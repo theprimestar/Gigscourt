@@ -170,13 +170,13 @@ const ProfilePage = (function() {
     // ===== Load Own Profile =====
     async function loadOwnProfile() {
         try {
-            const currentUser = await window.Supabase.getCurrentUser();
+            const currentUser = await window.SupabaseAPI.getCurrentUser();
             if (!currentUser) {
                 window.Modal?.showAlert("Login Required", "Please log in to view profile");
                 return;
             }
             
-            const profile = await window.Supabase.getProfile(currentUser.user.id);
+            const profile = await window.SupabaseAPI.getProfile(currentUser.user.id);
             if (profile) {
                 document.getElementById("display-name").textContent = profile.full_name || profile.username || "User";
                 document.getElementById("user-bio").textContent = profile.bio || "No bio yet";
@@ -191,7 +191,7 @@ const ProfilePage = (function() {
     
     async function loadUserProfile(userId) {
         try {
-            const profile = await window.Supabase.getProfile(userId);
+            const profile = await window.SupabaseAPI.getProfile(userId);
             currentViewingUser = profile;
             document.getElementById("visitor-display-name").textContent = profile.full_name || profile.username || "User";
             document.getElementById("visitor-bio").textContent = profile.bio || "No bio yet";
@@ -203,7 +203,7 @@ const ProfilePage = (function() {
     // ===== Load User Gigs =====
     async function loadUserGigs(userId, containerId = "portfolio-grid") {
         try {
-            const gigs = await window.Supabase.getGigs({ userId: userId });
+            const gigs = await window.SupabaseAPI.getGigs({ userId: userId });
             userGigs = gigs;
             
             const container = document.getElementById(containerId);
@@ -247,7 +247,7 @@ const ProfilePage = (function() {
     // ===== Load User Ratings =====
     async function loadUserRatings(userId) {
         try {
-            const { ratings, average } = await window.Supabase.getUserRatings(userId);
+            const { ratings, average } = await window.SupabaseAPI.getUserRatings(userId);
             document.getElementById("rating-count").textContent = ratings.length;
             document.getElementById("avg-rating").textContent = average.toFixed(1);
         } catch (error) {
@@ -257,7 +257,7 @@ const ProfilePage = (function() {
     
     // ===== Show Top Up Modal =====
     async function showTopUpModal() {
-        const currentUser = await window.Supabase.getCurrentUser();
+        const currentUser = await window.SupabaseAPI.getCurrentUser();
         if (!currentUser) return;
         
         if (window.Paystack) {
@@ -281,9 +281,9 @@ const ProfilePage = (function() {
             const bio = document.getElementById("edit-bio")?.value;
             const address = document.getElementById("edit-address")?.value;
             
-            const currentUser = await window.Supabase.getCurrentUser();
+            const currentUser = await window.SupabaseAPI.getCurrentUser();
             if (currentUser) {
-                await window.Supabase.updateProfile(currentUser.user.id, {
+                await window.SupabaseAPI.updateProfile(currentUser.user.id, {
                     full_name: fullname,
                     bio: bio,
                     address: address
@@ -305,9 +305,9 @@ const ProfilePage = (function() {
         trigger.addEventListener("touchstart", (e) => {
             pressTimer = setTimeout(async () => {
                 // Long press detected
-                const currentUser = await window.Supabase.getCurrentUser();
+                const currentUser = await window.SupabaseAPI.getCurrentUser();
                 if (currentUser) {
-                    const isAdmin = await window.Supabase.checkIsAdmin(currentUser.user.id);
+                    const isAdmin = await window.SupabaseAPI.checkIsAdmin(currentUser.user.id);
                     if (isAdmin) {
                         if (window.Admin && window.Admin.render) {
                             window.Admin.render();
@@ -329,7 +329,7 @@ const ProfilePage = (function() {
     }
     
     function getCurrentUserId() {
-        return window.Supabase?.getCurrentUser()?.then(user => user?.user?.id) || null;
+        return window.SupabaseAPI?.getCurrentUser()?.then(user => user?.user?.id) || null;
     }
     
     // ===== Public API =====
