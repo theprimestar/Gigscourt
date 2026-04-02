@@ -1,1 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#000000">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+    <title>GigsCourt</title>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <!-- Leaflet Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
+</head>
+<body>
 
+    <!-- Main App Container -->
+    <div id="app">
+        <!-- Dynamic Page Content -->
+        <div id="page-content"></div>
+        
+        <!-- Floating Tab Bar -->
+        <div class="tab-bar" id="tab-bar">
+            <div class="tab-item active" data-page="home">
+                <i class="fas fa-home"></i>
+                <span>Home</span>
+            </div>
+            <div class="tab-item" data-page="search">
+                <i class="fas fa-search"></i>
+                <span>Search</span>
+            </div>
+            <div class="tab-item" data-page="messages">
+                <i class="fas fa-comment"></i>
+                <span>Messages</span>
+            </div>
+            <div class="tab-item" data-page="profile">
+                <i class="fas fa-user"></i>
+                <span>Profile</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals Container -->
+    <div id="modal-container"></div>
+
+    <script src="supabase.js"></script>
+    <script src="imagekit.js"></script>
+    <script src="paystack.js"></script>
+    <script src="app.js"></script>
+    <script src="admin.js"></script>
+    <script src="sw.js"></script>
+</body>
+</html>
