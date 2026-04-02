@@ -82,9 +82,9 @@ const HomePage = (function() {
                 userLng = position.longitude;
                 
                 // Update user's geohash in DB if logged in
-                const currentUser = await window.Supabase?.getCurrentUser();
+                const currentUser = await window.SupabaseAPI?.getCurrentUser();
                 if (currentUser && userLat && userLng) {
-                    await window.Supabase.updateGeohash(currentUser.user.id, userLat, userLng);
+                    await window.SupabaseAPI.updateGeohash(currentUser.user.id, userLat, userLng);
                 }
             } catch (e) {
                 console.log("Location not available, using default");
@@ -96,10 +96,10 @@ const HomePage = (function() {
             let gigs;
             if (window.Cache && !append) {
                 gigs = await window.Cache.swr(cacheKey, async () => {
-                    return await window.Supabase.getGigs({}, currentPage, 10);
+                    return await window.SupabaseAPI.getGigs({}, currentPage, 10);
                 }, 300000); // 5 min cache
             } else {
-                gigs = await window.Supabase.getGigs({}, currentPage, 10);
+                gigs = await window.SupabaseAPI.getGigs({}, currentPage, 10);
             }
             
             if (!gigs || gigs.length === 0) {
