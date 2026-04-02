@@ -92,10 +92,10 @@ const Modal = (function() {
             submitBtn.textContent = "Submitting...";
             
             try {
-                const currentUser = await window.Supabase?.getCurrentUser();
+                const currentUser = await window.SupabaseAPI?.getCurrentUser();
                 if (!currentUser) throw new Error("Please log in");
                 
-                await window.Supabase.submitRating(
+                await window.SupabaseAPI.submitRating(
                     currentUser.user.id,
                     toUserId,
                     gigId,
@@ -283,7 +283,7 @@ const Modal = (function() {
             btn.textContent = "Processing...";
             
             try {
-                const currentUser = await window.Supabase?.getCurrentUser();
+                const currentUser = await window.SupabaseAPI?.getCurrentUser();
                 if (!currentUser) throw new Error("Please log in");
                 
                 // Check and deduct credits
@@ -293,7 +293,7 @@ const Modal = (function() {
                 }
                 
                 // Create gig
-                const gig = await window.Supabase.createGig(currentUser.user.id, {
+                const gig = await window.SupabaseAPI.createGig(currentUser.user.id, {
                     title,
                     category,
                     description,
