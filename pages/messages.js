@@ -50,13 +50,13 @@ const MessagesPage = (function() {
         if (!container) return;
         
         try {
-            const currentUser = await window.Supabase.getCurrentUser();
+            const currentUser = await window.SupabaseAPI.getCurrentUser();
             if (!currentUser) {
                 container.innerHTML = `<div class="loading">Please log in to view messages</div>`;
                 return;
             }
             
-            const conversations = await window.Supabase.getConversations(currentUser.user.id);
+            const conversations = await window.SupabaseAPI.getConversations(currentUser.user.id);
             currentConversations = conversations;
             
             if (conversations.length === 0) {
@@ -137,7 +137,7 @@ const MessagesPage = (function() {
         const container = document.getElementById("page-content");
         if (!container) return;
         
-        const currentUser = await window.Supabase.getCurrentUser();
+        const currentUser = await window.SupabaseAPI.getCurrentUser();
         if (!currentUser) return;
         
         // Subscribe to real-time messages
@@ -145,7 +145,7 @@ const MessagesPage = (function() {
             await messageSubscription.unsubscribe();
         }
         
-        messageSubscription = window.Supabase.subscribeToMessages(
+        messageSubscription = window.SupabaseAPI.subscribeToMessages(
             currentUser.user.id,
             (newMessage) => {
                 if (newMessage.sender_id === currentChatUser.id || newMessage.receiver_id === currentChatUser.id) {
@@ -243,7 +243,7 @@ const MessagesPage = (function() {
     // ===== Load Chat History =====
     async function loadChatHistory(userId, partnerId) {
         try {
-            const { data, error } = await window.Supabase.client
+            const { data, error } = await window.SupabaseAPI.client
                 .from("messages")
                 .select("*")
                 .or(`and(sender_id.eq.${userId},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${userId})`)
@@ -270,7 +270,7 @@ const MessagesPage = (function() {
         container.innerHTML = "";
         
         currentMessages.forEach(async (msg) => {
-            const isSender = msg.sender_id === (await window.Supabase.getCurrentUser())?.user?.id;
+            const isSender = msg.sender_id === (await window.SupabaseAPI.getCurrentUser())?.user?.id;
             const messageDiv = document.createElement("div");
             messageDiv.style.cssText = `
                 display: flex;
@@ -307,7 +307,7 @@ const MessagesPage = (function() {
         const content = input?.value.trim();
         if (!content) return;
         
-        const currentUser = await window.Supabase.getCurrentUser();
+        const currentUser = await window.SupabaseAPI.getCurrentUser();
         if (!currentUser) {
             window.Modal?.showAlert("Login Required", "Please log in to send messages");
             return;
@@ -321,7 +321,7 @@ const MessagesPage = (function() {
         }
         
         try {
-            await window.Supabase.sendMessage(currentUser.user.id, currentChatUser.id, content, "text");
+            await window.SupabaseAPI.sendMessage(currentUser.user.id, currentChatUser.id, content, "text");
             await window.Paystack.deductForAction(currentUser.user.id, "message");
             
             input.value = "";
@@ -394,11 +394,11 @@ const MessagesPage = (function() {
         const file = new File([audioBlob], `voice_${Date.now()}.webm`, { type: "audio/webm" });
         
         // Upload to Supabase Storage
-        const currentUser = await window.Supabase.getCurrentUser();
+        const currentUser = await window.SupabaseAPI.getCurrentUser();
         if (!currentUser) return;
         
         const fileName = `voice_notes/${currentUser.user.id}_${Date.now()}.ogg`;
-        const { data, error } = await window.Supabase.client.storage
+        const { data, error } = await window.SupabaseAPI.client.storage
             .from("voice_notes")
             .upload(fileName, file);
         
@@ -407,14 +407,14 @@ const MessagesPage = (function() {
             return;
         }
         
-        const { data: urlData } = window.Supabase.client.storage
+        const { data: urlData } = window.SupabaseAPI.client.storage
             .from("voice_notes")
             .getPublicUrl(fileName);
         
-        await window.Supabase.sendMessage(currentUser.user.id, currentChatUser.id, urlData.publicUrl, "voice");
+        await window.SupabaseAPI.sendMessage(currentUser.user.id, currentChatUser.id, urlData.publicUrl, "voice");
         
         // Save to voice_notes table for 14-day cleanup
-        await window.Supabase.client
+        await window.SupabaseAPI.client
             .from("voice_notes")
             .insert({ user_id: currentUser.user.id, file_url: urlData.publicUrl });
         
@@ -432,25 +432,25 @@ const MessagesPage = (function() {
             const file = e.target.files[0];
             if (!file) return;
             
-            const currentUser = await window.Supabase.getCurrentUser();
+            const currentUser = await window.SupabaseAPI.getCurrentUser();
             if (!currentUser) return;
             
             // Upload to ImageKit
             if (window.ImageKit) {
                 const result = await window.ImageKit.uploadImage(file, "chat");
-                await window.Supabase.sendMessage(currentUser.user.id, currentChatUser.id, result.url, "image");
+                await window.SupabaseAPI.sendMessage(currentUser.user.id, currentChatUser.id, result.url, "image");
             } else {
                 // Fallback: upload to Supabase Storage
                 const fileName = `chat_images/${currentUser.user.id}_${Date.now()}.jpg`;
-                const { error } = await window.Supabase.client.storage
+                const { error } = await window.SupabaseAPI.client.storage
                     .from("chat_images")
                     .upload(fileName, file);
                 
                 if (!error) {
-                    const { data: urlData } = window.Supabase.client.storage
+                    const { data: urlData } = window.SupabaseAPI.client.storage
                         .from("chat_images")
                         .getPublicUrl(fileName);
-                    await window.Supabase.sendMessage(currentUser.user.id, currentChatUser.id, urlData.publicUrl, "image");
+                    await window.SupabaseAPI.sendMessage(currentUser.user.id, currentChatUser.id, urlData.publicUrl, "image");
                 }
             }
             
