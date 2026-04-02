@@ -11,14 +11,14 @@ const Admin = (function() {
     // ===== Initialize Admin Panel =====
     async function init() {
         // Verify admin status
-        const currentUser = await window.Supabase.getCurrentUser();
+        const currentUser = await window.SupabaseAPI.getCurrentUser();
         if (!currentUser) {
             alert("Please log in first");
             window.location.href = "/";
             return;
         }
         
-        isAdmin = await window.Supabase.checkIsAdmin(currentUser.user.id);
+        isAdmin = await window.SupabaseAPI.checkIsAdmin(currentUser.user.id);
         if (!isAdmin) {
             alert("Access denied. Admin privileges required.");
             window.location.href = "/";
@@ -94,22 +94,22 @@ const Admin = (function() {
     async function loadStats() {
         try {
             // Get total users
-            const { count: userCount, error: userError } = await window.Supabase.client
+            const { count: userCount, error: userError } = await window.SupabaseAPI.client
                 .from("profiles")
                 .select("*", { count: "exact", head: true });
             
             // Get total gigs
-            const { count: gigCount, error: gigError } = await window.Supabase.client
+            const { count: gigCount, error: gigError } = await window.SupabaseAPI.client
                 .from("gigs")
                 .select("*", { count: "exact", head: true });
             
             // Get total messages
-            const { count: msgCount, error: msgError } = await window.Supabase.client
+            const { count: msgCount, error: msgError } = await window.SupabaseAPI.client
                 .from("messages")
                 .select("*", { count: "exact", head: true });
             
             // Get total transactions (revenue)
-            const { data: transactions, error: txError } = await window.Supabase.client
+            const { data: transactions, error: txError } = await window.SupabaseAPI.client
                 .from("transactions")
                 .select("amount")
                 .eq("type", "credit");
@@ -119,7 +119,7 @@ const Admin = (function() {
             // Get active users (last 24 hours)
             const oneDayAgo = new Date();
             oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-            const { count: activeCount } = await window.Supabase.client
+            const { count: activeCount } = await window.SupabaseAPI.client
                 .from("profiles")
                 .select("*", { count: "exact", head: true })
                 .gte("updated_at", oneDayAgo.toISOString());
@@ -144,7 +144,7 @@ const Admin = (function() {
         try {
             // Get conversations with high message counts or flagged content
             // For MVP, show recent conversations with > 20 messages
-            const { data: conversations, error } = await window.Supabase.client
+            const { data: conversations, error } = await window.SupabaseAPI.client
                 .from("messages")
                 .select("sender_id, receiver_id, count")
                 .limit(50);
@@ -190,7 +190,7 @@ const Admin = (function() {
         btn.textContent = "Sending...";
         
         try {
-            await window.Supabase.broadcastNotification(title, body);
+            await window.SupabaseAPI.broadcastNotification(title, body);
             
             alert("Broadcast sent successfully!");
             document.getElementById("broadcast-title").value = "";
@@ -211,7 +211,7 @@ const Admin = (function() {
         if (!container) return;
         
         try {
-            const { data: users, error } = await window.Supabase.client
+            const { data: users, error } = await window.SupabaseAPI.client
                 .from("profiles")
                 .select("*")
                 .order("created_at", { ascending: false })
@@ -281,7 +281,7 @@ const Admin = (function() {
         if (!container) return;
         
         try {
-            const { data: users, error } = await window.Supabase.client
+            const { data: users, error } = await window.SupabaseAPI.client
                 .from("profiles")
                 .select("*")
                 .or(`full_name.ilike.%${query}%,username.ilike.%${query}%`)
@@ -313,7 +313,7 @@ const Admin = (function() {
     // ===== Toggle Admin Status =====
     async function toggleAdminStatus(userId, makeAdmin) {
         try {
-            const { error } = await window.Supabase.client
+            const { error } = await window.SupabaseAPI.client
                 .from("profiles")
                 .update({ is_admin: makeAdmin })
                 .eq("id", userId);
