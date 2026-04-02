@@ -256,7 +256,7 @@ const SearchPage = (function() {
         
         // Fetch nearby profiles using geohash
         try {
-            const profiles = await window.Supabase.getNearbyProfiles(location.lat, location.lng, radius);
+            const profiles = await window.SupabaseAPI.getNearbyProfiles(location.lat, location.lng, radius);
             
             // Filter by category and search query
             let filtered = profiles || [];
