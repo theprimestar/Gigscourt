@@ -4,18 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#000000">
+    <meta name="description" content="GigsCourt - Connect with local gig workers">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="styles.css">
     <title>GigsCourt</title>
+    
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    
     <!-- Leaflet Map -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Confetti -->
+    
+    <!-- Confetti Animation -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1"></script>
+    
+    <!-- Paystack -->
+    <script src="https://js.paystack.co/v1/inline.js"></script>
 </head>
 <body>
 
@@ -48,11 +56,29 @@
     <!-- Modals Container -->
     <div id="modal-container"></div>
 
-    <script src="supabase.js"></script>
-    <script src="imagekit.js"></script>
-    <script src="paystack.js"></script>
-    <script src="app.js"></script>
-    <script src="admin.js"></script>
+    <!-- Library Files (order matters) -->
+    <script src="lib/cache.js"></script>
+    <script src="lib/supabase.js"></script>
+    <script src="lib/imagekit.js"></script>
+    <script src="lib/paystack.js"></script>
+    <script src="lib/navigation.js"></script>
+    
+    <!-- Components -->
+    <script src="components/back-button.js"></script>
+    <script src="components/card.js"></script>
+    <script src="components/modal.js"></script>
+    <script src="components/tab-bar.js"></script>
+    
+    <!-- Pages -->
+    <script src="pages/home.js"></script>
+    <script src="pages/search.js"></script>
+    <script src="pages/messages.js"></script>
+    <script src="pages/profile.js"></script>
+    
+    <!-- Admin -->
+    <script src="admin/admin.js"></script>
+    
+    <!-- Service Worker (PWA) -->
     <script src="sw.js"></script>
 </body>
 </html>
