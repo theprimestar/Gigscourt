@@ -1,6 +1,7 @@
 // ========================================
 // GigsCourt Auth Flow - 3 Page Signup
 // Low-friction onboarding with visibility gating
+// FIXED: Profile creation for OTP flow
 // ========================================
 
 const AuthFlow = (function() {
@@ -463,14 +464,14 @@ const AuthFlow = (function() {
             const file = e.target.files[0];
             if (file && window.ImageKitService) {
                 try {
-    const result = await window.ImageKitService.uploadImage(file, "avatars");
-    uploadedPhotoUrl = result.url;
-    photoPreview.innerHTML = `<img src="${uploadedPhotoUrl}" style="width: 100%; height: 100%; object-fit: cover;">`;
-    console.log("Upload success:", uploadedPhotoUrl);
-} catch (err) {
-    console.error("Upload failed:", err);
-    alert("Upload failed: " + err.message);
-}
+                    const result = await window.ImageKitService.uploadImage(file, "avatars");
+                    uploadedPhotoUrl = result.url;
+                    photoPreview.innerHTML = `<img src="${uploadedPhotoUrl}" style="width: 100%; height: 100%; object-fit: cover;">`;
+                    console.log("Upload success:", uploadedPhotoUrl);
+                } catch (err) {
+                    console.error("Upload failed:", err);
+                    alert("Upload failed: " + err.message);
+                }
             } else {
                 alert("Please select an image file");
             }
@@ -523,6 +524,7 @@ const AuthFlow = (function() {
             }
         });
         
+        // FIXED: Verify OTP and CREATE profile if it doesn't exist
         document.getElementById("verify-otp-btn")?.addEventListener("click", async () => {
             const otp = document.getElementById("otp-code")?.value.trim();
             
@@ -540,7 +542,6 @@ const AuthFlow = (function() {
                 
                 if (error) throw error;
                 
-                // Create/update profile with collected data
                 const userId = data.user.id;
                 
                 // Calculate visibility
@@ -549,8 +550,7 @@ const AuthFlow = (function() {
                 const hasPhoto = uploadedPhotoUrl !== null;
                 const isVisible = hasServices && hasLocation && hasPhoto;
                 
-                // Update profile
-                await window.SupabaseAPI.updateProfile(userId, {
+                const profileData = {
                     full_name: document.getElementById("full-name")?.value.trim(),
                     selected_services: selectedServices,
                     latitude: workspaceLocation?.lat || null,
@@ -559,7 +559,26 @@ const AuthFlow = (function() {
                     avatar_url: uploadedPhotoUrl,
                     is_visible: isVisible,
                     credits: 6
-                });
+                };
+                
+                // Check if profile exists
+                const client = await window.SupabaseAPI.client;
+                const { data: existingProfile } = await client
+                    .from('profiles')
+                    .select('id')
+                    .eq('id', userId)
+                    .maybeSingle();
+                
+                if (existingProfile) {
+                    // Update existing profile
+                    await window.SupabaseAPI.updateProfile(userId, profileData);
+                } else {
+                    // Create new profile
+                    const { error: insertError } = await client
+                        .from('profiles')
+                        .insert({ id: userId, ...profileData });
+                    if (insertError) throw insertError;
+                }
                 
                 // Navigate to home
                 if (window.Navigation) {
