@@ -462,9 +462,15 @@ const AuthFlow = (function() {
         photoInput?.addEventListener("change", async (e) => {
             const file = e.target.files[0];
             if (file && window.ImageKit) {
-                const result = await window.ImageKit.uploadImage(file, "avatars");
-                uploadedPhotoUrl = result.url;
-                photoPreview.innerHTML = `<img src="${uploadedPhotoUrl}" style="width: 100%; height: 100%; object-fit: cover;">`;
+                try {
+    const result = await window.ImageKit.uploadImage(file, "avatars");
+    uploadedPhotoUrl = result.url;
+    photoPreview.innerHTML = `<img src="${uploadedPhotoUrl}" style="width: 100%; height: 100%; object-fit: cover;">`;
+    console.log("Upload success:", uploadedPhotoUrl);
+} catch (err) {
+    console.error("Upload failed:", err);
+    alert("Upload failed: " + err.message);
+}
             } else {
                 alert("Please select an image file");
             }
