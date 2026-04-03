@@ -5,7 +5,7 @@ const ImageKit = require("imagekit");
 
 export default async function handler(req, res) {
     // Allow requests from your frontend
-    res.setHeader("Access-Control-Allow-Origin", "https://gigscourt2.vercel.app");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
     
     if (req.method === "OPTIONS") {
