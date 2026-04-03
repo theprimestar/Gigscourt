@@ -1,12 +1,14 @@
 // ========================================
 // GigsCourt Floating Tab Bar Component
 // Glass Pill Navigation + Active State
+// PURE UI - delegates navigation to Navigation API
 // ========================================
 
 const TabBar = (function() {
     
     let tabBarElement = null;
     let currentActive = "home";
+    let isInitialized = false;
     
     // Tab definitions
     const tabs = [
@@ -15,6 +17,9 @@ const TabBar = (function() {
         { id: "messages", icon: "fas fa-comment", label: "Messages" },
         { id: "profile", icon: "fas fa-user", label: "Profile" }
     ];
+    
+    // Pages where tab bar should be hidden
+    const hiddenPages = ["chat", "admin", "profile_view", "gig_register"];
     
     // ===== Create Tab Bar HTML =====
     function createTabBar() {
@@ -33,33 +38,26 @@ const TabBar = (function() {
                 <i class="${tab.icon}"></i>
                 <span>${tab.label}</span>
             `;
-            tabItem.addEventListener("click", () => handleTabClick(tab.id));
+            // DELEGATE to Navigation API - no direct routing logic here
+            tabItem.addEventListener("click", (e) => {
+                e.preventDefault();
+                if (window.Navigation && typeof window.Navigation.navigateTo === "function") {
+                    window.Navigation.navigateTo(tab.id, {}, true);
+                } else {
+                    console.warn('Navigation API not available');
+                }
+            });
             container.appendChild(tabItem);
         });
         
         return container;
     }
     
-    // ===== Handle Tab Click =====
-    function handleTabClick(pageId) {
-        if (pageId === currentActive) return;
-        
-        // Update active state visually
-        setActiveTab(pageId);
-        
-        // Navigate using Navigation system
-        if (window.Navigation && typeof window.Navigation.navigateTo === "function") {
-            window.Navigation.navigateTo(pageId, {}, true);
-        } else {
-            // Fallback
-            window.location.hash = pageId;
-            triggerPageChange(pageId);
-        }
-    }
-    
     // ===== Set Active Tab Visually =====
     function setActiveTab(pageId) {
-        const tabs = document.querySelectorAll(".tab-item");
+        if (!tabBarElement) return;
+        
+        const tabs = tabBarElement.querySelectorAll(".tab-item");
         tabs.forEach(tab => {
             const tabPage = tab.dataset.page;
             if (tabPage === pageId) {
@@ -69,12 +67,6 @@ const TabBar = (function() {
             }
         });
         currentActive = pageId;
-    }
-    
-    // ===== Trigger Page Change (Fallback) =====
-    function triggerPageChange(pageId) {
-        const event = new CustomEvent("tab:change", { detail: { page: pageId } });
-        document.dispatchEvent(event);
     }
     
     // ===== Get Current Active Tab =====
@@ -95,9 +87,8 @@ const TabBar = (function() {
         }
     }
     
-    // ===== Hide on Certain Pages (e.g., chat, admin) =====
+    // ===== Update visibility based on current page =====
     function updateVisibility(pageId) {
-        const hiddenPages = ["chat", "admin", "profile_view"];
         if (hiddenPages.includes(pageId)) {
             hide();
         } else {
@@ -117,23 +108,33 @@ const TabBar = (function() {
         });
     }
     
-    // Hidden pages array
-    const hiddenPages = ["chat", "admin", "profile_view", "gig_register"];
-    
     // ===== Initialize =====
     function init() {
-        // Check if tab bar already exists
-        const existing = document.getElementById("tab-bar");
-        if (existing) {
-            tabBarElement = existing;
-        } else {
+        if (isInitialized) return;
+        
+        // Wait for DOM
+        const doInit = () => {
+            // Check if tab bar already exists (from inline HTML - remove if found)
+            const existing = document.getElementById("tab-bar");
+            if (existing && existing !== tabBarElement) {
+                existing.remove();
+                console.log('Removed duplicate inline tab bar');
+            }
+            
+            // Create fresh tab bar
             tabBarElement = createTabBar();
             document.body.appendChild(tabBarElement);
+            
+            setupListeners();
+            isInitialized = true;
+            console.log('TabBar initialized');
+        };
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', doInit);
+        } else {
+            doInit();
         }
-        
-        setupListeners();
-        
-        console.log("TabBar initialized");
     }
     
     // Public API
@@ -148,12 +149,4 @@ const TabBar = (function() {
     
 })();
 
-// Make global
 window.TabBar = TabBar;
-
-// Auto-initialize when DOM ready
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => TabBar.init());
-} else {
-    TabBar.init();
-}
