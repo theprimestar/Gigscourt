@@ -1,12 +1,25 @@
 // ========================================
 // GigsCourt Smart Back Button Component
-// Deep Link Detection + Empty Stack Handling
+// FIXED: No duplicate with navigation.js
+// Now works as FALLBACK only
 // ========================================
 
 const BackButton = (function() {
     
     let buttonElement = null;
     let isVisible = false;
+    let isEnabled = true;
+    
+    // ===== Check if navigation.js already has back button =====
+    function shouldEnable() {
+        // If navigation.js is handling back button, disable this component
+        if (window.Navigation && window.Navigation._hasBackButton !== false) {
+            // Navigation.js creates its own back button via updateBackButton()
+            // So we should NOT create another one
+            return false;
+        }
+        return true;
+    }
     
     // ===== Create Button Element =====
     function createButton() {
@@ -42,37 +55,28 @@ const BackButton = (function() {
     
     // ===== Handle Back Press =====
     function handleBackPress() {
-        // Check if Navigation system exists
         if (window.Navigation && typeof window.Navigation.goBack === "function") {
             window.Navigation.goBack();
+        } else if (window.history.length > 1) {
+            window.history.back();
+        } else if (window.Navigation && typeof window.Navigation.navigateTo === "function") {
+            window.Navigation.navigateTo("home", {}, false);
         } else {
-            // Fallback: use browser history
-            if (window.history.length > 1) {
-                window.history.back();
-            } else {
-                // Empty stack - go to home via Navigation or window location
-                if (window.Navigation && typeof window.Navigation.navigateTo === "function") {
-                    window.Navigation.navigateTo("home", {}, false);
-                } else {
-                    window.location.hash = "#home";
-                    window.location.reload();
-                }
-            }
+            window.location.hash = "#home";
+            window.location.reload();
         }
     }
     
-    // ===== Detect if Stack is Empty (Deep Link Entry) =====
+    // ===== Detect if Stack is Empty =====
     function isNavigationStackEmpty() {
         if (window.Navigation && window.Navigation.getCurrentRoute) {
             const route = window.Navigation.getCurrentRoute();
             return route.stackDepth <= 1;
         }
-        
-        // Check browser history length
         return window.history.length <= 1;
     }
     
-    // ===== Update Button Icon Based on Stack =====
+    // ===== Update Button Icon =====
     function updateIcon() {
         if (!buttonElement) return;
         
@@ -92,8 +96,10 @@ const BackButton = (function() {
         }
     }
     
-    // ===== Show/Hide Button =====
+    // ===== Show/Hide =====
     function show() {
+        if (!isEnabled) return;
+        
         if (!buttonElement) {
             buttonElement = createButton();
             document.body.appendChild(buttonElement);
@@ -118,15 +124,15 @@ const BackButton = (function() {
         }
     }
     
-    // ===== Auto-manage Based on Current Page =====
+    // ===== Auto-manage Visibility =====
     function updateVisibility() {
+        if (!isEnabled) return;
+        
         if (window.Navigation && window.Navigation.getCurrentRoute) {
             const route = window.Navigation.getCurrentRoute();
-            // Show back button on all pages except home when stack is deep
             const shouldShow = route.stackDepth > 1;
             toggle(shouldShow);
         } else {
-            // Default: show on non-home pages
             const isHome = window.location.hash === "#home" || 
                           window.location.pathname === "/" || 
                           !window.location.hash;
@@ -134,9 +140,8 @@ const BackButton = (function() {
         }
     }
     
-    // ===== Listen to Navigation Events =====
+    // ===== Setup Listeners =====
     function setupListeners() {
-        // Listen for navigation changes
         document.addEventListener("page:load", () => {
             setTimeout(() => {
                 updateVisibility();
@@ -144,7 +149,6 @@ const BackButton = (function() {
             }, 10);
         });
         
-        // Also listen to popstate (browser back)
         window.addEventListener("popstate", () => {
             setTimeout(() => {
                 updateVisibility();
@@ -153,11 +157,28 @@ const BackButton = (function() {
         });
     }
     
+    // ===== Disable this component (if navigation.js handles it) =====
+    function disable() {
+        isEnabled = false;
+        hide();
+    }
+    
+    function enable() {
+        isEnabled = true;
+        updateVisibility();
+    }
+    
     // ===== Initialize =====
     function init() {
+        // Check if we should run at all
+        if (!shouldEnable()) {
+            console.log("BackButton: Disabled because navigation.js is handling back button");
+            isEnabled = false;
+            return;
+        }
+        
         setupListeners();
         
-        // Initial check after DOM ready
         if (document.readyState === "loading") {
             document.addEventListener("DOMContentLoaded", () => {
                 updateVisibility();
@@ -166,7 +187,7 @@ const BackButton = (function() {
             updateVisibility();
         }
         
-        console.log("BackButton initialized");
+        console.log("BackButton initialized (fallback mode)");
     }
     
     // Public API
@@ -176,6 +197,8 @@ const BackButton = (function() {
         hide,
         toggle,
         updateIcon,
+        disable,
+        enable,
         isVisible: () => isVisible
     };
     
@@ -184,7 +207,7 @@ const BackButton = (function() {
 // Make global
 window.BackButton = BackButton;
 
-// Auto-initialize when DOM ready
+// Auto-initialize - but will disable itself if navigation.js is handling back button
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => BackButton.init());
 } else {
