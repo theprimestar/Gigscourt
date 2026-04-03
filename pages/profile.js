@@ -96,6 +96,76 @@ const ProfilePage = (function() {
         `;
         
         container.innerHTML = html;
+
+        // Add this inside renderOwnProfile(), after the stats section (before closing div)
+// Add Completion Status Card
+function renderCompletionStatus() {
+    (async () => {
+        const user = await window.SupabaseAPI?.getCurrentUser();
+        if (!user) return;
+        
+        const visibility = await window.SupabaseAPI?.getVisibilityStatus(user.user.id);
+        if (visibility && !visibility.isVisible) {
+            const container = document.querySelector(".profile-container");
+            const statusCard = document.createElement("div");
+            statusCard.style.cssText = `
+                background: var(--bg-glass);
+                backdrop-filter: blur(10px);
+                border-radius: 20px;
+                padding: 16px;
+                margin: 16px 0;
+            `;
+            
+            statusCard.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <i class="fas fa-eye-slash" style="font-size: 24px; color: var(--accent-modern-red);"></i>
+                    <div style="flex: 1;">
+                        <strong style="font-size: 15px;">Profile is hidden</strong>
+                        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">Complete the missing items to appear in search</p>
+                    </div>
+                    <button id="complete-profile-btn" class="btn-burnt-orange" style="padding: 8px 16px; font-size: 12px;">Complete</button>
+                </div>
+            `;
+            
+            const statsSection = document.querySelector(".profile-container > div:last-child");
+            if (statsSection) {
+                statsSection.parentNode.insertBefore(statusCard, statsSection);
+            }
+            
+            document.getElementById("complete-profile-btn")?.addEventListener("click", () => {
+                showCompletionModal();
+            });
+        }
+    })();
+}
+
+function showCompletionModal() {
+    if (window.Modal) {
+        window.Modal.showBottomSheet("Complete Your Profile", `
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+                <div class="completion-item" data-type="services" style="padding: 12px; background: var(--bg-primary); border-radius: 12px; cursor: pointer;">
+                    <i class="fas fa-briefcase"></i> Add Services
+                </div>
+                <div class="completion-item" data-type="location" style="padding: 12px; background: var(--bg-primary); border-radius: 12px; cursor: pointer;">
+                    <i class="fas fa-map-marker-alt"></i> Add Location
+                </div>
+                <div class="completion-item" data-type="photo" style="padding: 12px; background: var(--bg-primary); border-radius: 12px; cursor: pointer;">
+                    <i class="fas fa-camera"></i> Add Profile Photo
+                </div>
+            </div>
+        `, { showClose: true });
+        
+        document.querySelectorAll(".completion-item").forEach(item => {
+            item.addEventListener("click", () => {
+                window.Modal.closeModal();
+                // Redirect to edit profile with specific focus
+                showEditProfileModal();
+            });
+        });
+    }
+}
+
+// Call renderCompletionStatus() at the end of renderOwnProfile() after loadUserRatings
         
         // Load user data
         loadOwnProfile();
