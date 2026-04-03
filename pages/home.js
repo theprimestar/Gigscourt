@@ -162,6 +162,57 @@ const HomePage = (function() {
         } else {
             // Fallback rendering
             container.innerHTML = "";
+
+            // Add to HomePage object, before renderGigs
+function showCompletionBanner() {
+    const container = document.getElementById("gigs-container");
+    if (!container) return;
+    
+    (async () => {
+        const user = await window.SupabaseAPI?.getCurrentUser();
+        if (!user) return;
+        
+        const visibility = await window.SupabaseAPI?.getVisibilityStatus(user.user.id);
+        if (visibility && !visibility.isVisible) {
+            const banner = document.createElement("div");
+            banner.style.cssText = `
+                background: linear-gradient(135deg, var(--accent-burnt-orange), var(--accent-modern-red));
+                margin: 12px 16px;
+                padding: 16px;
+                border-radius: 20px;
+                color: white;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                cursor: pointer;
+            `;
+            
+            let missingText = [];
+            if (visibility.missing.services) missingText.push("services");
+            if (visibility.missing.location) missingText.push("location");
+            if (visibility.missing.photo) missingText.push("photo");
+            
+            banner.innerHTML = `
+                <div>
+                    <strong>⚠️ Complete your profile</strong>
+                    <div style="font-size: 12px; opacity: 0.9;">Add ${missingText.join(", ")} to be seen by clients</div>
+                </div>
+                <i class="fas fa-arrow-right"></i>
+            `;
+            
+            banner.addEventListener("click", () => {
+                if (window.Navigation) {
+                    window.Navigation.navigateTo("profile", {}, true);
+                }
+            });
+            
+            container.insertBefore(banner, container.firstChild);
+        }
+    })();
+}
+
+// Call showCompletionBanner() inside renderGigs() after container.innerHTML is set
+// Add this line right after container.innerHTML = ""; in renderGigs()
             gigs.forEach(gig => {
                 const card = createSimpleCard(gig);
                 container.appendChild(card);
