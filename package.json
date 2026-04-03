@@ -1,7 +1,15 @@
 {
   "name": "gigscourt",
   "version": "1.0.0",
+  "description": "GigsCourt - Connect with local gig workers",
+  "main": "index.html",
   "dependencies": {
     "imagekit": "^4.0.0"
-  }
+  },
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "keywords": ["gigs", "marketplace", "workers"],
+  "author": "Theprimestar",
+  "license": "MIT"
 }
