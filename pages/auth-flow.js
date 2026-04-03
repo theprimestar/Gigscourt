@@ -461,7 +461,7 @@ const AuthFlow = (function() {
         
         photoInput?.addEventListener("change", async (e) => {
             const file = e.target.files[0];
-            if (file && window.ImageKit) {
+            if (file && window.ImageKitService) {
                 try {
     const result = await window.ImageKitService.uploadImage(file, "avatars");
     uploadedPhotoUrl = result.url;
