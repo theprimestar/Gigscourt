@@ -32,53 +32,104 @@
         <!-- Dynamic Page Content -->
         <div id="page-content"></div>
         
-        <!-- Floating Tab Bar -->
-        <div class="tab-bar" id="tab-bar">
-            <div class="tab-item active" data-page="home">
-                <i class="fas fa-home"></i>
-                <span>Home</span>
-            </div>
-            <div class="tab-item" data-page="search">
-                <i class="fas fa-search"></i>
-                <span>Search</span>
-            </div>
-            <div class="tab-item" data-page="messages">
-                <i class="fas fa-comment"></i>
-                <span>Messages</span>
-            </div>
-            <div class="tab-item" data-page="profile">
-                <i class="fas fa-user"></i>
-                <span>Profile</span>
-            </div>
-        </div>
+        <!-- Tab bar will be dynamically injected by tab-bar.js -->
+        <!-- REMOVED inline tab bar to prevent duplication -->
     </div>
 
     <!-- Modals Container -->
     <div id="modal-container"></div>
 
-    <!-- Library Files (order matters) -->
+    <!-- ======================================== -->
+    <!-- CORRECTED SCRIPT LOADING ORDER           -->
+    <!-- ======================================== -->
+    
+    <!-- 1. Core Libraries (no DOM dependencies) -->
     <script src="lib/cache.js"></script>
     <script src="lib/supabase.js"></script>
     <script src="lib/imagekit.js"></script>
     <script src="lib/paystack.js"></script>
-    <script src="lib/navigation.js"></script>
     
-    <!-- Components -->
+    <!-- 2. Components (may reference pages but not critical) -->
     <script src="components/back-button.js"></script>
     <script src="components/card.js"></script>
     <script src="components/modal.js"></script>
     <script src="components/tab-bar.js"></script>
     
-    <!-- Pages -->
+    <!-- 3. Pages (define window.PageName objects) -->
     <script src="pages/home.js"></script>
     <script src="pages/search.js"></script>
     <script src="pages/messages.js"></script>
     <script src="pages/profile.js"></script>
     
-    <!-- Admin -->
+    <!-- 4. Navigation (depends on pages being loaded) -->
+    <script src="lib/navigation.js"></script>
+    
+    <!-- 5. Admin (optional) -->
     <script src="admin/admin.js"></script>
     
-    <!-- Service Worker (PWA) -->
-    <script src="sw.js"></script>
+    <!-- 6. Service Worker Registration -->
+    <script>
+        // Register Service Worker for PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(reg => console.log('SW registered:', reg.scope))
+                .catch(err => console.error('SW registration failed:', err));
+        }
+    </script>
+    
+    <!-- 7. App Initialization - CRITICAL: This must run AFTER all scripts load -->
+    <script>
+        // Wait for DOM and all dependencies to be ready
+        (function initApp() {
+            console.log('Initializing GigsCourt...');
+            
+            // Ensure DOM is fully loaded
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', startApp);
+            } else {
+                startApp();
+            }
+            
+            function startApp() {
+                console.log('DOM ready, checking dependencies...');
+                
+                // Verify critical dependencies exist
+                const deps = ['Navigation', 'SupabaseAPI', 'TabBar', 'HomePage'];
+                const missing = deps.filter(dep => !window[dep]);
+                
+                if (missing.length > 0) {
+                    console.error('Missing dependencies:', missing);
+                    // Show error to user
+                    const content = document.getElementById('page-content');
+                    if (content) {
+                        content.innerHTML = `
+                            <div style="padding: 40px; text-align: center;">
+                                <h2>⚠️ Loading Error</h2>
+                                <p>Missing: ${missing.join(', ')}</p>
+                                <p>Please refresh the page</p>
+                            </div>
+                        `;
+                    }
+                    return;
+                }
+                
+                // Initialize TabBar (creates the UI)
+                if (window.TabBar && typeof window.TabBar.init === 'function') {
+                    window.TabBar.init();
+                    console.log('TabBar initialized');
+                }
+                
+                // Initialize Navigation (handles routing)
+                if (window.Navigation && typeof window.Navigation.init === 'function') {
+                    window.Navigation.init();
+                    console.log('Navigation initialized');
+                } else {
+                    console.error('Navigation.init not found!');
+                }
+                
+                console.log('GigsCourt ready ✅');
+            }
+        })();
+    </script>
 </body>
 </html>
