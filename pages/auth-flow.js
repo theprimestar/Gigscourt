@@ -463,7 +463,7 @@ const AuthFlow = (function() {
             const file = e.target.files[0];
             if (file && window.ImageKit) {
                 try {
-    const result = await window.ImageKit.uploadImage(file, "avatars");
+    const result = await window.ImageKitService.uploadImage(file, "avatars");
     uploadedPhotoUrl = result.url;
     photoPreview.innerHTML = `<img src="${uploadedPhotoUrl}" style="width: 100%; height: 100%; object-fit: cover;">`;
     console.log("Upload success:", uploadedPhotoUrl);
