@@ -1,4 +1,4 @@
-// pages/signup.js
+// pages/signup.js - Firebase Signup
 document.addEventListener('DOMContentLoaded', () => {
     const emailInput = document.getElementById('signup-email');
     const passwordInput = document.getElementById('signup-password');
@@ -28,18 +28,27 @@ document.addEventListener('DOMContentLoaded', () => {
         signupBtn.disabled = true;
         
         try {
-            const { data, error } = await window.supabaseClient.auth.signUp({
-                email: email,
-                password: password
-            });
-            
-            if (error) throw error;
-            
-            alert('Account created! Please check your email to confirm.');
-            loadPage('onboarding'); // Will create onboarding next
-            
+            const userCredential = await window.firebaseSignUp(window.firebaseAuth, email, password);
+            console.log('Signup successful:', userCredential.user.email);
+            alert('Account created successfully!');
+            loadPage('onboarding');
         } catch (error) {
-            alert(error.message || 'Signup failed');
+            console.error('Signup error:', error);
+            let errorMessage = 'Signup failed. ';
+            switch (error.code) {
+                case 'auth/email-already-in-use':
+                    errorMessage += 'Email already registered. Try logging in.';
+                    break;
+                case 'auth/invalid-email':
+                    errorMessage += 'Invalid email address.';
+                    break;
+                case 'auth/weak-password':
+                    errorMessage += 'Password should be at least 6 characters.';
+                    break;
+                default:
+                    errorMessage += error.message;
+            }
+            alert(errorMessage);
             signupBtn.textContent = 'Create Account';
             signupBtn.disabled = false;
         }
