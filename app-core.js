@@ -1,27 +1,28 @@
 // ========================================
-// GigsCourt - Core Module
+// GigsCourt - Core Module (FIXED)
 // Authentication, Navigation, UI, Onboarding
 // ========================================
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, updateDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // ========== INITIALIZATION ==========
 const app = initializeApp(window.firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// Make globally available for features file
+// Make globally available
 window.auth = auth;
 window.db = db;
 window.app = app;
+window.sendPasswordResetEmail = sendPasswordResetEmail;
 
 // ========== DOM ELEMENTS ==========
 let splashScreen, mainApp, bottomNav, header, pageContainer, bottomSheet, sheetOverlay, sheetContent, toastContainer, notificationsBtn, notificationsDropdown, notificationsList, clearNotificationsBtn, notificationBadge;
 
 // ========== STATE ==========
-let currentUser = null;
+window.currentUser = null;
 let currentPage = 'home';
 let scrollPositions = {
     home: 0,
@@ -84,30 +85,35 @@ function closeBottomSheet() {
 function setupBottomSheet() {
     const dragHandle = document.querySelector('.sheet-drag-handle');
     let startY = 0;
-    dragHandle.addEventListener('touchstart', (e) => {
-        startY = e.touches[0].clientY;
-    });
-    dragHandle.addEventListener('touchmove', (e) => {
-        const delta = e.touches[0].clientY - startY;
-        if (delta > 50) closeBottomSheet();
-    });
-    sheetOverlay.addEventListener('click', closeBottomSheet);
+    if (dragHandle) {
+        dragHandle.addEventListener('touchstart', (e) => {
+            startY = e.touches[0].clientY;
+        });
+        dragHandle.addEventListener('touchmove', (e) => {
+            const delta = e.touches[0].clientY - startY;
+            if (delta > 50) closeBottomSheet();
+        });
+    }
+    if (sheetOverlay) sheetOverlay.addEventListener('click', closeBottomSheet);
 }
 
 // ========== NOTIFICATION DROPDOWN ==========
 function setupNotifications() {
+    if (!notificationsBtn) return;
     notificationsBtn.addEventListener('click', () => {
         notificationsDropdown.classList.toggle('hidden');
         haptic('light');
     });
-    clearNotificationsBtn.addEventListener('click', () => {
-        const items = notificationsList.querySelectorAll('.notification-item');
-        items.forEach(item => item.remove());
-        notificationsList.innerHTML = '<div class="empty-state">No notifications yet</div>';
-        notificationBadge.classList.add('hidden');
-    });
+    if (clearNotificationsBtn) {
+        clearNotificationsBtn.addEventListener('click', () => {
+            const items = notificationsList.querySelectorAll('.notification-item');
+            items.forEach(item => item.remove());
+            notificationsList.innerHTML = '<div class="empty-state">No notifications yet</div>';
+            notificationBadge.classList.add('hidden');
+        });
+    }
     document.addEventListener('click', (e) => {
-        if (!notificationsBtn.contains(e.target) && !notificationsDropdown.contains(e.target)) {
+        if (notificationsBtn && notificationsDropdown && !notificationsBtn.contains(e.target) && !notificationsDropdown.contains(e.target)) {
             notificationsDropdown.classList.add('hidden');
         }
     });
@@ -131,7 +137,7 @@ function addNotification(title, body, link = '') {
     }
 }
 
-// ========== PAGE NAVIGATION (State Preservation) ==========
+// ========== PAGE NAVIGATION ==========
 function saveScrollPosition() {
     const activePage = document.querySelector('.page.active');
     if (activePage) {
@@ -151,7 +157,8 @@ function navigateToPage(pageId) {
     const pages = document.querySelectorAll('.page');
     const navItems = document.querySelectorAll('.nav-item');
     pages.forEach(page => page.classList.remove('active'));
-    document.getElementById(`${pageId}-page`).classList.add('active');
+    const targetPage = document.getElementById(`${pageId}-page`);
+    if (targetPage) targetPage.classList.add('active');
     navItems.forEach(item => {
         item.classList.remove('active');
         if (item.dataset.page === pageId) item.classList.add('active');
@@ -159,6 +166,9 @@ function navigateToPage(pageId) {
     currentPage = pageId;
     restoreScrollPosition(pageId);
     haptic('light');
+    
+    // Dispatch event for features file
+    window.dispatchEvent(new CustomEvent('navigate', { detail: { page: pageId } }));
 }
 
 function setupNavigation() {
@@ -171,7 +181,7 @@ function setupNavigation() {
     });
 }
 
-// ========== SCROLL HANDLER (Hide/Show Bottom Nav + Shrinking Header) ==========
+// ========== SCROLL HANDLER ==========
 function setupScrollHandlers() {
     const pages = document.querySelectorAll('.page');
     pages.forEach(page => {
@@ -181,13 +191,13 @@ function setupScrollHandlers() {
             if (currentScrollY > lastScrollY && currentScrollY > 50) {
                 if (!isNavHidden) {
                     bottomNav.classList.add('hidden');
-                    header.style.transform = 'translateY(-100%)';
+                    if (header) header.style.transform = 'translateY(-100%)';
                     isNavHidden = true;
                 }
             } else if (currentScrollY < lastScrollY) {
                 if (isNavHidden) {
                     bottomNav.classList.remove('hidden');
-                    header.style.transform = 'translateY(0)';
+                    if (header) header.style.transform = 'translateY(0)';
                     isNavHidden = false;
                 }
             }
@@ -197,7 +207,7 @@ function setupScrollHandlers() {
     });
 }
 
-// ========== ONBOARDING FLOW (5 Steps) ==========
+// ========== ONBOARDING FLOW ==========
 let onboardingData = {};
 
 function showOnboarding() {
@@ -247,6 +257,7 @@ function showOnboardingStep2() {
             if (selectedServices.includes(service)) {
                 selectedServices = selectedServices.filter(s => s !== service);
                 opt.style.background = 'var(--bg-secondary)';
+                opt.style.color = 'var(--text-primary)';
             } else {
                 selectedServices.push(service);
                 opt.style.background = 'var(--accent-orange)';
@@ -350,8 +361,11 @@ function showOnboardingStep5() {
 }
 
 async function saveUserProfile() {
-    if (!currentUser) return;
-    const userRef = doc(db, 'users', currentUser.uid);
+    if (!window.currentUser) {
+        console.error('No current user');
+        return;
+    }
+    const userRef = doc(db, 'users', window.currentUser.uid);
     await setDoc(userRef, {
         displayName: onboardingData.displayName,
         phone: onboardingData.phone,
@@ -366,7 +380,7 @@ async function saveUserProfile() {
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString()
     }, { merge: true });
-    await updateProfile(currentUser, { displayName: onboardingData.displayName });
+    await updateProfile(window.currentUser, { displayName: onboardingData.displayName });
 }
 
 // ========== AUTH UI ==========
@@ -382,7 +396,8 @@ function showAuthScreen() {
         const email = document.getElementById('auth-email').value;
         const password = document.getElementById('auth-password').value;
         try {
-            await signInWithEmailAndPassword(auth, email, password);
+            const userCred = await signInWithEmailAndPassword(auth, email, password);
+            window.currentUser = userCred.user;
             closeBottomSheet();
             showToast('Logged in!');
         } catch (error) {
@@ -394,7 +409,7 @@ function showAuthScreen() {
         const password = document.getElementById('auth-password').value;
         try {
             const userCred = await createUserWithEmailAndPassword(auth, email, password);
-            currentUser = userCred.user;
+            window.currentUser = userCred.user;
             closeBottomSheet();
             showOnboarding();
         } catch (error) {
@@ -406,13 +421,16 @@ function showAuthScreen() {
 // ========== AUTH STATE LISTENER ==========
 function setupAuthListener() {
     onAuthStateChanged(auth, async (user) => {
-        currentUser = user;
+        window.currentUser = user;
         if (user) {
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (!userDoc.exists()) {
                 showOnboarding();
             } else {
                 window.currentUserData = userDoc.data();
+                // Hide auth screen if visible and show main app
+                closeBottomSheet();
+                navigateToPage('home');
             }
         } else {
             showAuthScreen();
@@ -481,3 +499,7 @@ window.addNotification = addNotification;
 window.navigateToPage = navigateToPage;
 window.PRESET_SERVICES = PRESET_SERVICES;
 window.haptic = haptic;
+window.db = db;
+window.auth = auth;
+window.updateProfile = updateProfile;
+window.signOut = signOut;
