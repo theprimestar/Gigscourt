@@ -518,60 +518,54 @@ const AuthFlow = (function() {
     const hasPhoto = uploadedPhotoUrl !== null;
     const isVisible = hasServices && hasLocation && hasPhoto;
     
-    const profileData = {
-        full_name: fullNameForSignup,
-        selected_services: selectedServices,
-        latitude: workspaceLocation?.lat || null,
-        longitude: workspaceLocation?.lng || null,
-        address_text: workspaceAddressText,
-        avatar_url: uploadedPhotoUrl,
-        is_visible: isVisible,
-        credits: 6
-    };
-    
-    // Retry logic for profile creation
-    let retries = 0;
-    let profileCreated = false;
-    
-    while (retries < 5 && !profileCreated) {
-        try {
-            const client = window.SupabaseAPI.client;
-            
-            // Check if profile already exists
-            const { data: existingProfile } = await client
-                .from('profiles')
-                .select('id')
-                .eq('id', userId)
-                .maybeSingle();
-            
-            if (existingProfile) {
-                await window.SupabaseAPI.updateProfile(userId, profileData);
-                profileCreated = true;
-                console.log("Profile updated successfully");
-            } else {
-                const { error: insertError } = await client
-                    .from('profiles')
-                    .insert({ id: userId, ...profileData });
-                
-                if (insertError) {
-                    console.error(`Insert attempt ${retries + 1} failed:`, insertError);
-                    retries++;
-                    if (retries < 5) {
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-                } else {
-                    profileCreated = true;
-                    console.log("Profile created successfully");
-                }
-            }
-        } catch (err) {
-            console.error(`Attempt ${retries + 1} error:`, err);
+    // Retry logic for profile update (not insert - profile already exists from trigger)
+let retries = 0;
+let profileUpdated = false;
+
+while (retries < 5 && !profileUpdated) {
+    try {
+        const client = window.SupabaseAPI.client;
+        
+        // Profile should already exist from the database trigger
+        // So we just UPDATE it with the onboarding data
+        const { error: updateError } = await client
+            .from('profiles')
+            .update({
+                full_name: fullNameForSignup,
+                selected_services: selectedServices,
+                latitude: workspaceLocation?.lat || null,
+                longitude: workspaceLocation?.lng || null,
+                address_text: workspaceAddressText,
+                avatar_url: uploadedPhotoUrl,
+                is_visible: (selectedServices.length > 0 && workspaceLocation !== null && uploadedPhotoUrl !== null)
+            })
+            .eq('id', userId);
+        
+        if (updateError) {
+            console.error(`Update attempt ${retries + 1} failed:`, updateError);
             retries++;
             if (retries < 5) {
                 await new Promise(r => setTimeout(r, 1000));
             }
+        } else {
+            profileUpdated = true;
+            console.log("Profile updated successfully with onboarding data");
+        }
+        
+    } catch (err) {
+        console.error(`Attempt ${retries + 1} error:`, err);
+        retries++;
+        if (retries < 5) {
+            await new Promise(r => setTimeout(r, 1000));
         }
     }
+}
+
+if (!profileUpdated) {
+    console.error("Failed to update profile after 5 attempts");
+    alert("Profile update failed. Please contact support.");
+    return;
+}
     
     if (!profileCreated) {
         console.error("Failed to create profile after 5 attempts");
