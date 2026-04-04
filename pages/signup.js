@@ -35,9 +35,10 @@ setTimeout(() => {
         signupBtn.disabled = true;
         
         try {
-            await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
+            const userCredential = await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
+            console.log('Account created:', userCredential.user.uid);
             alert('Account created successfully!');
-            loadPage('onboarding');
+            loadPage('onboarding-welcome');
         } catch (error) {
             console.error(error);
             let errorMessage = 'Signup failed. ';
