@@ -144,3 +144,109 @@ body {
     font-size: 0.9rem;
     color: #666;
 }
+
+/* Onboarding Styles */
+.onboarding-container {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: var(--soft-gray);
+    padding: 1.5rem;
+}
+
+.onboarding-card {
+    background: var(--white);
+    border-radius: 24px;
+    padding: 2rem 1.5rem;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+}
+
+.onboarding-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--rich-black);
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.onboarding-subtitle {
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: var(--rich-black);
+    margin-bottom: 1.5rem;
+    text-align: center;
+}
+
+.onboarding-text {
+    text-align: center;
+    color: #666;
+    margin-bottom: 2rem;
+    line-height: 1.5;
+}
+
+.onboarding-small {
+    text-align: center;
+    color: #888;
+    font-size: 0.8rem;
+    margin-bottom: 1rem;
+}
+
+.btn-secondary {
+    background: transparent;
+    border: 1.5px solid var(--burnt-orange);
+    color: var(--burnt-orange);
+    padding: 0.8rem;
+    width: 100%;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    cursor: pointer;
+}
+
+.services-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.75rem;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 1rem;
+}
+
+.service-chip {
+    background: var(--soft-gray);
+    padding: 0.75rem;
+    border-radius: 30px;
+    text-align: center;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.service-chip.selected {
+    background: var(--burnt-orange);
+    color: white;
+}
+
+.credits-box {
+    background: linear-gradient(135deg, var(--burnt-orange), var(--modern-red));
+    border-radius: 60px;
+    padding: 2rem;
+    text-align: center;
+    margin: 1.5rem 0;
+}
+
+.credits-amount {
+    font-size: 4rem;
+    font-weight: 800;
+    color: white;
+    margin: 0;
+}
+
+.credits-label {
+    color: rgba(255,255,255,0.9);
+    font-size: 1rem;
+}
