@@ -78,7 +78,9 @@ function openBottomSheet(contentHtml) {
 
 function closeBottomSheet() {
     bottomSheet.classList.remove('open');
+    bottomSheet.classList.add('hidden');
     sheetOverlay.classList.remove('visible');
+    sheetOverlay.classList.add('hidden');
     document.body.style.overflow = '';
 }
 
