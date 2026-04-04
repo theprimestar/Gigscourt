@@ -490,4 +490,418 @@ async function registerGig(chatId, clientId) {
         clientId: clientId,
         chatId: chatId,
         status: 'pending_review',
-        createdAt: new Date().toISOString
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    });
+    await window.db.collection('chats').doc(chatId).update({ pendingReview: true });
+    window.addNotification('Gig Registered', 'Client has been notified to review you');
+    window.showToast('Gig registered! Client will review within 7 days.');
+    window.haptic('heavy');
+}
+
+// ========== REVIEW SYSTEM ==========
+async function submitReview(providerId, clientId, rating, reviewText) {
+    const reviewId = `${clientId}_${providerId}`;
+    await window.db.collection('reviews').doc(reviewId).set({
+        providerId: providerId,
+        clientId: clientId,
+        rating: rating,
+        review: reviewText,
+        updatedAt: new Date().toISOString()
+    });
+    const allReviews = await window.db.collection('reviews').where('providerId', '==', providerId).get();
+    let sum = 0, count = 0;
+    allReviews.forEach(doc => {
+        sum += doc.data().rating;
+        count++;
+    });
+    const avgRating = sum / count;
+    await window.db.collection('users').doc(providerId).update({
+        rating: avgRating,
+        gigCount: window.firebase.firestore.FieldValue.increment(1),
+        credits: window.firebase.firestore.FieldValue.increment(-1),
+        lastGigDate: new Date().toISOString(),
+        monthlyGigCount: window.firebase.firestore.FieldValue.increment(1)
+    });
+    const gigs = await window.db.collection('gigs')
+        .where('providerId', '==', providerId)
+        .where('clientId', '==', clientId)
+        .where('status', '==', 'pending_review')
+        .get();
+    gigs.forEach(doc => {
+        doc.ref.update({ status: 'completed', completedAt: new Date().toISOString() });
+    });
+    await window.db.collection('chats').doc(currentChatId).update({ pendingReview: false });
+    window.showToast(`Review submitted! ${rating} stars. Thank you!`);
+    window.haptic('heavy');
+}
+
+async function showReviews(providerId) {
+    const reviews = await window.db.collection('reviews').where('providerId', '==', providerId).get();
+    if (reviews.empty) {
+        window.showToast('No reviews yet');
+        return;
+    }
+    let reviewsHtml = '<h3 style="margin-bottom: 16px;">Reviews</h3>';
+    reviews.forEach(doc => {
+        const review = doc.data();
+        reviewsHtml += `
+            <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
+                <div style="font-weight: 600;">★ ${review.rating}</div>
+                <p style="color: var(--text-secondary);">${review.review}</p>
+                <div style="font-size: 11px; color: var(--text-muted);">${new Date(review.updatedAt).toLocaleDateString()}</div>
+            </div>
+        `;
+    });
+    window.openBottomSheet(reviewsHtml);
+}
+
+// ========== CREDITS (Paystack) ==========
+function buyCredits() {
+    const packages = [
+        { credits: 5, price: 2500 },
+        { credits: 10, price: 4500 },
+        { credits: 20, price: 8000 }
+    ];
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Buy Credits</h3>
+        ${packages.map(p => `
+            <button class="credit-package" data-credits="${p.credits}" data-price="${p.price}" style="width: 100%; padding: 16px; margin-bottom: 12px; background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: 16px; text-align: left;">
+                <strong>${p.credits} credits</strong> — ₦${p.price.toLocaleString()}
+            </button>
+        `).join('')}
+        <button id="transaction-history-btn" class="btn-secondary" style="width: 100%; margin-top: 12px;">View Transaction History</button>
+    `);
+    document.querySelectorAll('.credit-package').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const credits = parseInt(btn.dataset.credits);
+            const price = parseInt(btn.dataset.price);
+            window.closeBottomSheet();
+            if (window.PaystackPop) {
+                const handler = window.PaystackPop.setup({
+                    key: PAYSTACK_PUBLIC_KEY,
+                    email: window.auth.currentUser.email,
+                    amount: price * 100,
+                    currency: 'NGN',
+                    callback: async (response) => {
+                        await window.db.collection('users').doc(window.auth.currentUser.uid).update({
+                            credits: window.firebase.firestore.FieldValue.increment(credits)
+                        });
+                        await window.db.collection('transactions').add({
+                            userId: window.auth.currentUser.uid,
+                            type: 'credit_purchase',
+                            credits: credits,
+                            amount: price,
+                            reference: response.reference,
+                            createdAt: new Date().toISOString()
+                        });
+                        window.showToast(`Added ${credits} credits!`);
+                        window.haptic('heavy');
+                        loadProfile();
+                    }
+                });
+                handler.openIframe();
+            } else {
+                window.showToast('Paystack not loaded. Please refresh.', 'error');
+            }
+        });
+    });
+    document.getElementById('transaction-history-btn')?.addEventListener('click', showTransactionHistory);
+}
+
+async function showTransactionHistory() {
+    const transactions = await window.db.collection('transactions')
+        .where('userId', '==', window.auth.currentUser.uid)
+        .orderBy('createdAt', 'desc')
+        .get();
+    if (transactions.empty) {
+        window.showToast('No transactions yet');
+        return;
+    }
+    let html = '<h3 style="margin-bottom: 16px;">Transaction History</h3>';
+    transactions.forEach(doc => {
+        const t = doc.data();
+        html += `
+            <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
+                <div><strong>${t.type === 'credit_purchase' ? '💰 Purchased' : '📋 Gig Used'}</strong></div>
+                <div>${t.credits} credits • ₦${t.amount?.toLocaleString() || '0'}</div>
+                <div style="font-size: 11px; color: var(--text-muted);">${new Date(t.createdAt).toLocaleDateString()}</div>
+            </div>
+        `;
+    });
+    window.openBottomSheet(html);
+}
+
+// ========== PROFILE PAGE (Complete) ==========
+async function loadProfile(userId = null) {
+    const targetId = userId || window.auth.currentUser?.uid;
+    if (!targetId || !profileContent) return;
+    profileContent.innerHTML = '<div class="loading-spinner"></div>';
+    const userDoc = await window.db.collection('users').doc(targetId).get();
+    if (!userDoc.exists) {
+        profileContent.innerHTML = '<div class="empty-state">User not found</div>';
+        return;
+    }
+    const user = { id: userDoc.id, ...userDoc.data() };
+    const isOwnProfile = targetId === window.auth.currentUser?.uid;
+    const activeStatus = getActiveStatus(user);
+    profileContent.innerHTML = `
+        <div class="profile-header">
+            <img class="profile-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="" data-user-id="${user.id}">
+            <h2 class="profile-name">${user.displayName || 'Anonymous'}</h2>
+            <p class="profile-bio">${user.bio || 'No bio yet'}</p>
+            ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
+        </div>
+        <div class="profile-stats">
+            <div class="stat" data-stat="gigs">
+                <div class="stat-number">${user.gigCount || 0}</div>
+                <div class="stat-label">Gigs</div>
+            </div>
+            <div class="stat" data-stat="rating">
+                <div class="stat-number">★ ${(user.rating || 0).toFixed(1)}</div>
+                <div class="stat-label">Rating</div>
+            </div>
+            <div class="stat" data-stat="credits">
+                <div class="stat-number">${user.credits || 0}</div>
+                <div class="stat-label">Credits</div>
+            </div>
+        </div>
+        <div class="profile-address">📍 ${user.addressText || 'No address set'}</div>
+        <div class="profile-actions">
+            ${isOwnProfile ? `
+                <button id="edit-profile-btn" class="btn-secondary">Edit Profile</button>
+                <button id="register-gig-profile-btn" class="btn-primary">Register Gig</button>
+                <button id="buy-credits-btn" class="btn-primary">Buy Credits</button>
+                <button id="settings-btn" class="btn-secondary">Settings</button>
+            ` : `
+                <button id="contact-now-btn" class="btn-primary">Contact Now</button>
+            `}
+        </div>
+        <div class="services-section">
+            <div class="section-title">Services Offered</div>
+            <div class="card-services" id="profile-services-list">${(user.services || []).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+            ${isOwnProfile ? '<button id="edit-services-btn" class="btn-secondary" style="margin-top: 12px;">Edit Services</button>' : ''}
+        </div>
+        <div class="portfolio-section">
+            <div class="section-title">Portfolio</div>
+            <div class="portfolio-grid" id="portfolio-grid">
+                ${(user.portfolio || []).map(img => `<img src="${img}" class="portfolio-item">`).join('')}
+            </div>
+            ${isOwnProfile ? '<button id="add-portfolio-btn" class="btn-secondary" style="margin-top: 12px;">+ Add Portfolio Image (Max 15)</button>' : ''}
+        </div>
+    `;
+    if (isOwnProfile) {
+        document.getElementById('edit-profile-btn')?.addEventListener('click', editProfile);
+        document.getElementById('register-gig-profile-btn')?.addEventListener('click', showRecentChatsForGig);
+        document.getElementById('buy-credits-btn')?.addEventListener('click', buyCredits);
+        document.getElementById('settings-btn')?.addEventListener('click', showSettings);
+        document.getElementById('edit-services-btn')?.addEventListener('click', editServices);
+        document.getElementById('add-portfolio-btn')?.addEventListener('click', addPortfolioImage);
+    } else {
+        document.getElementById('contact-now-btn')?.addEventListener('click', () => openChat(user.id));
+    }
+    document.querySelectorAll('.portfolio-item').forEach(img => {
+        img.addEventListener('click', () => window.openBottomSheet(`<img src="${img.src}" style="width: 100%; border-radius: 20px;">`));
+    });
+    document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
+}
+
+async function editServices() {
+    let selectedServices = [...(window.currentUserData?.services || [])];
+    const servicesHtml = window.PRESET_SERVICES.map(service => `
+        <div class="service-option" data-service="${service}" style="padding: 12px; background: ${selectedServices.includes(service) ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${selectedServices.includes(service) ? 'white' : 'var(--text-primary)'}; border-radius: 10px; margin-bottom: 8px; cursor: pointer;">
+            ${service}
+        </div>
+    `).join('');
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Edit Your Services</h3>
+        <div id="services-list" style="max-height: 400px; overflow-y: auto;">${servicesHtml}</div>
+        <button id="save-services" class="btn-primary" style="width: 100%; margin-top: 16px;">Save Changes</button>
+    `);
+    const serviceOptions = document.querySelectorAll('.service-option');
+    serviceOptions.forEach(opt => {
+        opt.addEventListener('click', () => {
+            const service = opt.dataset.service;
+            if (selectedServices.includes(service)) {
+                selectedServices = selectedServices.filter(s => s !== service);
+                opt.style.background = 'var(--bg-secondary)';
+                opt.style.color = 'var(--text-primary)';
+            } else {
+                selectedServices.push(service);
+                opt.style.background = 'var(--accent-orange)';
+                opt.style.color = 'white';
+            }
+        });
+    });
+    document.getElementById('save-services')?.addEventListener('click', async () => {
+        await window.db.collection('users').doc(window.auth.currentUser.uid).update({ services: selectedServices });
+        window.closeBottomSheet();
+        window.showToast('Services updated!');
+        loadProfile();
+    });
+}
+
+async function addPortfolioImage() {
+    const userDoc = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
+    const currentPortfolio = userDoc.data().portfolio || [];
+    if (currentPortfolio.length >= 15) {
+        window.showToast('Maximum 15 images. Delete some first.', 'error');
+        return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            window.showToast('Uploading...');
+            const url = await uploadImage(file, 'portfolio');
+            currentPortfolio.push(url);
+            await window.db.collection('users').doc(window.auth.currentUser.uid).update({ portfolio: currentPortfolio });
+            window.showToast('Portfolio updated!');
+            loadProfile();
+        }
+    };
+    input.click();
+}
+
+async function editProfile() {
+    const userDoc = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
+    const user = userDoc.data();
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Edit Profile</h3>
+        <input type="text" id="edit-name" value="${user.displayName || ''}" placeholder="Name" class="search-input" style="margin-bottom: 12px;">
+        <input type="tel" id="edit-phone" value="${user.phone || ''}" placeholder="Phone" class="search-input" style="margin-bottom: 12px;">
+        <textarea id="edit-bio" placeholder="Bio" class="search-input" style="margin-bottom: 12px;">${user.bio || ''}</textarea>
+        <input type="text" id="edit-address" value="${user.addressText || ''}" placeholder="Address" class="search-input" style="margin-bottom: 12px;">
+        <button id="change-photo-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px;">Change Profile Photo</button>
+        <button id="save-profile" class="btn-primary">Save Changes</button>
+    `);
+    document.getElementById('change-photo-btn')?.addEventListener('click', async () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                window.showToast('Uploading...');
+                const url = await uploadImage(file, 'profiles');
+                await window.db.collection('users').doc(window.auth.currentUser.uid).update({ photoURL: url });
+                await window.updateProfile(window.auth.currentUser, { photoURL: url });
+                window.showToast('Photo updated!');
+                loadProfile();
+            }
+        };
+        input.click();
+    });
+    document.getElementById('save-profile')?.addEventListener('click', async () => {
+        const updates = {
+            displayName: document.getElementById('edit-name').value,
+            phone: document.getElementById('edit-phone').value,
+            bio: document.getElementById('edit-bio').value,
+            addressText: document.getElementById('edit-address').value
+        };
+        await window.db.collection('users').doc(window.auth.currentUser.uid).update(updates);
+        await window.updateProfile(window.auth.currentUser, { displayName: updates.displayName });
+        window.closeBottomSheet();
+        window.showToast('Profile updated!');
+        loadProfile();
+    });
+}
+
+async function showRecentChatsForGig() {
+    const chatsSnapshot = await window.db.collection('chats')
+        .where('participants', 'array-contains', window.auth.currentUser.uid)
+        .where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
+        .get();
+    const recentUsers = [];
+    for (const chatDoc of chatsSnapshot.docs) {
+        const chat = chatDoc.data();
+        const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
+        const userDoc = await window.db.collection('users').doc(otherId).get();
+        recentUsers.push({ id: otherId, ...userDoc.data(), chatId: chatDoc.id });
+    }
+    if (recentUsers.length === 0) {
+        window.showToast('No recent chats found');
+        return;
+    }
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Select a client you worked with</h3>
+        ${recentUsers.map(u => `
+            <button class="recent-client-btn" data-user-id="${u.id}" data-chat-id="${u.chatId}" style="width: 100%; padding: 16px; margin-bottom: 8px; background: var(--bg-secondary); border: none; border-radius: 12px; text-align: left;">
+                ${u.displayName || 'User'} - ${u.services ? u.services[0] : ''}
+            </button>
+        `).join('')}
+    `);
+    document.querySelectorAll('.recent-client-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            window.closeBottomSheet();
+            registerGig(btn.dataset.chatId, btn.dataset.userId);
+        });
+    });
+}
+
+async function showSettings() {
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Settings</h3>
+        <button id="change-password-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px;">Change Password</button>
+        <button id="deactivate-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px; color: var(--error-red);">Deactivate Account</button>
+        <button id="logout-btn" class="btn-secondary" style="width: 100%;">Logout</button>
+    `);
+    document.getElementById('logout-btn')?.addEventListener('click', async () => {
+        await window.signOut(window.auth);
+        window.closeBottomSheet();
+        window.location.reload();
+    });
+    document.getElementById('deactivate-btn')?.addEventListener('click', async () => {
+        await window.db.collection('users').doc(window.auth.currentUser.uid).update({
+            deactivatedAt: new Date().toISOString(),
+            deactivateExpires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+        });
+        window.showToast('Account deactivated. Will be deleted after 14 days.');
+        await window.signOut(window.auth);
+        window.location.reload();
+    });
+    document.getElementById('change-password-btn')?.addEventListener('click', async () => {
+        window.showToast('Password reset email sent');
+        await window.sendPasswordResetEmail(window.auth, window.auth.currentUser.email);
+    });
+}
+
+// ========== INITIALIZE ==========
+document.addEventListener('DOMContentLoaded', async () => {
+    homeFeed = document.getElementById('home-feed');
+    searchServiceInput = document.getElementById('search-service-input');
+    radiusSlider = document.getElementById('radius-slider');
+    radiusValue = document.getElementById('radius-value');
+    mapViewBtn = document.getElementById('map-view-btn');
+    listViewBtn = document.getElementById('list-view-btn');
+    mapContainer = document.getElementById('map-container');
+    searchListView = document.getElementById('search-list-view');
+    searchListFeed = document.getElementById('search-list-feed');
+    chatsList = document.getElementById('chats-list');
+    profileContent = document.getElementById('profile-content');
+    
+    await checkAndCancelExpiredGigs();
+    
+    if (homeFeed) loadHomeFeed();
+    if (searchServiceInput) setupSearch();
+    if (mapContainer && window.L) initMap();
+    if (chatsList) loadChats();
+    if (profileContent) loadProfile();
+    
+    window.addEventListener('navigate', (e) => {
+        if (e.detail.page === 'home' && homeFeed) loadHomeFeed();
+        if (e.detail.page === 'chats' && chatsList) loadChats();
+        if (e.detail.page === 'profile' && profileContent) loadProfile();
+    });
+});
+
+window.loadHomeFeed = loadHomeFeed;
+window.loadProfile = loadProfile;
+window.loadChats = loadChats;
+window.performSearch = performSearch;
+window.buyCredits = buyCredits;
+window.submitReview = submitReview;
+window.registerGig = registerGig;
+window.uploadImage = uploadImage;
