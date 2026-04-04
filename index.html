@@ -8,18 +8,16 @@
     <meta name="theme-color" content="#CC5500">
 </head>
 <body>
-    <div id="app"></div>
+    <div id="app">Loading...</div>
     
-    <!-- Load helpers first -->
     <script src="utils/helpers.js"></script>
     
-    <!-- Firebase SDK - Load as module -->
-    <script type="module">
-        // Import Firebase services
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js';
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/11.8.0/firebase-auth.js';
-        import { getFirestore } from 'https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore.js';
-        
+    <!-- Firebase SDK loaded as regular script -->
+    <script src="https://www.gstatic.com/firebasejs/11.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.8.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/11.8.0/firebase-firestore-compat.js"></script>
+    
+    <script>
         // Your Firebase config
         const firebaseConfig = {
             apiKey: "AIzaSyAqvDHUPuGtZGMephb3dN_31eruuBXnbFE",
@@ -31,22 +29,15 @@
         };
         
         // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
+        firebase.initializeApp(firebaseConfig);
         
-        // Make auth and db available to all pages
-        window.firebaseAuth = auth;
-        window.firebaseDb = db;
-        window.firebaseSignIn = signInWithEmailAndPassword;
-        window.firebaseSignUp = createUserWithEmailAndPassword;
+        // Make Firebase services available globally
+        window.firebaseAuth = firebase.auth();
+        window.firebaseDb = firebase.firestore();
         
         console.log('✅ Firebase initialized');
-        
-        // Load the main app router
-        const script = document.createElement('script');
-        script.src = 'app.js';
-        document.body.appendChild(script);
     </script>
+    
+    <script src="app.js"></script>
 </body>
 </html>
