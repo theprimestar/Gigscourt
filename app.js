@@ -4,7 +4,6 @@ console.log('app.js loaded');
 function loadPage(pageName) {
     const appContainer = document.getElementById('app');
     
-    // Show loading indicator
     appContainer.innerHTML = '<div style="text-align:center; padding:50px;">Loading...</div>';
     
     fetch(`pages/${pageName}.html`)
@@ -15,11 +14,9 @@ function loadPage(pageName) {
         .then(html => {
             appContainer.innerHTML = html;
             
-            // Remove old page script
             const oldScript = document.getElementById('page-script');
             if (oldScript) oldScript.remove();
             
-            // Load new page script
             const script = document.createElement('script');
             script.id = 'page-script';
             script.src = `pages/${pageName}.js`;
@@ -31,19 +28,31 @@ function loadPage(pageName) {
         });
 }
 
-// Start the app
+// Check if user is logged in and has completed onboarding
 const currentUser = window.firebaseAuth?.currentUser;
+
 if (currentUser) {
-    // Check if user has completed onboarding
+    // Check if user has completed onboarding (has displayName and services)
     window.firebaseDb.collection('users').doc(currentUser.uid).get()
         .then(doc => {
-            if (doc.exists && doc.data().onboardingCompleted) {
-                loadPage('home');
+            if (doc.exists) {
+                const userData = doc.data();
+                // If user has displayName AND services AND location, they completed onboarding
+                if (userData.displayName && userData.services && userData.services.length > 0 && userData.location) {
+                    console.log('User has completed onboarding');
+                    loadPage('home');
+                } else {
+                    console.log('User needs onboarding');
+                    loadPage('onboarding-welcome');
+                }
             } else {
+                // No profile document - needs onboarding
+                console.log('No profile found, starting onboarding');
                 loadPage('onboarding-welcome');
             }
         })
-        .catch(() => {
+        .catch(error => {
+            console.error('Error checking user:', error);
             loadPage('onboarding-welcome');
         });
 } else {
