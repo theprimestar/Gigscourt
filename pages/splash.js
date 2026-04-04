@@ -1,15 +1,14 @@
 // pages/splash.js
-// Splash screen with 1.5 second fade out
+// 1-2 second fade animation
 
 setTimeout(() => {
     const container = document.querySelector('.splash-container');
     if (container) {
         container.style.opacity = '0';
-        container.style.transition = 'opacity 0.8s ease';
+        container.style.transition = 'opacity 0.5s ease';
         
         setTimeout(() => {
-            // After fade, redirect to login
             loadPage('login');
-        }, 800);
+        }, 500);
     }
 }, 1500);
