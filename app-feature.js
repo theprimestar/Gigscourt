@@ -1,6 +1,6 @@
 // ========================================
-// GigsCourt - Features Module
-// Map, Chat, Gigs, Credits, Reviews, Profile
+// GigsCourt - Features Module (COMPLETE)
+// Map, Chat, Gigs, Credits, Reviews, Profile, Portfolio, Uploads
 // ========================================
 
 // ========== DOM ELEMENTS ==========
@@ -11,6 +11,7 @@ let currentMap = null;
 let currentMarkers = [];
 let currentListViewData = [];
 let currentChatUser = null;
+let currentChatId = null;
 let currentMessagesUnsubscribe = null;
 let currentUserLocation = null;
 let currentRadius = 5;
@@ -38,7 +39,7 @@ function getActiveStatus(userData) {
     if ((lastGigDate && lastGigDate > sevenDaysAgo) || monthlyGigs >= 3) {
         return { active: true, text: 'Active this week' };
     }
-    return { active: false, text: 'Active' };
+    return { active: false, text: 'Inactive' };
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -52,14 +53,52 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// ========== HOME PAGE (Discovery) ==========
+// ========== IMAGE UPLOAD (ImageKit) ==========
+async function uploadImage(file, folder = 'profiles') {
+    return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('fileName', `${Date.now()}_${file.name}`);
+        formData.append('folder', `/GigsCourt/${folder}`);
+        formData.append('useUniqueFileName', 'true');
+        
+        fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${btoa(IMAGEKIT_PUBLIC_KEY + ':')}`
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.url) resolve(data.url);
+            else reject(data);
+        })
+        .catch(reject);
+    });
+}
+
+// ========== 7-DAY AUTO-CANCEL ==========
+async function checkAndCancelExpiredGigs() {
+    const expiredGigs = await window.db.collection('gigs')
+        .where('status', '==', 'pending_review')
+        .where('expiresAt', '<', new Date().toISOString())
+        .get();
+    expiredGigs.forEach(async (doc) => {
+        await doc.ref.update({ status: 'cancelled' });
+        await window.db.collection('chats').doc(doc.data().chatId).update({ pendingReview: false });
+        window.addNotification('Gig Cancelled', 'Client did not review within 7 days. No credits deducted.');
+    });
+}
+
+// ========== HOME PAGE ==========
 async function loadHomeFeed() {
     if (!homeFeed) return;
     homeFeed.innerHTML = '<div class="loading-spinner"></div>';
-    const usersSnapshot = await window.db.collection('users').where('services', 'array-contains-any', window.PRESET_SERVICES.slice(0, 5)).get();
+    const usersSnapshot = await window.db.collection('users').get();
     let users = [];
     usersSnapshot.forEach(doc => {
-        if (doc.id !== window.auth.currentUser?.uid) {
+        if (doc.id !== window.auth.currentUser?.uid && doc.data().services && doc.data().services.length > 0) {
             users.push({ id: doc.id, ...doc.data() });
         }
     });
@@ -104,7 +143,40 @@ async function loadHomeFeed() {
         </div>
     `).join('');
     document.querySelectorAll('#home-feed .card').forEach(card => {
-        card.addEventListener('click', () => viewUserProfile(card.dataset.userId));
+        card.addEventListener('click', () => {
+            window.haptic('light');
+            showUserBottomSheet(card.dataset.userId);
+        });
+    });
+}
+
+// ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
+async function showUserBottomSheet(userId) {
+    const userDoc = await window.db.collection('users').doc(userId).get();
+    const user = userDoc.data();
+    const activeStatus = getActiveStatus(user);
+    window.openBottomSheet(`
+        <div style="text-align: center; padding: 8px 0;">
+            <img src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
+            <h3>${user.displayName || 'Anonymous'}</h3>
+            ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
+            <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0} gigs)</div>
+            <p style="color: var(--text-secondary); margin: 8px 0;">${user.bio || 'No bio yet'}</p>
+            <div class="card-services" style="justify-content: center;">${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+            <div style="display: flex; gap: 12px; margin-top: 20px;">
+                <button id="view-full-profile" class="btn-primary" style="flex: 1;">View Full Profile</button>
+                <button id="message-from-sheet" class="btn-secondary" style="flex: 1;">Message</button>
+            </div>
+        </div>
+    `);
+    document.getElementById('view-full-profile')?.addEventListener('click', () => {
+        window.closeBottomSheet();
+        loadProfile(userId);
+        window.navigateToPage('profile');
+    });
+    document.getElementById('message-from-sheet')?.addEventListener('click', () => {
+        window.closeBottomSheet();
+        openChat(userId);
     });
 }
 
@@ -142,7 +214,7 @@ async function performSearch() {
     const snapshot = await query.get();
     let users = [];
     snapshot.forEach(doc => {
-        if (doc.id !== window.auth.currentUser?.uid) {
+        if (doc.id !== window.auth.currentUser?.uid && doc.data().services && doc.data().services.length > 0) {
             users.push({ id: doc.id, ...doc.data() });
         }
     });
@@ -190,7 +262,7 @@ function updateMapMarkers(users) {
                 ${activeStatus.active ? '🟢 Active' : '⚪ Inactive'}<br>
                 ${user.services ? user.services[0] : ''}
             `);
-            marker.on('click', () => viewUserProfile(user.id));
+            marker.on('click', () => showUserBottomSheet(user.id));
             currentMarkers.push(marker);
         }
     });
@@ -219,7 +291,7 @@ function updateListView(users) {
         </div>
     `).join('');
     document.querySelectorAll('#search-list-feed .card').forEach(card => {
-        card.addEventListener('click', () => viewUserProfile(card.dataset.userId));
+        card.addEventListener('click', () => showUserBottomSheet(card.dataset.userId));
     });
 }
 
@@ -244,6 +316,7 @@ function setupSearch() {
             listViewBtn.classList.remove('active');
             mapContainer.classList.remove('hidden');
             searchListView.classList.add('hidden');
+            window.haptic('light');
         });
         listViewBtn.addEventListener('click', () => {
             currentViewMode = 'list';
@@ -251,11 +324,12 @@ function setupSearch() {
             mapViewBtn.classList.remove('active');
             mapContainer.classList.add('hidden');
             searchListView.classList.remove('hidden');
+            window.haptic('light');
         });
     }
 }
 
-// ========== CHAT SYSTEM ==========
+// ========== CHAT SYSTEM (with Delete Message) ==========
 async function loadChats() {
     if (!chatsList) return;
     chatsList.innerHTML = '<div class="loading-spinner"></div>';
@@ -295,6 +369,7 @@ async function loadChats() {
 
 async function openChat(userId, chatId = null) {
     currentChatUser = userId;
+    currentChatId = chatId;
     let chat = chatId;
     if (!chat) {
         const existingChat = await window.db.collection('chats')
@@ -314,6 +389,7 @@ async function openChat(userId, chatId = null) {
             });
             chat = newChatRef.id;
         }
+        currentChatId = chat;
     }
     const userDoc = await window.db.collection('users').doc(userId).get();
     const userData = userDoc.data();
@@ -345,7 +421,7 @@ async function openChat(userId, chatId = null) {
                 const msg = doc.data();
                 const isMe = msg.senderId === window.auth.currentUser.uid;
                 messagesDiv.innerHTML += `
-                    <div style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
+                    <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
                         <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
                             ${msg.text}
                             ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
@@ -355,6 +431,21 @@ async function openChat(userId, chatId = null) {
                 `;
             });
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            // Add delete on long press
+            document.querySelectorAll('.message-wrapper').forEach(wrapper => {
+                let pressTimer;
+                wrapper.addEventListener('touchstart', () => {
+                    pressTimer = setTimeout(() => {
+                        const messageId = wrapper.dataset.messageId;
+                        if (confirm('Delete this message?')) {
+                            window.db.collection('chats').doc(chat).collection('messages').doc(messageId).delete();
+                            window.haptic('heavy');
+                        }
+                    }, 500);
+                });
+                wrapper.addEventListener('touchend', () => clearTimeout(pressTimer));
+                wrapper.addEventListener('touchmove', () => clearTimeout(pressTimer));
+            });
         });
     checkPendingReview(chat, userId);
 }
@@ -371,6 +462,7 @@ async function sendMessage(chatId, text) {
         lastMessageTime: new Date().toISOString()
     });
     document.getElementById('chat-input').value = '';
+    window.haptic('light');
 }
 
 async function checkPendingReview(chatId, userId) {
@@ -398,278 +490,4 @@ async function registerGig(chatId, clientId) {
         clientId: clientId,
         chatId: chatId,
         status: 'pending_review',
-        createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-    });
-    await window.db.collection('chats').doc(chatId).update({ pendingReview: true });
-    window.addNotification('Gig Registered', 'Client has been notified to review you', `review/${clientId}`);
-    window.showToast('Gig registered! Client will review within 7 days.');
-}
-
-// ========== REVIEW SYSTEM ==========
-async function submitReview(providerId, clientId, rating, reviewText) {
-    const reviewId = `${clientId}_${providerId}`;
-    await window.db.collection('reviews').doc(reviewId).set({
-        providerId: providerId,
-        clientId: clientId,
-        rating: rating,
-        review: reviewText,
-        updatedAt: new Date().toISOString()
-    }, { merge: true });
-    const allReviews = await window.db.collection('reviews').where('providerId', '==', providerId).get();
-    let sum = 0, count = 0;
-    allReviews.forEach(doc => {
-        sum += doc.data().rating;
-        count++;
-    });
-    const avgRating = sum / count;
-    await window.db.collection('users').doc(providerId).update({
-        rating: avgRating,
-        gigCount: window.firebase.firestore.FieldValue.increment(1),
-        credits: window.firebase.firestore.FieldValue.increment(-1)
-    });
-    const gigs = await window.db.collection('gigs')
-        .where('providerId', '==', providerId)
-        .where('clientId', '==', clientId)
-        .where('status', '==', 'pending_review')
-        .get();
-    gigs.forEach(doc => {
-        doc.ref.update({ status: 'completed', completedAt: new Date().toISOString() });
-    });
-    window.showToast(`Review submitted! ${rating} stars. Thank you!`);
-}
-
-// ========== CREDITS (Paystack) ==========
-function buyCredits() {
-    const packages = [
-        { credits: 5, price: 2500 },
-        { credits: 10, price: 4500 },
-        { credits: 20, price: 8000 }
-    ];
-    window.openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Buy Credits</h3>
-        ${packages.map(p => `
-            <button class="credit-package" data-credits="${p.credits}" data-price="${p.price}" style="width: 100%; padding: 16px; margin-bottom: 12px; background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: 16px; text-align: left;">
-                <strong>${p.credits} credits</strong> — ₦${p.price.toLocaleString()}
-            </button>
-        `).join('')}
-    `);
-    document.querySelectorAll('.credit-package').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const credits = parseInt(btn.dataset.credits);
-            const price = parseInt(btn.dataset.price);
-            window.closeBottomSheet();
-            if (window.PaystackPop) {
-                const handler = window.PaystackPop.setup({
-                    key: PAYSTACK_PUBLIC_KEY,
-                    email: window.auth.currentUser.email,
-                    amount: price * 100,
-                    currency: 'NGN',
-                    callback: async (response) => {
-                        await window.db.collection('users').doc(window.auth.currentUser.uid).update({
-                            credits: window.firebase.firestore.FieldValue.increment(credits)
-                        });
-                        window.showToast(`Added ${credits} credits!`);
-                    }
-                });
-                handler.openIframe();
-            } else {
-                window.showToast('Paystack not loaded. Please refresh.', 'error');
-            }
-        });
-    });
-}
-
-// ========== PROFILE PAGE ==========
-async function loadProfile(userId = null) {
-    const targetId = userId || window.auth.currentUser?.uid;
-    if (!targetId || !profileContent) return;
-    profileContent.innerHTML = '<div class="loading-spinner"></div>';
-    const userDoc = await window.db.collection('users').doc(targetId).get();
-    if (!userDoc.exists) {
-        profileContent.innerHTML = '<div class="empty-state">User not found</div>';
-        return;
-    }
-    const user = { id: userDoc.id, ...userDoc.data() };
-    const isOwnProfile = targetId === window.auth.currentUser?.uid;
-    const activeStatus = getActiveStatus(user);
-    profileContent.innerHTML = `
-        <div class="profile-header">
-            <img class="profile-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="" data-user-id="${user.id}">
-            <h2 class="profile-name">${user.displayName || 'Anonymous'}</h2>
-            <p class="profile-bio">${user.bio || 'No bio yet'}</p>
-            ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
-        </div>
-        <div class="profile-stats">
-            <div class="stat" data-stat="reviews">
-                <div class="stat-number">${user.gigCount || 0}</div>
-                <div class="stat-label">Gigs</div>
-            </div>
-            <div class="stat" data-stat="rating">
-                <div class="stat-number">★ ${(user.rating || 0).toFixed(1)}</div>
-                <div class="stat-label">Rating</div>
-            </div>
-            <div class="stat" data-stat="credits">
-                <div class="stat-number">${user.credits || 0}</div>
-                <div class="stat-label">Credits</div>
-            </div>
-        </div>
-        <div class="profile-address">📍 ${user.addressText || 'No address set'}</div>
-        <div class="profile-actions">
-            ${isOwnProfile ? `
-                <button id="edit-profile-btn" class="btn-secondary">Edit Profile</button>
-                <button id="register-gig-profile-btn" class="btn-primary">Register Gig</button>
-                <button id="buy-credits-btn" class="btn-primary">Buy Credits</button>
-                <button id="settings-btn" class="btn-secondary">Settings</button>
-            ` : `
-                <button id="contact-now-btn" class="btn-primary">Contact Now</button>
-                <button id="message-btn" class="btn-secondary">Message</button>
-            `}
-        </div>
-        <div class="services-section">
-            <div class="section-title">Services Offered</div>
-            <div class="card-services">${(user.services || []).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
-        </div>
-        <div class="portfolio-section">
-            <div class="section-title">Portfolio</div>
-            <div class="portfolio-grid" id="portfolio-grid">
-                ${(user.portfolio || []).map(img => `<img src="${img}" class="portfolio-item">`).join('')}
-            </div>
-        </div>
-    `;
-    if (isOwnProfile) {
-        document.getElementById('edit-profile-btn')?.addEventListener('click', editProfile);
-        document.getElementById('register-gig-profile-btn')?.addEventListener('click', showRecentChatsForGig);
-        document.getElementById('buy-credits-btn')?.addEventListener('click', buyCredits);
-        document.getElementById('settings-btn')?.addEventListener('click', showSettings);
-    } else {
-        document.getElementById('contact-now-btn')?.addEventListener('click', () => openChat(user.id));
-        document.getElementById('message-btn')?.addEventListener('click', () => openChat(user.id));
-    }
-    document.querySelectorAll('.portfolio-item').forEach(img => {
-        img.addEventListener('click', () => window.openBottomSheet(`<img src="${img.src}" style="width: 100%; border-radius: 20px;">`));
-    });
-}
-
-async function editProfile() {
-    const userDoc = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
-    const user = userDoc.data();
-    window.openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Edit Profile</h3>
-        <input type="text" id="edit-name" value="${user.displayName || ''}" placeholder="Name" class="search-input" style="margin-bottom: 12px;">
-        <input type="tel" id="edit-phone" value="${user.phone || ''}" placeholder="Phone" class="search-input" style="margin-bottom: 12px;">
-        <textarea id="edit-bio" placeholder="Bio" class="search-input" style="margin-bottom: 12px;">${user.bio || ''}</textarea>
-        <input type="text" id="edit-address" value="${user.addressText || ''}" placeholder="Address" class="search-input" style="margin-bottom: 12px;">
-        <button id="save-profile" class="btn-primary">Save Changes</button>
-    `);
-    document.getElementById('save-profile').addEventListener('click', async () => {
-        const updates = {
-            displayName: document.getElementById('edit-name').value,
-            phone: document.getElementById('edit-phone').value,
-            bio: document.getElementById('edit-bio').value,
-            addressText: document.getElementById('edit-address').value
-        };
-        await window.db.collection('users').doc(window.auth.currentUser.uid).update(updates);
-        await window.updateProfile(window.auth.currentUser, { displayName: updates.displayName });
-        window.closeBottomSheet();
-        window.showToast('Profile updated!');
-        loadProfile();
-    });
-}
-
-async function showRecentChatsForGig() {
-    const chatsSnapshot = await window.db.collection('chats')
-        .where('participants', 'array-contains', window.auth.currentUser.uid)
-        .where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
-        .get();
-    const recentUsers = [];
-    for (const chatDoc of chatsSnapshot.docs) {
-        const chat = chatDoc.data();
-        const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-        const userDoc = await window.db.collection('users').doc(otherId).get();
-        recentUsers.push({ id: otherId, ...userDoc.data(), chatId: chatDoc.id });
-    }
-    if (recentUsers.length === 0) {
-        window.showToast('No recent chats found');
-        return;
-    }
-    window.openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Select a client you worked with</h3>
-        ${recentUsers.map(u => `
-            <button class="recent-client-btn" data-user-id="${u.id}" data-chat-id="${u.chatId}" style="width: 100%; padding: 16px; margin-bottom: 8px; background: var(--bg-secondary); border: none; border-radius: 12px; text-align: left;">
-                ${u.displayName || 'User'} - ${u.services ? u.services[0] : ''}
-            </button>
-        `).join('')}
-    `);
-    document.querySelectorAll('.recent-client-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            window.closeBottomSheet();
-            registerGig(btn.dataset.chatId, btn.dataset.userId);
-        });
-    });
-}
-
-async function showSettings() {
-    window.openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Settings</h3>
-        <button id="change-password-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px;">Change Password</button>
-        <button id="deactivate-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px; color: var(--error-red);">Deactivate Account</button>
-        <button id="logout-btn" class="btn-secondary" style="width: 100%;">Logout</button>
-    `);
-    document.getElementById('logout-btn')?.addEventListener('click', async () => {
-        await window.signOut(window.auth);
-        window.closeBottomSheet();
-        window.location.reload();
-    });
-    document.getElementById('deactivate-btn')?.addEventListener('click', async () => {
-        await window.db.collection('users').doc(window.auth.currentUser.uid).update({
-            deactivatedAt: new Date().toISOString(),
-            deactivateExpires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-        });
-        window.showToast('Account deactivated. Will be deleted after 14 days.');
-        await window.signOut(window.auth);
-        window.location.reload();
-    });
-}
-
-async function viewUserProfile(userId) {
-    await loadProfile(userId);
-    window.navigateToPage('profile');
-}
-
-// ========== INITIALIZE FEATURES ==========
-document.addEventListener('DOMContentLoaded', () => {
-    homeFeed = document.getElementById('home-feed');
-    searchServiceInput = document.getElementById('search-service-input');
-    radiusSlider = document.getElementById('radius-slider');
-    radiusValue = document.getElementById('radius-value');
-    mapViewBtn = document.getElementById('map-view-btn');
-    listViewBtn = document.getElementById('list-view-btn');
-    mapContainer = document.getElementById('map-container');
-    searchListView = document.getElementById('search-list-view');
-    searchListFeed = document.getElementById('search-list-feed');
-    chatsList = document.getElementById('chats-list');
-    profileContent = document.getElementById('profile-content');
-    
-    if (homeFeed) loadHomeFeed();
-    if (searchServiceInput) setupSearch();
-    if (mapContainer && window.L) initMap();
-    if (chatsList) loadChats();
-    if (profileContent) loadProfile();
-    
-    // Refresh data when user navigates
-    window.addEventListener('navigate', (e) => {
-        if (e.detail.page === 'home' && homeFeed) loadHomeFeed();
-        if (e.detail.page === 'chats' && chatsList) loadChats();
-        if (e.detail.page === 'profile' && profileContent) loadProfile();
-    });
-});
-
-// Expose functions
-window.loadHomeFeed = loadHomeFeed;
-window.loadProfile = loadProfile;
-window.loadChats = loadChats;
-window.performSearch = performSearch;
-window.buyCredits = buyCredits;
-window.submitReview = submitReview;
-window.registerGig = registerGig;
+        createdAt: new Date().toISOString
