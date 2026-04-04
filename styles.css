@@ -250,3 +250,29 @@ body {
     color: rgba(255,255,255,0.9);
     font-size: 1rem;
 }
+
+/* Home Page */
+.home-container {
+    min-height: 100vh;
+    background: var(--soft-gray);
+}
+
+.home-header {
+    background: white;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #eee;
+}
+
+.home-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+}
+
+.home-icons span {
+    margin-left: 1rem;
+    font-size: 1.2rem;
+}
