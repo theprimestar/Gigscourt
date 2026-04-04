@@ -12,43 +12,47 @@ setTimeout(() => {
         return;
     }
     
-    gotoLogin.addEventListener('click', (e) => {
-        e.preventDefault();
-        loadPage('login');
-    });
+    if (gotoLogin) {
+        gotoLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            loadPage('login');
+        });
+    }
     
-    signupBtn.addEventListener('click', async () => {
-        const email = emailInput.value.trim();
-        const password = passwordInput.value;
-        
-        if (!email || !password) {
-            alert('Please enter email and password');
-            return;
-        }
-        
-        if (password.length < 6) {
-            alert('Password must be at least 6 characters');
-            return;
-        }
-        
-        signupBtn.textContent = 'Creating account...';
-        signupBtn.disabled = true;
-        
-        try {
-            const userCredential = await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
-            console.log('Account created:', userCredential.user.uid);
-            alert('Account created successfully!');
-            loadPage('onboarding-welcome');
-        } catch (error) {
-            console.error(error);
-            let errorMessage = 'Signup failed. ';
-            if (error.code === 'auth/email-already-in-use') errorMessage += 'Email already registered.';
-            else if (error.code === 'auth/invalid-email') errorMessage += 'Invalid email.';
-            else if (error.code === 'auth/weak-password') errorMessage += 'Password too weak. Use 6+ characters.';
-            else errorMessage += error.message;
-            alert(errorMessage);
-            signupBtn.textContent = 'Create Account';
-            signupBtn.disabled = false;
-        }
-    });
+    if (signupBtn) {
+        signupBtn.addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            
+            if (!email || !password) {
+                alert('Please enter email and password');
+                return;
+            }
+            
+            if (password.length < 6) {
+                alert('Password must be at least 6 characters');
+                return;
+            }
+            
+            signupBtn.textContent = 'Creating account...';
+            signupBtn.disabled = true;
+            
+            try {
+                const userCredential = await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
+                console.log('Account created:', userCredential.user.uid);
+                alert('Account created successfully!');
+                loadPage('onboarding-welcome');
+            } catch (error) {
+                console.error(error);
+                let errorMessage = 'Signup failed. ';
+                if (error.code === 'auth/email-already-in-use') errorMessage += 'Email already registered.';
+                else if (error.code === 'auth/invalid-email') errorMessage += 'Invalid email.';
+                else if (error.code === 'auth/weak-password') errorMessage += 'Password too weak. Use 6+ characters.';
+                else errorMessage += error.message;
+                alert(errorMessage);
+                signupBtn.textContent = 'Create Account';
+                signupBtn.disabled = false;
+            }
+        });
+    }
 }, 100);
