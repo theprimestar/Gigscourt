@@ -1,24 +1,23 @@
 // pages/login.js - Firebase Login
-document.addEventListener('DOMContentLoaded', () => {
+console.log('login.js loaded');
+
+// Wait for elements to be ready
+setTimeout(() => {
     const emailInput = document.getElementById('login-email');
     const passwordInput = document.getElementById('login-password');
     const loginBtn = document.getElementById('login-btn');
     const gotoSignup = document.getElementById('goto-signup');
     
-    // Check if user is already logged in
-    if (window.firebaseAuth && window.firebaseAuth.currentUser) {
-        console.log('User already logged in');
-        loadPage('home');
+    if (!emailInput) {
+        console.error('Login elements not found');
         return;
     }
     
-    // Redirect to signup
     gotoSignup.addEventListener('click', (e) => {
         e.preventDefault();
         loadPage('signup');
     });
     
-    // Login function
     loginBtn.addEventListener('click', async () => {
         const email = emailInput.value.trim();
         const password = passwordInput.value;
@@ -32,32 +31,19 @@ document.addEventListener('DOMContentLoaded', () => {
         loginBtn.disabled = true;
         
         try {
-            const userCredential = await window.firebaseSignIn(window.firebaseAuth, email, password);
-            console.log('Login successful:', userCredential.user.email);
+            await window.firebaseAuth.signInWithEmailAndPassword(email, password);
             alert('Login successful!');
             loadPage('home');
         } catch (error) {
-            console.error('Login error:', error);
+            console.error(error);
             let errorMessage = 'Login failed. ';
-            switch (error.code) {
-                case 'auth/invalid-credential':
-                    errorMessage += 'Invalid email or password.';
-                    break;
-                case 'auth/user-not-found':
-                    errorMessage += 'No account found with this email.';
-                    break;
-                case 'auth/wrong-password':
-                    errorMessage += 'Incorrect password.';
-                    break;
-                case 'auth/too-many-requests':
-                    errorMessage += 'Too many failed attempts. Try again later.';
-                    break;
-                default:
-                    errorMessage += error.message;
-            }
+            if (error.code === 'auth/user-not-found') errorMessage += 'No account found.';
+            else if (error.code === 'auth/wrong-password') errorMessage += 'Wrong password.';
+            else if (error.code === 'auth/invalid-credential') errorMessage += 'Invalid email or password.';
+            else errorMessage += error.message;
             alert(errorMessage);
             loginBtn.textContent = 'Login';
             loginBtn.disabled = false;
         }
     });
-});
+}, 100);
