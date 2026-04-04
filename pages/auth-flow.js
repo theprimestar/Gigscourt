@@ -508,48 +508,84 @@ const AuthFlow = (function() {
                 magicLinkPollingInterval = setInterval(async () => {
                     const { data: { session } } = await window.SupabaseAPI.client.auth.getSession();
                     if (session) {
-                        clearInterval(magicLinkPollingInterval);
-                        magicLinkPollingInterval = null;
-                        
-                        const userId = session.user.id;
-                        
-                        const hasServices = selectedServices.length > 0;
-                        const hasLocation = workspaceLocation !== null;
-                        const hasPhoto = uploadedPhotoUrl !== null;
-                        const isVisible = hasServices && hasLocation && hasPhoto;
-                        
-                        const profileData = {
-                            full_name: fullNameForSignup,
-                            selected_services: selectedServices,
-                            latitude: workspaceLocation?.lat || null,
-                            longitude: workspaceLocation?.lng || null,
-                            address_text: workspaceAddressText,
-                            avatar_url: uploadedPhotoUrl,
-                            is_visible: isVisible,
-                            credits: 6
-                        };
-                        
-                        // Check if profile exists
-                        const client = window.SupabaseAPI.client;
-                        const { data: existingProfile } = await client
-                            .from('profiles')
-                            .select('id')
-                            .eq('id', userId)
-                            .maybeSingle();
-                        
-                        if (existingProfile) {
-                            await window.SupabaseAPI.updateProfile(userId, profileData);
-                        } else {
-                            await client.from('profiles').insert({ id: userId, ...profileData });
-                        }
-                        
-                        // Navigate to home
-                        if (window.Navigation) {
-                            if (window.TabBar) window.TabBar.show();
-                            window.Navigation.reset();
-                            window.Navigation.navigateTo("home", {}, false);
-                        }
+    clearInterval(magicLinkPollingInterval);
+    magicLinkPollingInterval = null;
+    
+    const userId = session.user.id;
+    
+    const hasServices = selectedServices.length > 0;
+    const hasLocation = workspaceLocation !== null;
+    const hasPhoto = uploadedPhotoUrl !== null;
+    const isVisible = hasServices && hasLocation && hasPhoto;
+    
+    const profileData = {
+        full_name: fullNameForSignup,
+        selected_services: selectedServices,
+        latitude: workspaceLocation?.lat || null,
+        longitude: workspaceLocation?.lng || null,
+        address_text: workspaceAddressText,
+        avatar_url: uploadedPhotoUrl,
+        is_visible: isVisible,
+        credits: 6
+    };
+    
+    // Retry logic for profile creation
+    let retries = 0;
+    let profileCreated = false;
+    
+    while (retries < 5 && !profileCreated) {
+        try {
+            const client = window.SupabaseAPI.client;
+            
+            // Check if profile already exists
+            const { data: existingProfile } = await client
+                .from('profiles')
+                .select('id')
+                .eq('id', userId)
+                .maybeSingle();
+            
+            if (existingProfile) {
+                await window.SupabaseAPI.updateProfile(userId, profileData);
+                profileCreated = true;
+                console.log("Profile updated successfully");
+            } else {
+                const { error: insertError } = await client
+                    .from('profiles')
+                    .insert({ id: userId, ...profileData });
+                
+                if (insertError) {
+                    console.error(`Insert attempt ${retries + 1} failed:`, insertError);
+                    retries++;
+                    if (retries < 5) {
+                        await new Promise(r => setTimeout(r, 1000));
                     }
+                } else {
+                    profileCreated = true;
+                    console.log("Profile created successfully");
+                }
+            }
+        } catch (err) {
+            console.error(`Attempt ${retries + 1} error:`, err);
+            retries++;
+            if (retries < 5) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
+    }
+    
+    if (!profileCreated) {
+        console.error("Failed to create profile after 5 attempts");
+        alert("Profile creation failed. Please contact support.");
+        return;
+    }
+    
+    // Navigate to home
+    if (window.Navigation) {
+        if (window.TabBar) window.TabBar.show();
+        window.Navigation.reset();
+        window.Navigation.navigateTo("home", {}, false);
+    }
+}
                 }, 2000);
                 
                 // Stop polling after 5 minutes
