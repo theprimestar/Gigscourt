@@ -1,7 +1,7 @@
 // ========================================
 // GigsCourt Auth Flow - 3 Page Signup
 // Low-friction onboarding with visibility gating
-// FIXED: Profile creation for OTP flow
+// CONVERTED TO MAGIC LINK (no OTP)
 // ========================================
 
 const AuthFlow = (function() {
@@ -10,7 +10,6 @@ const AuthFlow = (function() {
     let selectedServices = [];
     let workspaceLocation = null;
     let workspaceAddressText = "";
-    let tempUserId = null; // For OTP flow before account creation
     
     // The 30 services list
     const SERVICES = [
@@ -48,6 +47,7 @@ const AuthFlow = (function() {
     
     let map = null;
     let marker = null;
+    let magicLinkPollingInterval = null;
     
     // ===== Render Main Auth Container =====
     function render() {
@@ -252,7 +252,6 @@ const AuthFlow = (function() {
         // Setup address input geocoding (basic)
         const addressInput = document.getElementById("workspace-address");
         addressInput?.addEventListener("change", () => {
-            // Simple geocoding would go here - for MVP, just store text
             workspaceAddressText = addressInput.value;
         });
         
@@ -262,7 +261,6 @@ const AuthFlow = (function() {
                 workspaceLocation = { lat: latlng.lat, lng: latlng.lng };
                 if (addressInput.value) workspaceAddressText = addressInput.value;
                 
-                // Visual feedback
                 const btn = document.getElementById("confirm-location");
                 btn.textContent = "✓ Location Confirmed";
                 setTimeout(() => {
@@ -289,7 +287,6 @@ const AuthFlow = (function() {
     }
     
     function initStep2Map() {
-        // Default: Lagos, Nigeria
         const defaultLat = 6.5244;
         const defaultLng = 3.3792;
         
@@ -299,7 +296,6 @@ const AuthFlow = (function() {
             attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
         }).addTo(map);
         
-        // Draggable marker
         marker = L.marker([defaultLat, defaultLng], { draggable: true }).addTo(map);
         
         marker.on("dragend", () => {
@@ -307,7 +303,6 @@ const AuthFlow = (function() {
             workspaceLocation = { lat: pos.lat, lng: pos.lng };
         });
         
-        // Try to get user's current location
         navigator.geolocation.getCurrentPosition(
             (position) => {
                 const userLat = position.coords.latitude;
@@ -388,27 +383,8 @@ const AuthFlow = (function() {
                         font-size: 14px;
                     ">
                     
-                    <!-- OTP Section (hidden initially) -->
-                    <div id="otp-section" style="display: none;">
-                        <input type="text" id="otp-code" placeholder="Enter 6-digit code" style="
-                            width: 100%;
-                            padding: 14px;
-                            border-radius: 16px;
-                            border: 1px solid var(--border-glass);
-                            background: var(--bg-secondary);
-                            color: var(--text-primary);
-                            margin-bottom: 16px;
-                            font-size: 14px;
-                            text-align: center;
-                            letter-spacing: 4px;
-                        ">
-                        <button id="verify-otp-btn" class="btn-burnt-orange" style="width: 100%; margin-bottom: 12px;">
-                            Verify & Complete
-                        </button>
-                    </div>
-                    
-                    <!-- Send OTP Button -->
-                    <button id="send-otp-btn" class="btn-burnt-orange" style="width: 100%; margin-bottom: 12px;">
+                    <!-- Send Magic Link Button -->
+                    <button id="send-magic-link-btn" class="btn-burnt-orange" style="width: 100%; margin-bottom: 12px;">
                         Continue with Email →
                     </button>
                     
@@ -477,10 +453,17 @@ const AuthFlow = (function() {
             }
         });
         
-        // OTP flow
-        let emailForOtp = "";
+        // Magic Link flow (no OTP)
+        let emailForSignup = "";
+        let fullNameForSignup = "";
         
-        document.getElementById("send-otp-btn")?.addEventListener("click", async () => {
+        // Clear any existing polling interval
+        if (magicLinkPollingInterval) {
+            clearInterval(magicLinkPollingInterval);
+            magicLinkPollingInterval = null;
+        }
+        
+        document.getElementById("send-magic-link-btn")?.addEventListener("click", async () => {
             const email = document.getElementById("email")?.value.trim();
             const fullName = document.getElementById("full-name")?.value.trim();
             
@@ -497,7 +480,8 @@ const AuthFlow = (function() {
                 return;
             }
             
-            emailForOtp = email;
+            emailForSignup = email;
+            fullNameForSignup = fullName;
             
             try {
                 const { error } = await window.SupabaseAPI.client.auth.signInWithOtp({
@@ -513,93 +497,91 @@ const AuthFlow = (function() {
                 
                 if (error) throw error;
                 
-                // Show OTP input
-                document.getElementById("otp-section").style.display = "block";
-                document.getElementById("send-otp-btn").style.display = "none";
-                alert("6-digit code sent to your email!");
+                alert("Magic link sent to your email! Click the link to sign in.");
+                
+                // Disable button to prevent multiple clicks
+                const btn = document.getElementById("send-magic-link-btn");
+                btn.disabled = true;
+                btn.textContent = "Check your email...";
+                
+                // Poll for session (user clicks link in email)
+                magicLinkPollingInterval = setInterval(async () => {
+                    const { data: { session } } = await window.SupabaseAPI.client.auth.getSession();
+                    if (session) {
+                        clearInterval(magicLinkPollingInterval);
+                        magicLinkPollingInterval = null;
+                        
+                        const userId = session.user.id;
+                        
+                        const hasServices = selectedServices.length > 0;
+                        const hasLocation = workspaceLocation !== null;
+                        const hasPhoto = uploadedPhotoUrl !== null;
+                        const isVisible = hasServices && hasLocation && hasPhoto;
+                        
+                        const profileData = {
+                            full_name: fullNameForSignup,
+                            selected_services: selectedServices,
+                            latitude: workspaceLocation?.lat || null,
+                            longitude: workspaceLocation?.lng || null,
+                            address_text: workspaceAddressText,
+                            avatar_url: uploadedPhotoUrl,
+                            is_visible: isVisible,
+                            credits: 6
+                        };
+                        
+                        // Check if profile exists
+                        const client = window.SupabaseAPI.client;
+                        const { data: existingProfile } = await client
+                            .from('profiles')
+                            .select('id')
+                            .eq('id', userId)
+                            .maybeSingle();
+                        
+                        if (existingProfile) {
+                            await window.SupabaseAPI.updateProfile(userId, profileData);
+                        } else {
+                            await client.from('profiles').insert({ id: userId, ...profileData });
+                        }
+                        
+                        // Navigate to home
+                        if (window.Navigation) {
+                            if (window.TabBar) window.TabBar.show();
+                            window.Navigation.reset();
+                            window.Navigation.navigateTo("home", {}, false);
+                        }
+                    }
+                }, 2000);
+                
+                // Stop polling after 5 minutes
+                setTimeout(() => {
+                    if (magicLinkPollingInterval) {
+                        clearInterval(magicLinkPollingInterval);
+                        magicLinkPollingInterval = null;
+                        const btn = document.getElementById("send-magic-link-btn");
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = "Continue with Email →";
+                        }
+                        alert("Magic link expired or not clicked. Please try again.");
+                    }
+                }, 300000);
                 
             } catch (error) {
-                console.error("OTP error:", error);
-                alert("Error sending code: " + error.message);
-            }
-        });
-        
-        // FIXED: Verify OTP and CREATE profile if it doesn't exist
-        document.getElementById("verify-otp-btn")?.addEventListener("click", async () => {
-            const otp = document.getElementById("otp-code")?.value.trim();
-            
-            if (!otp || otp.length !== 6) {
-                alert("Please enter the 6-digit code");
-                return;
-            }
-            
-            try {
-                const { data, error } = await window.SupabaseAPI.client.auth.verifyOtp({
-                    email: emailForOtp,
-                    token: otp,
-                    type: 'email'
-                });
-                
-                if (error) throw error;
-                
-                const userId = data.user.id;
-                
-                // Calculate visibility
-                const hasServices = selectedServices.length > 0;
-                const hasLocation = workspaceLocation !== null;
-                const hasPhoto = uploadedPhotoUrl !== null;
-                const isVisible = hasServices && hasLocation && hasPhoto;
-                
-                const profileData = {
-                    full_name: document.getElementById("full-name")?.value.trim(),
-                    selected_services: selectedServices,
-                    latitude: workspaceLocation?.lat || null,
-                    longitude: workspaceLocation?.lng || null,
-                    address_text: workspaceAddressText,
-                    avatar_url: uploadedPhotoUrl,
-                    is_visible: isVisible,
-                    credits: 6
-                };
-                
-                // Check if profile exists
-                const client = await window.SupabaseAPI.client;
-                const { data: existingProfile } = await client
-                    .from('profiles')
-                    .select('id')
-                    .eq('id', userId)
-                    .maybeSingle();
-                
-                if (existingProfile) {
-                    // Update existing profile
-                    await window.SupabaseAPI.updateProfile(userId, profileData);
-                } else {
-                    // Create new profile
-                    const { error: insertError } = await client
-                        .from('profiles')
-                        .insert({ id: userId, ...profileData });
-                    if (insertError) throw insertError;
-                }
-                
-                // Navigate to home
-                if (window.Navigation) {
-                    if (window.TabBar) window.TabBar.show();
-                    window.Navigation.reset();
-                    window.Navigation.navigateTo("home", {}, false);
-                }
-                
-            } catch (error) {
-                console.error("Verification error:", error);
-                alert("Error verifying code: " + error.message);
+                console.error("Magic link error:", error);
+                alert("Error sending magic link: " + error.message);
+                const btn = document.getElementById("send-magic-link-btn");
+                btn.disabled = false;
+                btn.textContent = "Continue with Email →";
             }
         });
         
         // Social auth placeholders
         document.getElementById("google-auth")?.addEventListener("click", () => {
-            alert("Google sign-in coming soon. Use email OTP for now.");
+            alert("Google sign-in coming soon. Use magic link for now.");
         });
         
         document.getElementById("apple-auth")?.addEventListener("click", () => {
-            alert("Apple sign-in coming soon. Use email OTP for now.");
+            alert("Apple sign-in coming soon. Use magic link for now.");
         });
     }
     
