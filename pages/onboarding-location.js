@@ -81,16 +81,17 @@ document.addEventListener('DOMContentLoaded', () => {
             
             try {
                 await window.firebaseDb.collection('users').doc(currentUser.uid).set({
-                    displayName: userData.displayName,
-                    phoneNumber: userData.phoneNumber,
-                    services: userData.services,
-                    location: userData.location,
-                    profilePicture: userData.profilePicture || null,
-                    createdAt: new Date(),
-                    credits: 6,
-                    rating: 0,
-                    totalGigs: 0
-                });
+    displayName: userData.displayName,
+    phoneNumber: userData.phoneNumber,
+    services: userData.services,
+    location: userData.location,
+    profilePicture: userData.profilePicture || null,
+    createdAt: new Date(),
+    credits: 6,
+    rating: 0,
+    totalGigs: 0,
+    onboardingCompleted: true
+});
                 
                 // Clear session storage
                 sessionStorage.removeItem('onboardingData');
