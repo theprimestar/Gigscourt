@@ -6,24 +6,20 @@
     <meta name="theme-color" content="#0f0f0f" media="(prefers-color-scheme: dark)">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     <meta name="description" content="GigsCourt - Find trusted local service providers">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="https://ik.imagekit.io/Theprimestar/icon-192.png">
     <title>GigsCourt</title>
-    <!-- Leaflet CSS (for map) -->
+    
+    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-        import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-        import { getFirestore } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-        import { getStorage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js';
-        window.firebaseApp = initializeApp(window.firebaseConfig);
-        window.auth = getAuth(window.firebaseApp);
-        window.db = getFirestore(window.firebaseApp);
-        window.storage = getStorage(window.firebaseApp);
-    </script>
+    
+    <!-- Paystack -->
+    <script src="https://js.paystack.co/v1/inline.js"></script>
+    
     <style>
-        /* Quick inline styles for splash screen only - full styles in styles.css */
+        /* Quick inline styles for splash screen only */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #0f0f0f; overflow-x: hidden; }
         #splash-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #C0392B 0%, #E67E22 100%); display: flex; justify-content: center; align-items: center; z-index: 10000; transition: opacity 0.5s ease; }
@@ -33,6 +29,7 @@
         @keyframes bounceScale { 0% { transform: scale(0.3); opacity: 0; } 50% { transform: scale(1.2); } 70% { transform: scale(0.95); } 100% { transform: scale(1); opacity: 1; } }
         #main-app { display: none; opacity: 0; transition: opacity 0.3s ease; }
     </style>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
@@ -60,7 +57,6 @@
                 </button>
             </div>
         </div>
-        <!-- Notification Dropdown (hidden by default) -->
         <div id="notifications-dropdown" class="notifications-dropdown hidden">
             <div class="notifications-header">
                 <span>Notifications</span>
@@ -74,7 +70,6 @@
 
     <!-- PAGE CONTAINERS -->
     <main id="page-container">
-        <!-- HOME PAGE (Discovery) -->
         <div id="home-page" class="page active">
             <div class="page-content">
                 <div class="search-bar-container">
@@ -86,7 +81,6 @@
             </div>
         </div>
 
-        <!-- SEARCH PAGE (Map + List Toggle) -->
         <div id="search-page" class="page">
             <div class="page-content">
                 <div class="search-controls">
@@ -109,7 +103,6 @@
             </div>
         </div>
 
-        <!-- CHATS PAGE -->
         <div id="chats-page" class="page">
             <div class="page-content">
                 <div class="chats-header">
@@ -126,7 +119,6 @@
             </div>
         </div>
 
-        <!-- PROFILE PAGE -->
         <div id="profile-page" class="page">
             <div class="page-content">
                 <div id="profile-content">
@@ -136,7 +128,6 @@
         </div>
     </main>
 
-    <!-- BOTTOM NAVIGATION -->
     <nav id="bottom-nav" class="bottom-nav">
         <button class="nav-item active" data-page="home">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -166,62 +157,29 @@
         </button>
     </nav>
 
-    <!-- BOTTOM SHEET (Universal) -->
     <div id="bottom-sheet" class="bottom-sheet hidden">
         <div class="sheet-drag-handle"></div>
-        <div class="sheet-content" id="sheet-content">
-            <!-- Dynamic content injected here -->
-        </div>
+        <div class="sheet-content" id="sheet-content"></div>
     </div>
     <div id="sheet-overlay" class="sheet-overlay hidden"></div>
 
-    <!-- TOAST CONTAINER -->
     <div id="toast-container" class="toast-container"></div>
 </div>
 
-<script src="firebase-config.js"></script>
-<script type="module">
-    // Wait for Firebase to initialize then load main app
-    import { getAuth, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-    
-    window.addEventListener('DOMContentLoaded', () => {
-        // Hide splash after animation
-        setTimeout(() => {
-            const splash = document.getElementById('splash-screen');
-            splash.style.opacity = '0';
-            setTimeout(() => {
-                splash.style.display = 'none';
-                document.getElementById('main-app').style.display = 'block';
-                setTimeout(() => {
-                    document.getElementById('main-app').style.opacity = '1';
-                }, 50);
-            }, 500);
-        }, 1500);
-    });
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    // Simple navigation setup (will be replaced by app.js logic)
-    window.initSimpleNav = () => {
-        const navItems = document.querySelectorAll('.nav-item');
-        const pages = document.querySelectorAll('.page');
-        navItems.forEach(item => {
-            item.addEventListener('click', () => {
-                const pageId = item.dataset.page;
-                navItems.forEach(nav => nav.classList.remove('active'));
-                item.classList.add('active');
-                pages.forEach(page => {
-                    page.classList.remove('active');
-                    if (page.id === `${pageId}-page`) {
-                        page.classList.add('active');
-                    }
-                });
-                // Trigger scroll restore later
-            });
-        });
-    };
-    setTimeout(() => {
-        if (document.querySelector('.nav-item')) window.initSimpleNav();
-    }, 100);
-</script>
-<script src="app.js" type="module"></script>
+<!-- ImageKit Uploader -->
+<script src="https://cdn.jsdelivr.net/npm/ik-imagekit@latest/dist/ik-imagekit.min.js"></script>
+
+<!-- Firebase Config -->
+<script src="firebase-config.js"></script>
+
+<!-- Core App -->
+<script src="app-core.js" type="module"></script>
+
+<!-- Features App -->
+<script src="app-features.js" type="module"></script>
+
 </body>
 </html>
