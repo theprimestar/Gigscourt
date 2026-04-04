@@ -1,9 +1,16 @@
 // pages/signup.js - Firebase Signup
-document.addEventListener('DOMContentLoaded', () => {
+console.log('signup.js loaded');
+
+setTimeout(() => {
     const emailInput = document.getElementById('signup-email');
     const passwordInput = document.getElementById('signup-password');
     const signupBtn = document.getElementById('signup-btn');
     const gotoLogin = document.getElementById('goto-login');
+    
+    if (!emailInput) {
+        console.error('Signup elements not found');
+        return;
+    }
     
     gotoLogin.addEventListener('click', (e) => {
         e.preventDefault();
@@ -28,29 +35,19 @@ document.addEventListener('DOMContentLoaded', () => {
         signupBtn.disabled = true;
         
         try {
-            const userCredential = await window.firebaseSignUp(window.firebaseAuth, email, password);
-            console.log('Signup successful:', userCredential.user.email);
+            await window.firebaseAuth.createUserWithEmailAndPassword(email, password);
             alert('Account created successfully!');
             loadPage('onboarding');
         } catch (error) {
-            console.error('Signup error:', error);
+            console.error(error);
             let errorMessage = 'Signup failed. ';
-            switch (error.code) {
-                case 'auth/email-already-in-use':
-                    errorMessage += 'Email already registered. Try logging in.';
-                    break;
-                case 'auth/invalid-email':
-                    errorMessage += 'Invalid email address.';
-                    break;
-                case 'auth/weak-password':
-                    errorMessage += 'Password should be at least 6 characters.';
-                    break;
-                default:
-                    errorMessage += error.message;
-            }
+            if (error.code === 'auth/email-already-in-use') errorMessage += 'Email already registered.';
+            else if (error.code === 'auth/invalid-email') errorMessage += 'Invalid email.';
+            else if (error.code === 'auth/weak-password') errorMessage += 'Password too weak. Use 6+ characters.';
+            else errorMessage += error.message;
             alert(errorMessage);
             signupBtn.textContent = 'Create Account';
             signupBtn.disabled = false;
         }
     });
-});
+}, 100);
