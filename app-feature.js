@@ -1,7 +1,9 @@
 // ========================================
-// GigsCourt - Features Module (COMPLETE)
+// GigsCourt - Features Module (COMPLETE - FIXED)
 // Map, Chat, Gigs, Credits, Reviews, Profile, Portfolio, Uploads
 // ========================================
+
+import { increment } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // ========== DOM ELEMENTS ==========
 let homeFeed, searchServiceInput, radiusSlider, radiusValue, mapViewBtn, listViewBtn, mapContainer, searchListView, searchListFeed, chatsList, profileContent;
@@ -518,10 +520,10 @@ async function submitReview(providerId, clientId, rating, reviewText) {
     const avgRating = sum / count;
     await window.db.collection('users').doc(providerId).update({
         rating: avgRating,
-        gigCount: window.firebase.firestore.FieldValue.increment(1),
-        credits: window.firebase.firestore.FieldValue.increment(-1),
+        gigCount: increment(1),
+        credits: increment(-1),
         lastGigDate: new Date().toISOString(),
-        monthlyGigCount: window.firebase.firestore.FieldValue.increment(1)
+        monthlyGigCount: increment(1)
     });
     const gigs = await window.db.collection('gigs')
         .where('providerId', '==', providerId)
@@ -585,7 +587,7 @@ function buyCredits() {
                     currency: 'NGN',
                     callback: async (response) => {
                         await window.db.collection('users').doc(window.auth.currentUser.uid).update({
-                            credits: window.firebase.firestore.FieldValue.increment(credits)
+                            credits: increment(credits)
                         });
                         await window.db.collection('transactions').add({
                             userId: window.auth.currentUser.uid,
