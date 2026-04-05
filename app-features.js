@@ -1228,3 +1228,4 @@ window.buyCredits = buyCredits;
 window.submitReview = submitReview;
 window.registerGig = registerGig;
 window.uploadImage = uploadImage;
+window.showSettings = showSettings;
