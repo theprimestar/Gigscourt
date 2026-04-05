@@ -1437,3 +1437,124 @@ body {
 .onboarding-info-box p:last-child {
     margin-bottom: 0;
 }
+
+/* ========== FULL SCREEN SETTINGS SCREEN ========== */
+.settings-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #C0392B 0%, #E67E22 100%);
+    z-index: 30000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.settings-screen.hidden {
+    display: none;
+}
+
+.settings-container {
+    background: var(--bg-primary);
+    border-radius: 32px;
+    padding: 24px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: var(--shadow-xl);
+}
+
+.settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border-light);
+}
+
+.settings-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.settings-icon-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    border-radius: 50%;
+    transition: all var(--transition-fast);
+}
+
+.settings-icon-btn:active {
+    background: var(--bg-tertiary);
+    transform: scale(0.95);
+}
+
+.settings-content {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.settings-btn-primary {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent-orange);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.settings-btn-primary:active {
+    transform: scale(0.98);
+    background: var(--accent-orange-dark);
+}
+
+.settings-btn-secondary {
+    width: 100%;
+    padding: 14px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-light);
+    border-radius: 30px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.settings-btn-secondary:active {
+    transform: scale(0.98);
+    background: var(--bg-secondary);
+}
+
+.settings-btn-danger {
+    width: 100%;
+    padding: 14px;
+    background: transparent;
+    color: var(--error-red);
+    border: 1px solid var(--error-red);
+    border-radius: 30px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.settings-btn-danger:active {
+    transform: scale(0.98);
+    background: rgba(234, 67, 53, 0.1);
+}
