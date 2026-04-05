@@ -1,10 +1,8 @@
 /* ========================================
    GigsCourt - Final Premium CSS
    Dark/Light Mode | Glassmorphism | Orange/Red Accents
-   Shrinking Headers | Fixed Bottom Nav Behavior
    ======================================== */
 
-/* ---------- CSS VARIABLES ---------- */
 :root {
     --bg-primary: #ffffff;
     --bg-secondary: #f8f9fa;
@@ -20,7 +18,6 @@
     --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
     --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
     --accent-orange: #E67E22;
-    --accent-orange-dark: #D35400;
     --accent-red: #C0392B;
     --active-green: #27AE60;
     --warning-yellow: #F1C40F;
@@ -56,7 +53,6 @@
     }
 }
 
-/* ---------- RESET & BASE ---------- */
 * {
     margin: 0;
     padding: 0;
@@ -73,13 +69,12 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* Force main app visible */
 #main-app {
     display: block !important;
     opacity: 1 !important;
 }
 
-/* ---------- SHRINKING HEADER (Home, Chats, Profile) ---------- */
+/* ========== SHRINKING HEADERS ========== */
 .shrink-header {
     position: fixed;
     top: 0;
@@ -100,28 +95,14 @@ body {
     padding-top: calc(env(safe-area-inset-top) + var(--space-sm));
 }
 
-.shrink-header .header-large {
-    transition: all 0.2s ease;
-}
-
-.shrink-header.shrunk .header-large {
-    font-size: 18px;
-}
-
-/* Home Header */
 .home-header .logo {
     font-size: 28px;
     font-weight: 700;
     letter-spacing: -0.5px;
 }
 
-.home-header .logo span:first-child {
-    color: var(--accent-red);
-}
-
-.home-header .logo span:last-child {
-    color: var(--accent-orange);
-}
+.home-header .logo span:first-child { color: var(--accent-red); }
+.home-header .logo span:last-child { color: var(--accent-orange); }
 
 .home-subtitle {
     font-size: 13px;
@@ -130,34 +111,24 @@ body {
     margin-top: 2px;
 }
 
-.shrink-header.shrunk .home-subtitle {
-    display: none;
-}
+.shrink-header.shrunk .home-subtitle { display: none; }
 
-/* Chats Header */
 .chats-header-large {
     font-size: 28px;
     font-weight: 700;
-    letter-spacing: -0.02em;
     color: var(--text-primary);
 }
 
-.shrink-header.shrunk .chats-header-large {
-    font-size: 18px;
-}
+.shrink-header.shrunk .chats-header-large { font-size: 18px; }
 
-/* Profile Header */
 .profile-header-name {
     font-size: 24px;
     font-weight: 700;
     color: var(--text-primary);
 }
 
-.shrink-header.shrunk .profile-header-name {
-    font-size: 18px;
-}
+.shrink-header.shrunk .profile-header-name { font-size: 18px; }
 
-/* Header Actions (Bell Icon) */
 .header-actions {
     position: absolute;
     top: calc(env(safe-area-inset-top) + var(--space-lg));
@@ -170,7 +141,26 @@ body {
     top: calc(env(safe-area-inset-top) + var(--space-sm));
 }
 
-/* ---------- SEARCH PAGE STATIC CONTROLS (No Header) ---------- */
+.icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: var(--space-xs);
+    color: var(--text-primary);
+}
+
+.badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: var(--accent-red);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: var(--radius-full);
+}
+
+/* ========== SEARCH PAGE STATIC CONTROLS ========== */
 .search-controls-container {
     position: fixed;
     top: 0;
@@ -178,7 +168,6 @@ body {
     right: 0;
     background: var(--bg-glass);
     backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     z-index: 100;
     padding: var(--space-md) var(--space-lg);
     padding-top: calc(env(safe-area-inset-top) + var(--space-md));
@@ -219,7 +208,6 @@ body {
     font-weight: 500;
     cursor: pointer;
     color: var(--text-secondary);
-    transition: all 0.2s ease;
 }
 
 .toggle-btn.active {
@@ -261,7 +249,7 @@ body {
     cursor: pointer;
 }
 
-/* ---------- BOTTOM NAVIGATION ---------- */
+/* ========== BOTTOM NAVIGATION ========== */
 .bottom-nav {
     position: fixed;
     bottom: 0;
@@ -269,7 +257,6 @@ body {
     right: 0;
     background: var(--bg-glass);
     backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
     border-top: 1px solid var(--border-light);
     display: flex;
     justify-content: space-around;
@@ -283,7 +270,6 @@ body {
     transform: translateY(100%);
 }
 
-/* Search page - bottom nav always visible */
 .search-page .bottom-nav {
     transform: translateY(0) !important;
 }
@@ -316,7 +302,7 @@ body {
     stroke: var(--accent-orange);
 }
 
-/* ---------- MAIN PAGE CONTAINER ---------- */
+/* ========== PAGE CONTAINER ========== */
 #page-container {
     position: relative;
     height: 100dvh;
@@ -328,7 +314,6 @@ body {
     height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
 }
 
 .page.active {
@@ -339,27 +324,23 @@ body {
     padding: var(--space-lg);
 }
 
-/* Home page - content starts below header */
 #home-page .page-content {
     padding-top: calc(env(safe-area-inset-top) + 80px);
 }
 
-/* Chats page - content starts below header */
 #chats-page .page-content {
     padding-top: calc(env(safe-area-inset-top) + 80px);
 }
 
-/* Profile page - content starts below header */
 #profile-page .page-content {
     padding-top: calc(env(safe-area-inset-top) + 80px);
 }
 
-/* Search page - content starts below static controls */
 #search-page .page-content {
     padding-top: calc(env(safe-area-inset-top) + 130px);
 }
 
-/* ---------- CARDS (Orange/Red Top Border) ---------- */
+/* ========== CARDS ========== */
 .cards-feed {
     display: flex;
     flex-direction: column;
@@ -372,7 +353,6 @@ body {
     border-radius: var(--radius-lg);
     padding: var(--space-md);
     cursor: pointer;
-    transition: all 0.2s ease;
     border: 1px solid var(--border-light);
     border-top: 3px solid var(--accent-orange);
     box-shadow: var(--shadow-sm);
@@ -380,10 +360,6 @@ body {
 
 .card:active {
     transform: scale(0.98);
-}
-
-.card.featured {
-    border-top-color: var(--accent-red);
 }
 
 .card-header {
@@ -459,7 +435,6 @@ body {
     gap: 4px;
 }
 
-/* Slimmer cards for search list view */
 .search-list-view .card {
     padding: var(--space-sm) var(--space-md);
     border-top-width: 2px;
@@ -470,7 +445,7 @@ body {
     height: 44px;
 }
 
-/* ---------- MAP CONTAINER ---------- */
+/* ========== MAP ========== */
 .map-container {
     height: calc(100dvh - 160px);
     width: 100%;
@@ -479,14 +454,7 @@ body {
     margin-top: var(--space-sm);
 }
 
-/* ---------- CHATS LIST ---------- */
-.chats-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--space-lg);
-}
-
+/* ========== CHATS ========== */
 .chat-item {
     display: flex;
     align-items: center;
@@ -540,7 +508,7 @@ body {
     display: inline-block;
 }
 
-/* ---------- PROFILE PAGE ---------- */
+/* ========== PROFILE ========== */
 .profile-header-large {
     text-align: center;
     margin-bottom: var(--space-xl);
@@ -656,7 +624,7 @@ body {
     cursor: pointer;
 }
 
-/* ---------- BOTTOM SHEET ---------- */
+/* ========== BOTTOM SHEET ========== */
 .bottom-sheet {
     position: fixed;
     bottom: 0;
@@ -711,7 +679,7 @@ body {
     pointer-events: auto;
 }
 
-/* ---------- CREDIT PACKAGES ---------- */
+/* ========== CREDIT PACKAGES ========== */
 .credit-package {
     width: 100%;
     padding: 16px;
@@ -727,7 +695,7 @@ body {
     border-color: var(--accent-orange);
 }
 
-/* ---------- SERVICE OPTION ---------- */
+/* ========== SERVICE OPTION ========== */
 .service-option {
     padding: 12px;
     background: var(--bg-secondary);
@@ -743,7 +711,7 @@ body {
     color: white;
 }
 
-/* ---------- TOAST ---------- */
+/* ========== TOAST ========== */
 .toast-container {
     position: fixed;
     bottom: 80px;
@@ -776,7 +744,7 @@ body {
     }
 }
 
-/* ---------- LOADING & EMPTY STATES ---------- */
+/* ========== LOADING & EMPTY STATES ========== */
 .loading-spinner {
     width: 40px;
     height: 40px;
@@ -797,7 +765,7 @@ body {
     color: var(--text-muted);
 }
 
-/* ---------- NOTIFICATION DROPDOWN ---------- */
+/* ========== NOTIFICATION DROPDOWN ========== */
 .notifications-dropdown {
     position: absolute;
     top: 60px;
@@ -828,36 +796,17 @@ body {
     cursor: pointer;
 }
 
-/* ---------- UTILITIES ---------- */
+/* ========== UTILITIES ========== */
 .hidden {
     display: none !important;
 }
 
-.icon-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: var(--space-xs);
-}
-
-.badge {
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    background: var(--accent-red);
-    color: white;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: var(--radius-full);
-}
-
-/* ---------- RESPONSIVE ---------- */
+/* ========== RESPONSIVE ========== */
 @media (max-width: 375px) {
     .profile-actions button {
         font-size: 12px;
         padding: 10px;
     }
-    
     .card-name {
         font-size: 14px;
     }
