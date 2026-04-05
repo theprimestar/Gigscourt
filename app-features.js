@@ -1064,10 +1064,23 @@ async function showSettings() {
 
 // ========== INITIALIZE FEATURES (only after appReady) ==========
 async function initFeatures() {
-    if (featuresInitialized) return;
-    featuresInitialized = true;
+    console.log('initFeatures: Starting...');
     
-    // Get DOM elements - NO 'let' here, assign to existing global variables
+    if (featuresInitialized) {
+        console.log('initFeatures: Already initialized, skipping');
+        return;
+    }
+    
+    // Double check Firebase is ready
+    if (!window.db || !window.auth) {
+        console.log('initFeatures: Firebase not ready yet, waiting for appReady');
+        return;
+    }
+    
+    featuresInitialized = true;
+    console.log('initFeatures: Firebase is ready, initializing...');
+    
+    // Get DOM elements
     homeFeed = document.getElementById('home-feed');
     searchServiceInput = document.getElementById('search-service-input');
     radiusSlider = document.getElementById('radius-slider');
@@ -1080,41 +1093,65 @@ async function initFeatures() {
     chatsList = document.getElementById('chats-list');
     profileContent = document.getElementById('profile-content');
     
+    console.log('initFeatures: DOM elements found:', {
+        homeFeed: !!homeFeed,
+        chatsList: !!chatsList,
+        profileContent: !!profileContent
+    });
+    
     // Run initial data loads with error handling
     try {
         await checkAndCancelExpiredGigs();
+        console.log('checkAndCancelExpiredGigs completed');
     } catch (e) {
         console.error('checkAndCancelExpiredGigs failed:', e);
     }
     
     try {
-        if (homeFeed) await loadHomeFeed();
+        if (homeFeed) {
+            await loadHomeFeed();
+            console.log('loadHomeFeed completed');
+        }
     } catch (e) {
         console.error('loadHomeFeed failed:', e);
         if (homeFeed) homeFeed.innerHTML = '<div class="empty-state">Failed to load feed. Pull to refresh.</div>';
     }
     
     try {
-        if (searchServiceInput) setupSearch();
+        if (searchServiceInput) {
+            setupSearch();
+            console.log('setupSearch completed');
+        }
     } catch (e) {
         console.error('setupSearch failed:', e);
     }
     
     try {
-        if (mapContainer && window.L) await initMap();
+        if (mapContainer && window.L) {
+            await initMap();
+            console.log('initMap completed');
+        } else {
+            console.log('initMap skipped - mapContainer or Leaflet missing');
+        }
     } catch (e) {
         console.error('initMap failed:', e);
     }
     
     try {
-        if (chatsList) await loadChats();
+        if (chatsList) {
+            await loadChats();
+            console.log('loadChats completed');
+        }
     } catch (e) {
         console.error('loadChats failed:', e);
         if (chatsList) chatsList.innerHTML = '<div class="empty-state">Failed to load chats</div>';
     }
     
     try {
-        if (profileContent) await loadProfile();
+        if (profileContent) {
+            await loadProfile();
+            console.log('loadProfile completed');
+        }
     } catch (e) {
         console.error('loadProfile failed:', e);
         if (profileContent) profileContent.innerHTML = '<div class="empty-state">Failed to load profile</div>';
@@ -1122,6 +1159,7 @@ async function initFeatures() {
     
     // Set up navigation event listener for tab changes
     window.addEventListener('navigate', (e) => {
+        console.log('Navigate event:', e.detail.page);
         if (e.detail.page === 'home' && homeFeed) {
             loadHomeFeed().catch(err => console.error('Navigate loadHomeFeed error:', err));
         }
@@ -1132,20 +1170,38 @@ async function initFeatures() {
             loadProfile().catch(err => console.error('Navigate loadProfile error:', err));
         }
     });
+    
+    console.log('initFeatures: All done!');
 }
 
-// ========== WAIT FOR appReady EVENT ==========
-document.addEventListener('DOMContentLoaded', () => {
-    // If app is already ready (rare case), init immediately
-    if (window.db && window.auth && window.currentUser !== undefined) {
-        initFeatures();
-    } else {
-        // Wait for appReady event from core
-        window.addEventListener('appReady', () => {
+// ========== WAIT FOR appReady EVENT (IMPROVED) ==========
+// This ensures features only start after Firebase is ready
+
+// First, check if Firebase is already available
+if (window.db && window.auth && window.firebaseConfig) {
+    console.log('Firebase already available, waiting for DOM');
+    document.addEventListener('DOMContentLoaded', () => {
+        setTimeout(() => {
             initFeatures();
-        });
+        }, 100);
+    });
+} else {
+    console.log('Waiting for appReady event from core...');
+    window.addEventListener('appReady', () => {
+        console.log('appReady received!');
+        setTimeout(() => {
+            initFeatures();
+        }, 100);
+    });
+}
+
+// Also try after a delay as fallback (safety net)
+setTimeout(() => {
+    if (!featuresInitialized && window.db && window.auth) {
+        console.log('Fallback: Initializing features after timeout');
+        initFeatures();
     }
-});
+}, 3000);
 
 // Expose functions globally
 window.loadHomeFeed = loadHomeFeed;
