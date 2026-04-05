@@ -1,9 +1,23 @@
 // ========================================
-// GigsCourt - Features Module (FIXED - Waits for appReady)
+// GigsCourt - Features Module (FIXED - Modular Firestore Syntax)
 // Map, Chat, Gigs, Credits, Reviews, Profile, Portfolio, Uploads
 // ========================================
 
-import { increment } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { 
+    increment, 
+    collection, 
+    query, 
+    where, 
+    getDocs, 
+    getDoc, 
+    setDoc, 
+    updateDoc, 
+    addDoc, 
+    orderBy, 
+    onSnapshot, 
+    doc, 
+    deleteDoc 
+} from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // ========== DOM ELEMENTS ==========
 let homeFeed, searchServiceInput, radiusSlider, radiusValue, mapViewBtn, listViewBtn, mapContainer, searchListView, searchListFeed, chatsList, profileContent;
@@ -88,15 +102,20 @@ async function checkAndCancelExpiredGigs() {
             console.warn('checkAndCancelExpiredGigs: db not ready');
             return;
         }
-        const expiredGigs = await window.db.collection('gigs')
-            .where('status', '==', 'pending_review')
-            .where('expiresAt', '<', new Date().toISOString())
-            .get();
-        expiredGigs.forEach(async (doc) => {
-            await doc.ref.update({ status: 'cancelled' });
-            await window.db.collection('chats').doc(doc.data().chatId).update({ pendingReview: false });
+        const gigsRef = collection(window.db, 'gigs');
+        const q = query(
+            gigsRef, 
+            where('status', '==', 'pending_review'),
+            where('expiresAt', '<', new Date().toISOString())
+        );
+        const expiredGigs = await getDocs(q);
+        
+        for (const docSnapshot of expiredGigs.docs) {
+            await updateDoc(docSnapshot.ref, { status: 'cancelled' });
+            const chatRef = doc(window.db, 'chats', docSnapshot.data().chatId);
+            await updateDoc(chatRef, { pendingReview: false });
             window.addNotification('Gig Cancelled', 'Client did not review within 7 days. No credits deducted.');
-        });
+        }
     } catch (error) {
         console.error('checkAndCancelExpiredGigs error:', error);
     }
@@ -112,11 +131,13 @@ async function loadHomeFeed() {
     
     try {
         homeFeed.innerHTML = '<div class="loading-spinner"></div>';
-        const usersSnapshot = await window.db.collection('users').get();
+        const usersRef = collection(window.db, 'users');
+        const usersSnapshot = await getDocs(usersRef);
         let users = [];
         usersSnapshot.forEach(doc => {
-            if (doc.id !== window.auth.currentUser?.uid && doc.data().services && doc.data().services.length > 0) {
-                users.push({ id: doc.id, ...doc.data() });
+            const userData = doc.data();
+            if (doc.id !== window.auth.currentUser?.uid && userData.services && userData.services.length > 0) {
+                users.push({ id: doc.id, ...userData });
             }
         });
         
@@ -179,7 +200,8 @@ async function loadHomeFeed() {
 // ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
 async function showUserBottomSheet(userId) {
     try {
-        const userDoc = await window.db.collection('users').doc(userId).get();
+        const userRef = doc(window.db, 'users', userId);
+        const userDoc = await getDoc(userRef);
         const user = userDoc.data();
         const activeStatus = getActiveStatus(user);
         window.openBottomSheet(`
@@ -240,15 +262,19 @@ async function performSearch() {
         currentSearchService = searchServiceInput.value;
     }
     try {
-        let query = window.db.collection('users');
+        const usersRef = collection(window.db, 'users');
+        let q;
         if (currentSearchService) {
-            query = query.where('services', 'array-contains', currentSearchService);
+            q = query(usersRef, where('services', 'array-contains', currentSearchService));
+        } else {
+            q = query(usersRef);
         }
-        const snapshot = await query.get();
+        const snapshot = await getDocs(q);
         let users = [];
         snapshot.forEach(doc => {
-            if (doc.id !== window.auth.currentUser?.uid && doc.data().services && doc.data().services.length > 0) {
-                users.push({ id: doc.id, ...doc.data() });
+            const userData = doc.data();
+            if (doc.id !== window.auth.currentUser?.uid && userData.services && userData.services.length > 0) {
+                users.push({ id: doc.id, ...userData });
             }
         });
         if (currentUserLocation) {
@@ -374,10 +400,14 @@ async function loadChats() {
     }
     try {
         chatsList.innerHTML = '<div class="loading-spinner"></div>';
-        const chatsSnapshot = await window.db.collection('chats')
-            .where('participants', 'array-contains', window.auth.currentUser.uid)
-            .orderBy('lastMessageTime', 'desc')
-            .get();
+        const chatsRef = collection(window.db, 'chats');
+        const q = query(
+            chatsRef, 
+            where('participants', 'array-contains', window.auth.currentUser.uid),
+            orderBy('lastMessageTime', 'desc')
+        );
+        const chatsSnapshot = await getDocs(q);
+        
         if (chatsSnapshot.empty) {
             chatsList.innerHTML = '<div class="empty-state">No messages yet</div>';
             return;
@@ -386,7 +416,8 @@ async function loadChats() {
         for (const chatDoc of chatsSnapshot.docs) {
             const chat = { id: chatDoc.id, ...chatDoc.data() };
             const otherUserId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-            const userDoc = await window.db.collection('users').doc(otherUserId).get();
+            const userRef = doc(window.db, 'users', otherUserId);
+            const userDoc = await getDoc(userRef);
             const userData = userDoc.data();
             chats.push({ ...chat, otherUser: { id: otherUserId, ...userData } });
         }
@@ -418,16 +449,17 @@ async function openChat(userId, chatId = null) {
     let chat = chatId;
     if (!chat) {
         try {
-            const existingChat = await window.db.collection('chats')
-                .where('participants', 'array-contains', window.auth.currentUser.uid)
-                .get();
+            const chatsRef = collection(window.db, 'chats');
+            const q = query(chatsRef, where('participants', 'array-contains', window.auth.currentUser.uid));
+            const existingChat = await getDocs(q);
             let found = null;
             existingChat.forEach(doc => {
                 if (doc.data().participants.includes(userId)) found = doc.id;
             });
             chat = found;
             if (!chat) {
-                const newChatRef = await window.db.collection('chats').add({
+                const chatsRef = collection(window.db, 'chats');
+                const newChatRef = await addDoc(chatsRef, {
                     participants: [window.auth.currentUser.uid, userId],
                     createdAt: new Date().toISOString(),
                     lastMessageTime: new Date().toISOString(),
@@ -443,7 +475,8 @@ async function openChat(userId, chatId = null) {
         }
     }
     try {
-        const userDoc = await window.db.collection('users').doc(userId).get();
+        const userRef = doc(window.db, 'users', userId);
+        const userDoc = await getDoc(userRef);
         const userData = userDoc.data();
         window.openBottomSheet(`
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -465,39 +498,41 @@ async function openChat(userId, chatId = null) {
         input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(chat, input.value); });
         document.getElementById('register-gig-chat').addEventListener('click', () => registerGig(chat, userId));
         if (currentMessagesUnsubscribe) currentMessagesUnsubscribe();
-        currentMessagesUnsubscribe = window.db.collection('chats').doc(chat).collection('messages')
-            .orderBy('timestamp', 'asc')
-            .onSnapshot(snapshot => {
-                messagesDiv.innerHTML = '';
-                snapshot.forEach(doc => {
-                    const msg = doc.data();
-                    const isMe = msg.senderId === window.auth.currentUser.uid;
-                    messagesDiv.innerHTML += `
-                        <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
-                            <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
-                                ${msg.text}
-                                ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
-                                <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
-                            </div>
+        
+        const messagesRef = collection(window.db, 'chats', chat, 'messages');
+        const q = query(messagesRef, orderBy('timestamp', 'asc'));
+        currentMessagesUnsubscribe = onSnapshot(q, (snapshot) => {
+            messagesDiv.innerHTML = '';
+            snapshot.forEach(doc => {
+                const msg = doc.data();
+                const isMe = msg.senderId === window.auth.currentUser.uid;
+                messagesDiv.innerHTML += `
+                    <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
+                        <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
+                            ${msg.text}
+                            ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
+                            <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
                         </div>
-                    `;
-                });
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
-                document.querySelectorAll('.message-wrapper').forEach(wrapper => {
-                    let pressTimer;
-                    wrapper.addEventListener('touchstart', () => {
-                        pressTimer = setTimeout(() => {
-                            const messageId = wrapper.dataset.messageId;
-                            if (confirm('Delete this message?')) {
-                                window.db.collection('chats').doc(chat).collection('messages').doc(messageId).delete();
-                                window.haptic('heavy');
-                            }
-                        }, 500);
-                    });
-                    wrapper.addEventListener('touchend', () => clearTimeout(pressTimer));
-                    wrapper.addEventListener('touchmove', () => clearTimeout(pressTimer));
-                });
+                    </div>
+                `;
             });
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            document.querySelectorAll('.message-wrapper').forEach(wrapper => {
+                let pressTimer;
+                wrapper.addEventListener('touchstart', () => {
+                    pressTimer = setTimeout(() => {
+                        const messageId = wrapper.dataset.messageId;
+                        if (confirm('Delete this message?')) {
+                            const messageRef = doc(window.db, 'chats', chat, 'messages', messageId);
+                            deleteDoc(messageRef);
+                            window.haptic('heavy');
+                        }
+                    }, 500);
+                });
+                wrapper.addEventListener('touchend', () => clearTimeout(pressTimer));
+                wrapper.addEventListener('touchmove', () => clearTimeout(pressTimer));
+            });
+        });
         checkPendingReview(chat, userId);
     } catch (error) {
         console.error('openChat error:', error);
@@ -508,12 +543,14 @@ async function openChat(userId, chatId = null) {
 async function sendMessage(chatId, text) {
     if (!text.trim()) return;
     try {
-        await window.db.collection('chats').doc(chatId).collection('messages').add({
+        const messagesRef = collection(window.db, 'chats', chatId, 'messages');
+        await addDoc(messagesRef, {
             senderId: window.auth.currentUser.uid,
             text: text,
             timestamp: new Date().toISOString()
         });
-        await window.db.collection('chats').doc(chatId).update({
+        const chatRef = doc(window.db, 'chats', chatId);
+        await updateDoc(chatRef, {
             lastMessage: text,
             lastMessageTime: new Date().toISOString()
         });
@@ -527,11 +564,14 @@ async function sendMessage(chatId, text) {
 
 async function checkPendingReview(chatId, userId) {
     try {
-        const pendingGig = await window.db.collection('gigs')
-            .where('providerId', '==', window.auth.currentUser.uid)
-            .where('clientId', '==', userId)
-            .where('status', '==', 'pending_review')
-            .get();
+        const gigsRef = collection(window.db, 'gigs');
+        const q = query(
+            gigsRef,
+            where('providerId', '==', window.auth.currentUser.uid),
+            where('clientId', '==', userId),
+            where('status', '==', 'pending_review')
+        );
+        const pendingGig = await getDocs(q);
         const toast = document.getElementById('pending-review-toast');
         if (!pendingGig.empty && toast) {
             toast.style.display = 'block';
@@ -544,13 +584,15 @@ async function checkPendingReview(chatId, userId) {
 // ========== REGISTER GIG ==========
 async function registerGig(chatId, clientId) {
     try {
-        const userData = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
-        if ((userData.data().credits || 0) < 1) {
+        const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+        const userDoc = await getDoc(userRef);
+        if ((userDoc.data().credits || 0) < 1) {
             window.showToast('You need credits to register a gig. Buy credits first.', 'error');
             buyCredits();
             return;
         }
-        await window.db.collection('gigs').add({
+        const gigsRef = collection(window.db, 'gigs');
+        await addDoc(gigsRef, {
             providerId: window.auth.currentUser.uid,
             clientId: clientId,
             chatId: chatId,
@@ -558,7 +600,8 @@ async function registerGig(chatId, clientId) {
             createdAt: new Date().toISOString(),
             expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
         });
-        await window.db.collection('chats').doc(chatId).update({ pendingReview: true });
+        const chatRef = doc(window.db, 'chats', chatId);
+        await updateDoc(chatRef, { pendingReview: true });
         window.addNotification('Gig Registered', 'Client has been notified to review you');
         window.showToast('Gig registered! Client will review within 7 days.');
         window.haptic('heavy');
@@ -572,36 +615,48 @@ async function registerGig(chatId, clientId) {
 async function submitReview(providerId, clientId, rating, reviewText) {
     try {
         const reviewId = `${clientId}_${providerId}`;
-        await window.db.collection('reviews').doc(reviewId).set({
+        const reviewRef = doc(window.db, 'reviews', reviewId);
+        await setDoc(reviewRef, {
             providerId: providerId,
             clientId: clientId,
             rating: rating,
             review: reviewText,
             updatedAt: new Date().toISOString()
         });
-        const allReviews = await window.db.collection('reviews').where('providerId', '==', providerId).get();
+        
+        const reviewsRef = collection(window.db, 'reviews');
+        const q = query(reviewsRef, where('providerId', '==', providerId));
+        const allReviews = await getDocs(q);
         let sum = 0, count = 0;
         allReviews.forEach(doc => {
             sum += doc.data().rating;
             count++;
         });
         const avgRating = sum / count;
-        await window.db.collection('users').doc(providerId).update({
+        
+        const userRef = doc(window.db, 'users', providerId);
+        await updateDoc(userRef, {
             rating: avgRating,
             gigCount: increment(1),
             credits: increment(-1),
             lastGigDate: new Date().toISOString(),
             monthlyGigCount: increment(1)
         });
-        const gigs = await window.db.collection('gigs')
-            .where('providerId', '==', providerId)
-            .where('clientId', '==', clientId)
-            .where('status', '==', 'pending_review')
-            .get();
-        gigs.forEach(doc => {
-            doc.ref.update({ status: 'completed', completedAt: new Date().toISOString() });
-        });
-        await window.db.collection('chats').doc(currentChatId).update({ pendingReview: false });
+        
+        const gigsRef = collection(window.db, 'gigs');
+        const gigsQuery = query(
+            gigsRef,
+            where('providerId', '==', providerId),
+            where('clientId', '==', clientId),
+            where('status', '==', 'pending_review')
+        );
+        const gigs = await getDocs(gigsQuery);
+        for (const gigDoc of gigs.docs) {
+            await updateDoc(gigDoc.ref, { status: 'completed', completedAt: new Date().toISOString() });
+        }
+        
+        const chatRef = doc(window.db, 'chats', currentChatId);
+        await updateDoc(chatRef, { pendingReview: false });
         window.showToast(`Review submitted! ${rating} stars. Thank you!`);
         window.haptic('heavy');
     } catch (error) {
@@ -612,7 +667,9 @@ async function submitReview(providerId, clientId, rating, reviewText) {
 
 async function showReviews(providerId) {
     try {
-        const reviews = await window.db.collection('reviews').where('providerId', '==', providerId).get();
+        const reviewsRef = collection(window.db, 'reviews');
+        const q = query(reviewsRef, where('providerId', '==', providerId));
+        const reviews = await getDocs(q);
         if (reviews.empty) {
             window.showToast('No reviews yet');
             return;
@@ -664,10 +721,12 @@ function buyCredits() {
                     currency: 'NGN',
                     callback: async (response) => {
                         try {
-                            await window.db.collection('users').doc(window.auth.currentUser.uid).update({
+                            const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+                            await updateDoc(userRef, {
                                 credits: increment(credits)
                             });
-                            await window.db.collection('transactions').add({
+                            const transactionsRef = collection(window.db, 'transactions');
+                            await addDoc(transactionsRef, {
                                 userId: window.auth.currentUser.uid,
                                 type: 'credit_purchase',
                                 credits: credits,
@@ -695,10 +754,13 @@ function buyCredits() {
 
 async function showTransactionHistory() {
     try {
-        const transactions = await window.db.collection('transactions')
-            .where('userId', '==', window.auth.currentUser.uid)
-            .orderBy('createdAt', 'desc')
-            .get();
+        const transactionsRef = collection(window.db, 'transactions');
+        const q = query(
+            transactionsRef,
+            where('userId', '==', window.auth.currentUser.uid),
+            orderBy('createdAt', 'desc')
+        );
+        const transactions = await getDocs(q);
         if (transactions.empty) {
             window.showToast('No transactions yet');
             return;
@@ -731,7 +793,8 @@ async function loadProfile(userId = null) {
     }
     try {
         profileContent.innerHTML = '<div class="loading-spinner"></div>';
-        const userDoc = await window.db.collection('users').doc(targetId).get();
+        const userRef = doc(window.db, 'users', targetId);
+        const userDoc = await getDoc(userRef);
         if (!userDoc.exists) {
             profileContent.innerHTML = '<div class="empty-state">User not found</div>';
             return;
@@ -833,7 +896,8 @@ async function editServices() {
     });
     document.getElementById('save-services')?.addEventListener('click', async () => {
         try {
-            await window.db.collection('users').doc(window.auth.currentUser.uid).update({ services: selectedServices });
+            const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+            await updateDoc(userRef, { services: selectedServices });
             window.closeBottomSheet();
             window.showToast('Services updated!');
             loadProfile();
@@ -846,7 +910,8 @@ async function editServices() {
 
 async function addPortfolioImage() {
     try {
-        const userDoc = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
+        const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+        const userDoc = await getDoc(userRef);
         const currentPortfolio = userDoc.data().portfolio || [];
         if (currentPortfolio.length >= 15) {
             window.showToast('Maximum 15 images. Delete some first.', 'error');
@@ -861,7 +926,7 @@ async function addPortfolioImage() {
                 window.showToast('Uploading...');
                 const url = await uploadImage(file, 'portfolio');
                 currentPortfolio.push(url);
-                await window.db.collection('users').doc(window.auth.currentUser.uid).update({ portfolio: currentPortfolio });
+                await updateDoc(userRef, { portfolio: currentPortfolio });
                 window.showToast('Portfolio updated!');
                 loadProfile();
             }
@@ -875,7 +940,8 @@ async function addPortfolioImage() {
 
 async function editProfile() {
     try {
-        const userDoc = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
+        const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+        const userDoc = await getDoc(userRef);
         const user = userDoc.data();
         window.openBottomSheet(`
             <h3 style="margin-bottom: 16px;">Edit Profile</h3>
@@ -895,7 +961,7 @@ async function editProfile() {
                 if (file) {
                     window.showToast('Uploading...');
                     const url = await uploadImage(file, 'profiles');
-                    await window.db.collection('users').doc(window.auth.currentUser.uid).update({ photoURL: url });
+                    await updateDoc(userRef, { photoURL: url });
                     await window.updateProfile(window.auth.currentUser, { photoURL: url });
                     window.showToast('Photo updated!');
                     loadProfile();
@@ -910,7 +976,7 @@ async function editProfile() {
                 bio: document.getElementById('edit-bio').value,
                 addressText: document.getElementById('edit-address').value
             };
-            await window.db.collection('users').doc(window.auth.currentUser.uid).update(updates);
+            await updateDoc(userRef, updates);
             await window.updateProfile(window.auth.currentUser, { displayName: updates.displayName });
             window.closeBottomSheet();
             window.showToast('Profile updated!');
@@ -924,15 +990,19 @@ async function editProfile() {
 
 async function showRecentChatsForGig() {
     try {
-        const chatsSnapshot = await window.db.collection('chats')
-            .where('participants', 'array-contains', window.auth.currentUser.uid)
-            .where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
-            .get();
+        const chatsRef = collection(window.db, 'chats');
+        const q = query(
+            chatsRef,
+            where('participants', 'array-contains', window.auth.currentUser.uid),
+            where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
+        );
+        const chatsSnapshot = await getDocs(q);
         const recentUsers = [];
         for (const chatDoc of chatsSnapshot.docs) {
             const chat = chatDoc.data();
             const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-            const userDoc = await window.db.collection('users').doc(otherId).get();
+            const userRef = doc(window.db, 'users', otherId);
+            const userDoc = await getDoc(userRef);
             recentUsers.push({ id: otherId, ...userDoc.data(), chatId: chatDoc.id });
         }
         if (recentUsers.length === 0) {
@@ -973,7 +1043,8 @@ async function showSettings() {
     });
     document.getElementById('deactivate-btn')?.addEventListener('click', async () => {
         try {
-            await window.db.collection('users').doc(window.auth.currentUser.uid).update({
+            const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+            await updateDoc(userRef, {
                 deactivatedAt: new Date().toISOString(),
                 deactivateExpires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
             });
