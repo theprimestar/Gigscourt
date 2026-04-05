@@ -1558,3 +1558,101 @@ body {
     transform: scale(0.98);
     background: rgba(234, 67, 53, 0.1);
 }
+
+/* ========== EMAIL VERIFICATION SCREEN ========== */
+.verification-screen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, #C0392B 0%, #E67E22 100%);
+    z-index: 40000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.verification-screen.hidden {
+    display: none;
+}
+
+.verification-container {
+    background: var(--bg-primary);
+    border-radius: 32px;
+    padding: 32px 24px;
+    max-width: 400px;
+    width: 100%;
+    box-shadow: var(--shadow-xl);
+    text-align: center;
+}
+
+.verification-logo {
+    font-size: 32px;
+    font-weight: 800;
+    margin-bottom: 24px;
+}
+
+.verification-logo span:first-child {
+    color: #C0392B;
+}
+
+.verification-logo span:last-child {
+    color: #E67E22;
+}
+
+.verification-container h2 {
+    font-size: 24px;
+    margin-bottom: 16px;
+    color: var(--text-primary);
+}
+
+.verification-subtitle {
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    font-size: 14px;
+}
+
+.verification-instruction {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    font-size: 14px;
+}
+
+.verification-btn-primary {
+    width: 100%;
+    padding: 14px;
+    background: var(--accent-orange);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 12px;
+    transition: all var(--transition-fast);
+}
+
+.verification-btn-primary:active {
+    transform: scale(0.98);
+}
+
+.verification-btn-secondary {
+    width: 100%;
+    padding: 14px;
+    background: transparent;
+    color: var(--accent-orange);
+    border: 1px solid var(--accent-orange);
+    border-radius: 30px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.verification-btn-secondary:active {
+    transform: scale(0.98);
+    background: rgba(230, 126, 34, 0.1);
+}
