@@ -82,6 +82,7 @@ body {
     color: var(--text-primary);
     line-height: 1.5;
     overflow-x: hidden;
+    overflow-y: hidden; /* Prevents body scrolling, pages scroll independently */
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -287,18 +288,21 @@ h1, h2, h3, h4 {
     color: inherit;
 }
 
-/* ---------- MAIN PAGE CONTAINER ---------- */
+/* ---------- MAIN PAGE CONTAINER (INDEPENDENT SCROLLING) ---------- */
 #page-container {
-    margin-top: 70px;
-    margin-bottom: 70px;
-    min-height: calc(100vh - 140px);
+    position: relative;
+    height: calc(100vh - 70px - 70px); /* Viewport minus header (70px) minus bottom nav (70px) */
+    overflow: hidden;
+    margin-top: 70px; /* Space for fixed header */
 }
 
 .page {
     display: none;
     opacity: 0;
     transition: opacity 0.2s ease;
-    color: var(--text-primary);
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 .page.active {
