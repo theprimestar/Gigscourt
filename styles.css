@@ -988,3 +988,79 @@ body {
     background: var(--border-medium);
     border-radius: 4px;
 }
+
+/* ========== PAGE HEADERS (inside each page) ========== */
+.page-header {
+    position: sticky;
+    top: 0;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-light);
+    padding: 12px 16px;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all var(--transition-normal);
+}
+
+@media (prefers-color-scheme: dark) {
+    .page-header {
+        background: rgba(15, 15, 15, 0.95);
+    }
+}
+
+.page-header h1, .page-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.page-header h1 {
+    background: linear-gradient(135deg, #C0392B, #E67E22);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-size: 22px;
+}
+
+.page-header .icon-btn {
+    background: none;
+    border: none;
+    padding: 8px;
+    cursor: pointer;
+    color: var(--text-primary);
+    border-radius: 50%;
+    transition: background var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.page-header .icon-btn:active {
+    background: var(--bg-tertiary);
+    transform: scale(0.95);
+}
+
+/* Home header specific (shrink on scroll) */
+.home-header {
+    transition: all var(--transition-normal);
+}
+
+.home-header.shrunk {
+    padding: 6px 16px;
+}
+
+.home-header.shrunk h1 {
+    font-size: 18px;
+}
+
+.home-header.shrunk .icon-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+/* Remove old app-header styles if they exist */
+#app-header {
+    display: none;
+}
