@@ -430,13 +430,13 @@ function setupAuthListener() {
                 const userDoc = await getDoc(doc(db, 'users', user.uid));
                 if (userDoc.exists()) {
                     window.currentUserData = userDoc.data();
-                    // User is logged in and data is loaded - fire appReady
+                    // Existing user - fire appReady for features
                     if (!appReadyFired) {
                         appReadyFired = true;
                         window.dispatchEvent(new CustomEvent('appReady'));
                     }
                 } else {
-                    // New user needs onboarding - fire appReady anyway so UI shows
+                    // New user needs onboarding - fire appReady for features
                     if (!appReadyFired) {
                         appReadyFired = true;
                         window.dispatchEvent(new CustomEvent('appReady'));
@@ -445,7 +445,7 @@ function setupAuthListener() {
                 }
             } catch (error) {
                 console.error('Error loading user data:', error);
-                // Still fire appReady so app doesn't hang on blank screen
+                // Still fire appReady so features can try to load
                 if (!appReadyFired) {
                     appReadyFired = true;
                     window.dispatchEvent(new CustomEvent('appReady'));
@@ -453,7 +453,7 @@ function setupAuthListener() {
                 showToast('Error loading profile. Pull to refresh.', 'error');
             }
         } else {
-            // No user logged in - fire appReady so auth screen shows
+            // No user logged in - fire appReady for features (so they can show empty states)
             if (!appReadyFired) {
                 appReadyFired = true;
                 window.dispatchEvent(new CustomEvent('appReady'));
@@ -476,17 +476,6 @@ function setupProfilePictureHandler() {
             document.getElementById('close-sheet-btn').addEventListener('click', closeBottomSheet);
         }
     });
-}
-
-// ========== HIDE SPLASH AND SHOW MAIN APP ==========
-function showMainApp() {
-    if (splashScreen && mainApp) {
-        splashScreen.style.opacity = '0';
-        setTimeout(() => {
-            splashScreen.style.display = 'none';
-            mainApp.style.display = 'block';
-        }, 500);
-    }
 }
 
 // ========== INITIALIZE CORE ==========
@@ -514,13 +503,19 @@ document.addEventListener('DOMContentLoaded', () => {
     setupNotifications();
     setupProfilePictureHandler();
     
-    // Setup auth listener (this will eventually fire appReady)
+    // Setup auth listener (this will eventually fire appReady for features)
     setupAuthListener();
     
-    // Listen for appReady to show main app
-    window.addEventListener('appReady', () => {
-        showMainApp();
-    });
+    // Hide splash and show main app AFTER splash timeout, regardless of auth state
+    setTimeout(() => {
+        if (splashScreen && mainApp) {
+            splashScreen.style.opacity = '0';
+            setTimeout(() => {
+                splashScreen.style.display = 'none';
+                mainApp.style.display = 'block';
+            }, 500);
+        }
+    }, 1500);
 });
 
 // Expose functions for features file
