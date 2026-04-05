@@ -34,6 +34,7 @@ let scrollPositions = {
 let lastScrollY = 0;
 let isNavHidden = false;
 let appReadyFired = false;
+let appReadyTimeout = null;
 
 // ========== PRESET SERVICES (30) ==========
 const PRESET_SERVICES = [
@@ -530,3 +531,11 @@ window.db = db;
 window.auth = auth;
 window.updateProfile = updateProfile;
 window.signOut = signOut;
+
+// Force appReady after a short delay to ensure everything is loaded
+setTimeout(() => {
+    if (!appReadyFired && window.db && window.auth) {
+        appReadyFired = true;
+        window.dispatchEvent(new CustomEvent('appReady'));
+    }
+}, 1000);
