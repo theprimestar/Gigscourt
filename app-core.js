@@ -397,37 +397,118 @@ async function saveUserProfile() {
 
 // ========== AUTH UI ==========
 function showAuthScreen() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Welcome to GigsCourt</h3>
-        <input type="email" id="auth-email" placeholder="Email" class="search-input" style="margin-bottom: 12px;">
-        <input type="password" id="auth-password" placeholder="Password" class="search-input" style="margin-bottom: 16px;">
-        <button id="auth-login-btn" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px; margin-bottom: 12px;">Login</button>
-        <button id="auth-signup-btn" class="btn-secondary" style="width: 100%; padding: 14px; border-radius: 30px;">Create Account</button>
-    `);
-    document.getElementById('auth-login-btn').addEventListener('click', async () => {
-        const email = document.getElementById('auth-email').value;
-        const password = document.getElementById('auth-password').value;
-        try {
-            const userCred = await signInWithEmailAndPassword(auth, email, password);
-            window.currentUser = userCred.user;
-            closeBottomSheet();
-            showToast('Logged in!');
-        } catch (error) {
-            showToast(error.message, 'error');
-        }
-    });
-    document.getElementById('auth-signup-btn').addEventListener('click', async () => {
-        const email = document.getElementById('auth-email').value;
-        const password = document.getElementById('auth-password').value;
-        try {
-            const userCred = await createUserWithEmailAndPassword(auth, email, password);
-            window.currentUser = userCred.user;
-            closeBottomSheet();
-            showOnboarding();
-        } catch (error) {
-            showToast(error.message, 'error');
-        }
-    });
+    const authScreen = document.getElementById('auth-screen');
+    const mainApp = document.getElementById('main-app');
+    
+    if (authScreen) {
+        authScreen.classList.remove('hidden');
+    }
+    if (mainApp) {
+        mainApp.style.display = 'none';
+    }
+    
+    // Tab switching
+    const loginTab = document.getElementById('auth-login-tab');
+    const signupTab = document.getElementById('auth-signup-tab');
+    const loginPanel = document.getElementById('auth-login-panel');
+    const signupPanel = document.getElementById('auth-signup-panel');
+    
+    if (loginTab && signupTab) {
+        loginTab.onclick = () => {
+            loginTab.classList.add('active');
+            signupTab.classList.remove('active');
+            loginPanel.classList.add('active');
+            signupPanel.classList.remove('active');
+        };
+        
+        signupTab.onclick = () => {
+            signupTab.classList.add('active');
+            loginTab.classList.remove('active');
+            signupPanel.classList.add('active');
+            loginPanel.classList.remove('active');
+        };
+    }
+    
+    // Login
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) {
+        loginBtn.onclick = async () => {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            if (!email || !password) {
+                showToast('Please enter email and password', 'error');
+                return;
+            }
+            try {
+                const userCred = await signInWithEmailAndPassword(auth, email, password);
+                window.currentUser = userCred.user;
+                hideAuthScreen();
+                showToast('Welcome back!');
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        };
+    }
+    
+    // Signup
+    const signupBtn = document.getElementById('signup-btn');
+    if (signupBtn) {
+        signupBtn.onclick = async () => {
+            const name = document.getElementById('signup-name').value;
+            const email = document.getElementById('signup-email').value;
+            const phone = document.getElementById('signup-phone').value;
+            const password = document.getElementById('signup-password').value;
+            
+            if (!name || !email || !phone || !password) {
+                showToast('Please fill all fields', 'error');
+                return;
+            }
+            
+            try {
+                const userCred = await createUserWithEmailAndPassword(auth, email, password);
+                window.currentUser = userCred.user;
+                
+                // Store onboarding data for later
+                onboardingData.displayName = name;
+                onboardingData.phone = phone;
+                
+                hideAuthScreen();
+                showOnboarding();
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        };
+    }
+    
+    // Forgot password
+    const forgotBtn = document.getElementById('forgot-password-btn');
+    if (forgotBtn) {
+        forgotBtn.onclick = async () => {
+            const email = document.getElementById('login-email').value;
+            if (!email) {
+                showToast('Enter your email first', 'error');
+                return;
+            }
+            try {
+                await sendPasswordResetEmail(auth, email);
+                showToast('Password reset email sent!');
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        };
+    }
+}
+
+function hideAuthScreen() {
+    const authScreen = document.getElementById('auth-screen');
+    const mainApp = document.getElementById('main-app');
+    
+    if (authScreen) {
+        authScreen.classList.add('hidden');
+    }
+    if (mainApp) {
+        mainApp.style.display = 'block';
+    }
 }
 
 // ========== AUTH STATE LISTENER ==========
@@ -436,17 +517,21 @@ function setupAuthListener() {
         window.currentUser = user;
         
         if (user) {
+            // User is logged in
             try {
                 const userDoc = await getDoc(doc(db, 'users', user.uid));
                 if (userDoc.exists()) {
                     window.currentUserData = userDoc.data();
-                    // Existing user - fire appReady for features
+                    // Existing user - hide auth screen, show main app
+                    hideAuthScreen();
                     if (!appReadyFired) {
                         appReadyFired = true;
                         window.dispatchEvent(new CustomEvent('appReady'));
                     }
+                    navigateToPage('home');
                 } else {
-                    // New user needs onboarding - fire appReady for features
+                    // New user - needs onboarding
+                    hideAuthScreen();
                     if (!appReadyFired) {
                         appReadyFired = true;
                         window.dispatchEvent(new CustomEvent('appReady'));
@@ -455,19 +540,15 @@ function setupAuthListener() {
                 }
             } catch (error) {
                 console.error('Error loading user data:', error);
-                // Still fire appReady so features can try to load
                 if (!appReadyFired) {
                     appReadyFired = true;
                     window.dispatchEvent(new CustomEvent('appReady'));
                 }
-                showToast('Error loading profile. Pull to refresh.', 'error');
+                showToast('Error loading profile. Please refresh.', 'error');
             }
         } else {
-            // No user logged in - fire appReady for features (so they can show empty states)
-            if (!appReadyFired) {
-                appReadyFired = true;
-                window.dispatchEvent(new CustomEvent('appReady'));
-            }
+            // No user logged in - show auth screen, hide main app
+            window.currentUserData = null;
             showAuthScreen();
         }
     });
