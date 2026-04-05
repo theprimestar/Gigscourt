@@ -870,7 +870,6 @@ async function loadProfile(userId = null) {
             document.getElementById('profile-settings-btn')?.addEventListener('click', showSettings);
             document.getElementById('edit-services-btn')?.addEventListener('click', editServices);
             document.getElementById('add-portfolio-btn')?.addEventListener('click', addPortfolioImage);
-        }
         } else {
             document.getElementById('contact-now-btn')?.addEventListener('click', () => openChat(user.id));
         }
