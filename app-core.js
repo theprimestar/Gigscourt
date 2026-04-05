@@ -678,7 +678,7 @@ function showAuthScreen() {
         });
     }
     
-   // Signup - Using addEventListener instead of onclick
+   // Signup - Using addEventListener instead of onclick (Email + Password + Confirm Password only)
     const signupBtn = document.getElementById('signup-btn');
     if (signupBtn) {
         // Remove any existing listeners to prevent duplicates
@@ -688,26 +688,25 @@ function showAuthScreen() {
         newSignupBtn.addEventListener('click', async () => {
             console.log('Signup button clicked'); // Debug log
             
-            const name = document.getElementById('signup-name').value.trim();
             const email = document.getElementById('signup-email').value.trim();
-            const phone = document.getElementById('signup-phone').value.trim();
             const password = document.getElementById('signup-password').value;
+            const confirmPassword = document.getElementById('signup-confirm-password').value;
             
             // Validation
-            if (!name) {
-                showToast('Please enter your full name', 'error');
-                return;
-            }
             if (!email) {
                 showToast('Please enter your email', 'error');
                 return;
             }
-            if (!phone) {
-                showToast('Please enter your phone number', 'error');
+            if (!password) {
+                showToast('Please enter a password', 'error');
                 return;
             }
-            if (!password || password.length < 6) {
+            if (password.length < 6) {
                 showToast('Password must be at least 6 characters', 'error');
+                return;
+            }
+            if (password !== confirmPassword) {
+                showToast('Passwords do not match', 'error');
                 return;
             }
             
@@ -716,12 +715,15 @@ function showAuthScreen() {
                 const userCred = await createUserWithEmailAndPassword(auth, email, password);
                 window.currentUser = userCred.user;
                 
-                // Store onboarding data for later
-                onboardingData.displayName = name;
-                onboardingData.phone = phone;
+                // Send email verification
+                await sendEmailVerification(auth.currentUser);
                 
-                hideAuthScreen();
-                showOnboarding();
+                // Store email for later (name and phone will be collected in onboarding)
+                onboardingData.email = email;
+                
+                // Show verification required screen instead of onboarding
+                showVerificationRequiredScreen();
+                
             } catch (error) {
                 console.error('Signup error:', error);
                 if (error.code === 'auth/email-already-in-use') {
