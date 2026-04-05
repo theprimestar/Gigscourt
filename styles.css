@@ -3,6 +3,11 @@
    Dark/Light Mode | Glassmorphism | Orange/Red Accents
    ======================================== */
 
+#main-app {
+    display: block !important;
+    opacity: 1 !important;
+}
+
 /* ---------- CSS VARIABLES ---------- */
 :root {
     /* Light mode (default) */
