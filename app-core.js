@@ -5,6 +5,7 @@
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, sendEmailVerification } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // ========== INITIALIZATION ==========
@@ -310,13 +311,10 @@ function showOnboardingStep1() {
         const phone = document.getElementById('onboard-phone').value.trim();
         
         if (!name) {
-            showToast('Please enter your full name', 'error');
-            return;
-        }
-        if (!phone) {
-            showToast('Please enter your phone number', 'error');
-            return;
-        }
+    showToast('Please enter your full name', 'error');
+    return;
+}
+// Phone number is optional - no validation needed
         
         onboardingData.displayName = name;
         onboardingData.phone = phone;
@@ -678,7 +676,7 @@ function showAuthScreen() {
         });
     }
     
-   // Signup - Using addEventListener instead of onclick (Email + Password + Confirm Password only)
+// Signup - Using addEventListener instead of onclick (Email + Password + Confirm Password only)
     const signupBtn = document.getElementById('signup-btn');
     if (signupBtn) {
         // Remove any existing listeners to prevent duplicates
@@ -778,6 +776,98 @@ function hideAuthScreen() {
     }
 }
 
+// ========== EMAIL VERIFICATION SCREEN ==========
+function showVerificationRequiredScreen() {
+    // Hide main app and auth screen
+    const mainApp = document.getElementById('main-app');
+    const authScreen = document.getElementById('auth-screen');
+    
+    if (authScreen) {
+        authScreen.classList.add('hidden');
+    }
+    if (mainApp) {
+        mainApp.style.display = 'none';
+    }
+    
+    // Create a temporary verification screen if it doesn't exist
+    let verificationScreen = document.getElementById('verification-screen');
+    if (!verificationScreen) {
+        verificationScreen = document.createElement('div');
+        verificationScreen.id = 'verification-screen';
+        verificationScreen.className = 'verification-screen';
+        verificationScreen.innerHTML = `
+            <div class="verification-container">
+                <div class="verification-logo">
+                    <span>Gigs</span><span>Court</span>
+                </div>
+                <h2>Verify Your Email</h2>
+                <p class="verification-subtitle">We've sent a verification email to <strong id="verification-email"></strong></p>
+                <p class="verification-instruction">Please check your inbox and click the verification link.</p>
+                <button id="resend-verification-btn" class="verification-btn-primary">Resend Email</button>
+                <button id="verification-logout-btn" class="verification-btn-secondary">Back to Login</button>
+            </div>
+        `;
+        document.body.appendChild(verificationScreen);
+    }
+    
+    // Update email display
+    const emailSpan = document.getElementById('verification-email');
+    if (emailSpan && window.currentUser) {
+        emailSpan.textContent = window.currentUser.email;
+    }
+    
+    verificationScreen.classList.remove('hidden');
+    
+    // Resend button
+    const resendBtn = document.getElementById('resend-verification-btn');
+    if (resendBtn) {
+        const newResendBtn = resendBtn.cloneNode(true);
+        resendBtn.parentNode.replaceChild(newResendBtn, resendBtn);
+        newResendBtn.addEventListener('click', async () => {
+            if (window.currentUser) {
+                await sendEmailVerification(window.currentUser);
+                showToast('Verification email resent! Check your inbox.');
+            }
+        });
+    }
+    
+    // Back to login button
+    const logoutBtn = document.getElementById('verification-logout-btn');
+    if (logoutBtn) {
+        const newLogoutBtn = logoutBtn.cloneNode(true);
+        logoutBtn.parentNode.replaceChild(newLogoutBtn, logoutBtn);
+        newLogoutBtn.addEventListener('click', async () => {
+            // Sign out and go back to auth screen
+            await signOut(auth);
+            const screen = document.getElementById('verification-screen');
+            if (screen) screen.classList.add('hidden');
+            showAuthScreen();
+        });
+    }
+    
+    // Check periodically if email is verified
+    const checkInterval = setInterval(async () => {
+        if (window.currentUser) {
+            await window.currentUser.reload();
+            if (window.currentUser.emailVerified) {
+                clearInterval(checkInterval);
+                // Hide verification screen
+                const screen = document.getElementById('verification-screen');
+                if (screen) screen.classList.add('hidden');
+                // Show onboarding
+                showOnboarding();
+            }
+        }
+    }, 3000);
+}
+
+function hideVerificationScreen() {
+    const screen = document.getElementById('verification-screen');
+    if (screen) {
+        screen.classList.add('hidden');
+    }
+}
+
 // ========== AUTH STATE LISTENER ==========
 function setupAuthListener() {
     onAuthStateChanged(auth, async (user) => {
@@ -797,14 +887,20 @@ function setupAuthListener() {
                     }
                     navigateToPage('home');
                 } else {
-                    // New user - needs onboarding
-                    hideAuthScreen();
-                    if (!appReadyFired) {
-                        appReadyFired = true;
-                        window.dispatchEvent(new CustomEvent('appReady'));
-                    }
-                    showOnboarding();
-                }
+    // New user - needs email verification first
+    hideAuthScreen();
+    if (!appReadyFired) {
+        appReadyFired = true;
+        window.dispatchEvent(new CustomEvent('appReady'));
+    }
+    
+    // Check if email is verified
+    if (user.emailVerified) {
+        showOnboarding();
+    } else {
+        showVerificationRequiredScreen();
+    }
+}
             } catch (error) {
                 console.error('Error loading user data:', error);
                 if (!appReadyFired) {
