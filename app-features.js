@@ -996,7 +996,7 @@ async function initFeatures() {
     if (featuresInitialized) return;
     featuresInitialized = true;
     
-    // Get DOM elements
+    // Get DOM elements - NO 'let' here, assign to existing global variables
     homeFeed = document.getElementById('home-feed');
     searchServiceInput = document.getElementById('search-service-input');
     radiusSlider = document.getElementById('radius-slider');
