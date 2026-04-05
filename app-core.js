@@ -187,31 +187,29 @@ function setupNavigation() {
 // ========== SCROLL HANDLER ==========
 function setupScrollHandlers() {
     const homePage = document.getElementById('home-page');
-    const header = document.getElementById('app-header');
+    const homeHeader = document.querySelector('.home-header');
     
-    if (!homePage || !header) return;
+    if (!homePage || !homeHeader) return;
     
     homePage.addEventListener('scroll', () => {
         const scrollY = homePage.scrollTop;
         
-        // Handle header shrink/expand
+        // Shrink header when scrolling down
         if (scrollY > 10) {
-            header.classList.add('shrunk');
+            homeHeader.classList.add('shrunk');
         } else {
-            header.classList.remove('shrunk');
+            homeHeader.classList.remove('shrunk');
         }
         
-        // Handle hide/show on scroll (Instagram style)
+        // Hide bottom nav on scroll down, show on scroll up
         if (scrollY > lastScrollY && scrollY > 50) {
             if (!isNavHidden) {
                 bottomNav.classList.add('hidden');
-                header.classList.add('hidden-header');
                 isNavHidden = true;
             }
         } else if (scrollY < lastScrollY) {
             if (isNavHidden) {
                 bottomNav.classList.remove('hidden');
-                header.classList.remove('hidden-header');
                 isNavHidden = false;
             }
         }
