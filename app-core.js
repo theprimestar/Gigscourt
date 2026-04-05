@@ -1,5 +1,5 @@
 // ========================================
-// GigsCourt - Core Module (FIXED)
+// GigsCourt - Core Module (FIXED - Race Condition)
 // Authentication, Navigation, UI, Onboarding
 // ========================================
 
@@ -23,6 +23,7 @@ let splashScreen, mainApp, bottomNav, header, pageContainer, bottomSheet, sheetO
 
 // ========== STATE ==========
 window.currentUser = null;
+window.currentUserData = null;
 let currentPage = 'home';
 let scrollPositions = {
     home: 0,
@@ -32,6 +33,7 @@ let scrollPositions = {
 };
 let lastScrollY = 0;
 let isNavHidden = false;
+let appReadyFired = false;
 
 // ========== PRESET SERVICES (30) ==========
 const PRESET_SERVICES = [
@@ -78,9 +80,7 @@ function openBottomSheet(contentHtml) {
 
 function closeBottomSheet() {
     bottomSheet.classList.remove('open');
-    bottomSheet.classList.add('hidden');
     sheetOverlay.classList.remove('visible');
-    sheetOverlay.classList.add('hidden');
     document.body.style.overflow = '';
 }
 
@@ -247,7 +247,7 @@ function showOnboardingStep2() {
     `).join('');
     openBottomSheet(`
         <h3 style="margin-bottom: 16px;">What services do you offer?</h3>
-        <p style="margin-bottom: 16px; color: var(--text-secondary);">Select all that apply</p>
+        <p style="margin-bottom: 16px; color: var(--text-secondary);;">Select all that apply</p>
         <div id="services-list" style="max-height: 400px; overflow-y: auto;">${servicesHtml}</div>
         <button id="onboard-next-2" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px; margin-top: 16px;">Continue (${selectedServices.length} selected)</button>
     `);
@@ -424,17 +424,40 @@ function showAuthScreen() {
 function setupAuthListener() {
     onAuthStateChanged(auth, async (user) => {
         window.currentUser = user;
+        
         if (user) {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (!userDoc.exists()) {
-                showOnboarding();
-            } else {
-                window.currentUserData = userDoc.data();
-                // Hide auth screen if visible and show main app
-                closeBottomSheet();
-                navigateToPage('home');
+            try {
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                if (userDoc.exists()) {
+                    window.currentUserData = userDoc.data();
+                    // User is logged in and data is loaded - fire appReady
+                    if (!appReadyFired) {
+                        appReadyFired = true;
+                        window.dispatchEvent(new CustomEvent('appReady'));
+                    }
+                } else {
+                    // New user needs onboarding - fire appReady anyway so UI shows
+                    if (!appReadyFired) {
+                        appReadyFired = true;
+                        window.dispatchEvent(new CustomEvent('appReady'));
+                    }
+                    showOnboarding();
+                }
+            } catch (error) {
+                console.error('Error loading user data:', error);
+                // Still fire appReady so app doesn't hang on blank screen
+                if (!appReadyFired) {
+                    appReadyFired = true;
+                    window.dispatchEvent(new CustomEvent('appReady'));
+                }
+                showToast('Error loading profile. Pull to refresh.', 'error');
             }
         } else {
+            // No user logged in - fire appReady so auth screen shows
+            if (!appReadyFired) {
+                appReadyFired = true;
+                window.dispatchEvent(new CustomEvent('appReady'));
+            }
             showAuthScreen();
         }
     });
@@ -455,6 +478,17 @@ function setupProfilePictureHandler() {
     });
 }
 
+// ========== HIDE SPLASH AND SHOW MAIN APP ==========
+function showMainApp() {
+    if (splashScreen && mainApp) {
+        splashScreen.style.opacity = '0';
+        setTimeout(() => {
+            splashScreen.style.display = 'none';
+            mainApp.style.display = 'block';
+        }, 500);
+    }
+}
+
 // ========== INITIALIZE CORE ==========
 document.addEventListener('DOMContentLoaded', () => {
     // Get DOM elements
@@ -473,24 +507,20 @@ document.addEventListener('DOMContentLoaded', () => {
     clearNotificationsBtn = document.getElementById('clear-notifications');
     notificationBadge = document.getElementById('notification-badge');
     
-    // Setup all core features
+    // Setup all core features that don't depend on auth
     setupBottomSheet();
     setupNavigation();
     setupScrollHandlers();
     setupNotifications();
-    setupAuthListener();
     setupProfilePictureHandler();
     
-    // Hide splash after delay
-    setTimeout(() => {
-        if (splashScreen) {
-            splashScreen.style.opacity = '0';
-            setTimeout(() => {
-                splashScreen.style.display = 'none';
-                if (mainApp) mainApp.style.display = 'block';
-            }, 500);
-        }
-    }, 1500);
+    // Setup auth listener (this will eventually fire appReady)
+    setupAuthListener();
+    
+    // Listen for appReady to show main app
+    window.addEventListener('appReady', () => {
+        showMainApp();
+    });
 });
 
 // Expose functions for features file
