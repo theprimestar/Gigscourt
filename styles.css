@@ -78,11 +78,11 @@
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: var(--bg-primary);
-    color: var(--text-primary);
+    background-color: var(--bg-primary) !important;
+    color: var(--text-primary) !important;
     line-height: 1.5;
     overflow-x: hidden;
-    overflow-y: hidden; /* Prevents body scrolling, pages scroll independently */
+    overflow-y: hidden !important;
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 
@@ -96,7 +96,7 @@ button:active, .nav-item:active, .card:active {
 h1, h2, h3, h4 {
     font-weight: 600;
     letter-spacing: -0.02em;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .logo {
@@ -106,11 +106,11 @@ h1, h2, h3, h4 {
 }
 
 .logo span:first-child {
-    color: var(--accent-red);
+    color: var(--accent-red) !important;
 }
 
 .logo span:last-child {
-    color: var(--accent-orange);
+    color: var(--accent-orange) !important;
 }
 
 /* ---------- HEADER (SHRINKING) ---------- */
@@ -119,7 +119,7 @@ h1, h2, h3, h4 {
     top: 0;
     left: 0;
     right: 0;
-    background: var(--bg-primary);
+    background: var(--bg-primary) !important;
     border-bottom: 1px solid var(--border-light);
     z-index: 100;
     transition: transform 0.3s ease, padding 0.2s ease;
@@ -141,7 +141,7 @@ h1, h2, h3, h4 {
 .icon-btn {
     background: none;
     border: none;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
     cursor: pointer;
     padding: var(--space-xs);
     border-radius: var(--radius-full);
@@ -158,7 +158,7 @@ h1, h2, h3, h4 {
     top: -4px;
     right: -4px;
     background: var(--accent-red);
-    color: white;
+    color: white !important;
     font-size: 10px;
     font-weight: 600;
     padding: 2px 6px;
@@ -178,7 +178,7 @@ h1, h2, h3, h4 {
     right: var(--space-lg);
     width: 320px;
     max-width: calc(100vw - 32px);
-    background: var(--bg-elevated);
+    background: var(--bg-elevated) !important;
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-lg);
     border: 1px solid var(--border-light);
@@ -197,13 +197,13 @@ h1, h2, h3, h4 {
     padding: var(--space-md) var(--space-lg);
     border-bottom: 1px solid var(--border-light);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 #clear-notifications {
     background: none;
     border: none;
-    color: var(--accent-orange);
+    color: var(--accent-orange) !important;
     font-size: 13px;
     cursor: pointer;
 }
@@ -228,12 +228,12 @@ h1, h2, h3, h4 {
     font-weight: 600;
     font-size: 14px;
     margin-bottom: 4px;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .notification-body {
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--text-secondary) !important;
 }
 
 /* ---------- BOTTOM NAVIGATION ---------- */
@@ -242,7 +242,7 @@ h1, h2, h3, h4 {
     bottom: 0;
     left: 0;
     right: 0;
-    background: var(--bg-primary);
+    background: var(--bg-primary) !important;
     border-top: 1px solid var(--border-light);
     display: flex;
     justify-content: space-around;
@@ -263,7 +263,7 @@ h1, h2, h3, h4 {
     gap: 4px;
     background: none;
     border: none;
-    color: var(--text-muted);
+    color: var(--text-muted) !important;
     font-size: 11px;
     cursor: pointer;
     transition: color 0.2s ease;
@@ -276,7 +276,7 @@ h1, h2, h3, h4 {
 }
 
 .nav-item.active {
-    color: var(--accent-orange);
+    color: var(--accent-orange) !important;
 }
 
 .nav-item.active svg {
@@ -285,15 +285,15 @@ h1, h2, h3, h4 {
 }
 
 .nav-item span {
-    color: inherit;
+    color: inherit !important;
 }
 
 /* ---------- MAIN PAGE CONTAINER (INDEPENDENT SCROLLING) ---------- */
 #page-container {
     position: relative;
-    height: calc(100vh - 70px - 70px); /* Viewport minus header (70px) minus bottom nav (70px) */
+    height: calc(100vh - 70px - 70px);
     overflow: hidden;
-    margin-top: 70px; /* Space for fixed header */
+    margin-top: 70px;
 }
 
 .page {
@@ -302,12 +302,13 @@ h1, h2, h3, h4 {
     transition: opacity 0.2s ease;
     height: 100%;
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+    color: var(--text-primary) !important;
 }
 
 .page.active {
-    display: block;
-    opacity: 1;
+    display: block !important;
+    opacity: 1 !important;
 }
 
 .page-content {
@@ -322,7 +323,7 @@ h1, h2, h3, h4 {
 }
 
 .card {
-    background: var(--bg-card);
+    background: var(--bg-card) !important;
     border-radius: var(--radius-lg);
     padding: var(--space-md);
     cursor: pointer;
@@ -361,7 +362,7 @@ h1, h2, h3, h4 {
     align-items: center;
     gap: var(--space-xs);
     flex-wrap: wrap;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .active-badge {
@@ -369,7 +370,7 @@ h1, h2, h3, h4 {
     align-items: center;
     gap: 4px;
     background: var(--active-green);
-    color: white;
+    color: white !important;
     font-size: 10px;
     padding: 2px 8px;
     border-radius: var(--radius-full);
@@ -386,7 +387,7 @@ h1, h2, h3, h4 {
     align-items: center;
     gap: 4px;
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--text-secondary) !important;
 }
 
 .star {
@@ -405,12 +406,12 @@ h1, h2, h3, h4 {
     padding: 4px 10px;
     border-radius: var(--radius-full);
     font-size: 11px;
-    color: var(--text-secondary);
+    color: var(--text-secondary) !important;
 }
 
 .card-distance {
     font-size: 12px;
-    color: var(--text-muted);
+    color: var(--text-muted) !important;
     display: flex;
     align-items: center;
     gap: 4px;
@@ -424,11 +425,11 @@ h1, h2, h3, h4 {
 .search-input {
     width: 100%;
     padding: 14px var(--space-lg);
-    background: var(--bg-secondary);
+    background: var(--bg-secondary) !important;
     border: 1px solid var(--border-light);
     border-radius: var(--radius-full);
     font-size: 15px;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
     transition: border 0.2s ease;
 }
 
@@ -438,7 +439,7 @@ h1, h2, h3, h4 {
 }
 
 .search-input::placeholder {
-    color: var(--text-muted);
+    color: var(--text-muted) !important;
 }
 
 .view-toggle {
@@ -457,13 +458,13 @@ h1, h2, h3, h4 {
     border-radius: var(--radius-full);
     font-size: 14px;
     cursor: pointer;
-    color: var(--text-secondary);
+    color: var(--text-secondary) !important;
     transition: all 0.2s ease;
 }
 
 .toggle-btn.active {
-    background: var(--accent-orange);
-    color: white;
+    background: var(--accent-orange) !important;
+    color: white !important;
 }
 
 .radius-control {
@@ -471,7 +472,7 @@ h1, h2, h3, h4 {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 #radius-slider {
@@ -517,7 +518,7 @@ h1, h2, h3, h4 {
 }
 
 .chats-header h2 {
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .chats-list {
@@ -531,7 +532,7 @@ h1, h2, h3, h4 {
     align-items: center;
     gap: var(--space-md);
     padding: var(--space-md);
-    background: var(--bg-card);
+    background: var(--bg-card) !important;
     border-radius: var(--radius-lg);
     cursor: pointer;
     transition: background 0.2s ease;
@@ -552,12 +553,12 @@ h1, h2, h3, h4 {
 .chat-name {
     font-weight: 600;
     margin-bottom: 4px;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .chat-last-message {
     font-size: 13px;
-    color: var(--text-secondary);
+    color: var(--text-secondary) !important;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -569,12 +570,12 @@ h1, h2, h3, h4 {
 
 .chat-time {
     font-size: 11px;
-    color: var(--text-muted);
+    color: var(--text-muted) !important;
 }
 
 .pending-badge {
     background: var(--accent-orange);
-    color: white;
+    color: white !important;
     font-size: 11px;
     padding: 2px 8px;
     border-radius: var(--radius-full);
@@ -601,11 +602,11 @@ h1, h2, h3, h4 {
     font-size: 22px;
     font-weight: 700;
     margin-bottom: var(--space-xs);
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .profile-bio {
-    color: var(--text-secondary);
+    color: var(--text-secondary) !important;
     font-size: 14px;
     margin-bottom: var(--space-md);
 }
@@ -627,12 +628,12 @@ h1, h2, h3, h4 {
 .stat-number {
     font-size: 18px;
     font-weight: 700;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .stat-label {
     font-size: 12px;
-    color: var(--text-secondary);
+    color: var(--text-secondary) !important;
 }
 
 .profile-address {
@@ -644,7 +645,7 @@ h1, h2, h3, h4 {
     border-radius: var(--radius-md);
     margin-bottom: var(--space-lg);
     font-size: 14px;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .profile-actions {
@@ -663,20 +664,20 @@ h1, h2, h3, h4 {
 }
 
 .btn-primary {
-    background: var(--accent-orange);
+    background: var(--accent-orange) !important;
     border: none;
-    color: white;
+    color: white !important;
 }
 
 .btn-secondary {
-    background: var(--bg-secondary);
+    background: var(--bg-secondary) !important;
     border: 1px solid var(--border-light);
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .credit-balance {
     background: linear-gradient(135deg, var(--accent-red), var(--accent-orange));
-    color: white;
+    color: white !important;
     padding: var(--space-sm) var(--space-md);
     border-radius: var(--radius-full);
     font-weight: 600;
@@ -694,7 +695,7 @@ h1, h2, h3, h4 {
     font-size: 16px;
     font-weight: 600;
     margin-bottom: var(--space-md);
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .portfolio-grid {
@@ -716,7 +717,7 @@ h1, h2, h3, h4 {
     bottom: 0;
     left: 0;
     right: 0;
-    background: var(--bg-elevated);
+    background: var(--bg-elevated) !important;
     border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     z-index: 200;
     transform: translateY(100%);
@@ -744,7 +745,7 @@ h1, h2, h3, h4 {
     flex: 1;
     overflow-y: auto;
     padding: 0 var(--space-lg) var(--space-xl);
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .sheet-overlay {
@@ -778,13 +779,13 @@ h1, h2, h3, h4 {
 }
 
 .toast {
-    background: var(--bg-elevated);
+    background: var(--bg-elevated) !important;
     border-left: 4px solid var(--accent-orange);
     padding: var(--space-md);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     animation: slideUp 0.3s ease;
-    color: var(--text-primary);
+    color: var(--text-primary) !important;
 }
 
 .toast-warning {
@@ -824,7 +825,7 @@ h1, h2, h3, h4 {
 .empty-state {
     text-align: center;
     padding: var(--space-2xl);
-    color: var(--text-muted);
+    color: var(--text-muted) !important;
 }
 
 /* ---------- UTILITIES ---------- */
