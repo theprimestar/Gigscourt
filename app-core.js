@@ -429,42 +429,80 @@ function showAuthScreen() {
         };
     }
     
-    // Login
+    // Login - Using addEventListener instead of onclick
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) {
-        loginBtn.onclick = async () => {
-            const email = document.getElementById('login-email').value;
+        // Remove any existing listeners
+        const newLoginBtn = loginBtn.cloneNode(true);
+        loginBtn.parentNode.replaceChild(newLoginBtn, loginBtn);
+        
+        newLoginBtn.addEventListener('click', async () => {
+            console.log('Login button clicked'); // Debug log
+            
+            const email = document.getElementById('login-email').value.trim();
             const password = document.getElementById('login-password').value;
+            
             if (!email || !password) {
                 showToast('Please enter email and password', 'error');
                 return;
             }
+            
             try {
+                showToast('Logging in...');
                 const userCred = await signInWithEmailAndPassword(auth, email, password);
                 window.currentUser = userCred.user;
                 hideAuthScreen();
                 showToast('Welcome back!');
             } catch (error) {
-                showToast(error.message, 'error');
+                console.error('Login error:', error);
+                if (error.code === 'auth/user-not-found') {
+                    showToast('No account found with this email', 'error');
+                } else if (error.code === 'auth/wrong-password') {
+                    showToast('Incorrect password', 'error');
+                } else if (error.code === 'auth/invalid-email') {
+                    showToast('Invalid email address', 'error');
+                } else {
+                    showToast(error.message, 'error');
+                }
             }
-        };
+        });
     }
     
-    // Signup
+   // Signup - Using addEventListener instead of onclick
     const signupBtn = document.getElementById('signup-btn');
     if (signupBtn) {
-        signupBtn.onclick = async () => {
-            const name = document.getElementById('signup-name').value;
-            const email = document.getElementById('signup-email').value;
-            const phone = document.getElementById('signup-phone').value;
+        // Remove any existing listeners to prevent duplicates
+        const newSignupBtn = signupBtn.cloneNode(true);
+        signupBtn.parentNode.replaceChild(newSignupBtn, signupBtn);
+        
+        newSignupBtn.addEventListener('click', async () => {
+            console.log('Signup button clicked'); // Debug log
+            
+            const name = document.getElementById('signup-name').value.trim();
+            const email = document.getElementById('signup-email').value.trim();
+            const phone = document.getElementById('signup-phone').value.trim();
             const password = document.getElementById('signup-password').value;
             
-            if (!name || !email || !phone || !password) {
-                showToast('Please fill all fields', 'error');
+            // Validation
+            if (!name) {
+                showToast('Please enter your full name', 'error');
+                return;
+            }
+            if (!email) {
+                showToast('Please enter your email', 'error');
+                return;
+            }
+            if (!phone) {
+                showToast('Please enter your phone number', 'error');
+                return;
+            }
+            if (!password || password.length < 6) {
+                showToast('Password must be at least 6 characters', 'error');
                 return;
             }
             
             try {
+                showToast('Creating account...');
                 const userCred = await createUserWithEmailAndPassword(auth, email, password);
                 window.currentUser = userCred.user;
                 
@@ -475,29 +513,45 @@ function showAuthScreen() {
                 hideAuthScreen();
                 showOnboarding();
             } catch (error) {
-                showToast(error.message, 'error');
+                console.error('Signup error:', error);
+                if (error.code === 'auth/email-already-in-use') {
+                    showToast('Email already in use. Please login instead.', 'error');
+                } else if (error.code === 'auth/invalid-email') {
+                    showToast('Invalid email address', 'error');
+                } else if (error.code === 'auth/weak-password') {
+                    showToast('Password is too weak. Use at least 6 characters.', 'error');
+                } else {
+                    showToast(error.message, 'error');
+                }
             }
-        };
+        });
     }
     
     // Forgot password
     const forgotBtn = document.getElementById('forgot-password-btn');
     if (forgotBtn) {
-        forgotBtn.onclick = async () => {
-            const email = document.getElementById('login-email').value;
+        const newForgotBtn = forgotBtn.cloneNode(true);
+        forgotBtn.parentNode.replaceChild(newForgotBtn, forgotBtn);
+        
+        newForgotBtn.addEventListener('click', async () => {
+            const email = document.getElementById('login-email').value.trim();
             if (!email) {
-                showToast('Enter your email first', 'error');
+                showToast('Enter your email address first', 'error');
                 return;
             }
             try {
                 await sendPasswordResetEmail(auth, email);
-                showToast('Password reset email sent!');
+                showToast('Password reset email sent! Check your inbox.');
             } catch (error) {
-                showToast(error.message, 'error');
+                console.error('Reset error:', error);
+                if (error.code === 'auth/user-not-found') {
+                    showToast('No account found with this email', 'error');
+                } else {
+                    showToast(error.message, 'error');
+                }
             }
-        };
+        });
     }
-}
 
 function hideAuthScreen() {
     const authScreen = document.getElementById('auth-screen');
