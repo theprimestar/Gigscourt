@@ -1,5 +1,10 @@
 /* GIGSCOURT CORE STYLES - INSTAGRAM AESTHETIC WITH RED ACCENTS */
 
+#main-app {
+    display: block !important;
+    opacity: 1 !important;
+}
+
 :root {
     --ig-red: #FF3B30; /* The "Little Red Touch" */
     --ig-bg: #ffffff;
