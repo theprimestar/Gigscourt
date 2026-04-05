@@ -222,88 +222,212 @@ function setupScrollHandlers() {
 // ========== ONBOARDING FLOW ==========
 let onboardingData = {};
 
+// ========== ONBOARDING SCREEN CONTROLS ==========
+let currentOnboardingStep = 1;
+
+function showOnboardingScreen() {
+    const onboardingScreen = document.getElementById('onboarding-screen');
+    const mainApp = document.getElementById('main-app');
+    
+    if (onboardingScreen) {
+        onboardingScreen.classList.remove('hidden');
+    }
+    if (mainApp) {
+        mainApp.style.display = 'none';
+    }
+    document.body.style.overflow = 'hidden';
+}
+
+function hideOnboardingScreen() {
+    const onboardingScreen = document.getElementById('onboarding-screen');
+    const mainApp = document.getElementById('main-app');
+    
+    if (onboardingScreen) {
+        onboardingScreen.classList.add('hidden');
+    }
+    if (mainApp) {
+        mainApp.style.display = 'block';
+    }
+    document.body.style.overflow = '';
+}
+
+function updateOnboardingStepIndicator(step, total) {
+    const indicator = document.getElementById('onboarding-step-indicator');
+    if (indicator) {
+        indicator.textContent = `Step ${step} of ${total}`;
+    }
+}
+
+function showOnboardingBackButton(show) {
+    const backBtn = document.getElementById('onboarding-back-btn');
+    if (backBtn) {
+        if (show) {
+            backBtn.classList.remove('hidden');
+        } else {
+            backBtn.classList.add('hidden');
+        }
+    }
+}
+
+function setOnboardingNextButtonText(text) {
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    if (nextBtn) {
+        nextBtn.textContent = text;
+    }
+}
+
 function showOnboarding() {
+    // Reset onboarding data if needed
+    if (!onboardingData.displayName) {
+        onboardingData = {};
+    }
     showOnboardingStep1();
 }
 
 function showOnboardingStep1() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Welcome to GigsCourt! 👋</h3>
-        <p style="margin-bottom: 24px; color: var(--text-secondary);">Let's set up your profile in a few steps</p>
-        <input type="text" id="onboard-name" placeholder="Full name" class="search-input" style="margin-bottom: 12px;">
-        <input type="tel" id="onboard-phone" placeholder="Phone number (e.g., 08012345678)" class="search-input" style="margin-bottom: 24px;">
-        <button id="onboard-next-1" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px;">Continue</button>
-    `);
-    document.getElementById('onboard-next-1').addEventListener('click', () => {
-        const name = document.getElementById('onboard-name').value;
-        const phone = document.getElementById('onboard-phone').value;
-        if (!name || !phone) {
-            showToast('Please enter name and phone number');
+    currentOnboardingStep = 1;
+    updateOnboardingStepIndicator(1, 5);
+    showOnboardingBackButton(false);
+    setOnboardingNextButtonText('Continue');
+    
+    const content = `
+        <h2 class="onboarding-title">Welcome to GigsCourt! 👋</h2>
+        <p class="onboarding-subtitle">Let's set up your profile in a few steps</p>
+        <input type="text" id="onboard-name" placeholder="Full name" class="onboarding-input" value="${onboardingData.displayName || ''}">
+        <input type="tel" id="onboard-phone" placeholder="Phone number (e.g., 08012345678)" class="onboarding-input" value="${onboardingData.phone || ''}">
+    `;
+    
+    document.getElementById('onboarding-content').innerHTML = content;
+    showOnboardingScreen();
+    
+    // Setup next button handler
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    const oldNext = nextBtn.cloneNode(true);
+    nextBtn.parentNode.replaceChild(oldNext, nextBtn);
+    
+    oldNext.addEventListener('click', () => {
+        const name = document.getElementById('onboard-name').value.trim();
+        const phone = document.getElementById('onboard-phone').value.trim();
+        
+        if (!name) {
+            showToast('Please enter your full name', 'error');
             return;
         }
+        if (!phone) {
+            showToast('Please enter your phone number', 'error');
+            return;
+        }
+        
         onboardingData.displayName = name;
         onboardingData.phone = phone;
-        closeBottomSheet();
         showOnboardingStep2();
     });
+    
+    // Setup close button
+    const closeBtn = document.getElementById('onboarding-close-btn');
+    if (closeBtn) {
+        const newCloseBtn = closeBtn.cloneNode(true);
+        closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+        newCloseBtn.addEventListener('click', () => {
+            if (confirm('Are you sure? Your progress will be lost.')) {
+                hideOnboardingScreen();
+                showAuthScreen();
+            }
+        });
+    }
 }
 
 function showOnboardingStep2() {
-    let selectedServices = [];
+    currentOnboardingStep = 2;
+    updateOnboardingStepIndicator(2, 5);
+    showOnboardingBackButton(true);
+    setOnboardingNextButtonText('Continue');
+    
+    let selectedServices = [...(onboardingData.services || [])];
+    
     const servicesHtml = PRESET_SERVICES.map(service => `
-        <div class="service-option" data-service="${service}" style="padding: 12px; background: var(--bg-secondary); border-radius: 10px; margin-bottom: 8px; cursor: pointer;">
+        <div class="onboarding-service-option ${selectedServices.includes(service) ? 'selected' : ''}" data-service="${service}">
             ${service}
         </div>
     `).join('');
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">What services do you offer?</h3>
-        <p style="margin-bottom: 16px; color: var(--text-secondary);;">Select all that apply</p>
-        <div id="services-list" style="max-height: 400px; overflow-y: auto;">${servicesHtml}</div>
-        <button id="onboard-next-2" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px; margin-top: 16px;">Continue (${selectedServices.length} selected)</button>
-    `);
-    const serviceOptions = document.querySelectorAll('.service-option');
-    const nextBtn = document.getElementById('onboard-next-2');
-    serviceOptions.forEach(opt => {
+    
+    const content = `
+        <h2 class="onboarding-title">What services do you offer?</h2>
+        <p class="onboarding-subtitle">Select all that apply</p>
+        <div class="onboarding-services-list" id="onboarding-services-list">
+            ${servicesHtml}
+        </div>
+    `;
+    
+    document.getElementById('onboarding-content').innerHTML = content;
+    
+    // Attach service selection handlers
+    document.querySelectorAll('.onboarding-service-option').forEach(opt => {
         opt.addEventListener('click', () => {
             const service = opt.dataset.service;
             if (selectedServices.includes(service)) {
                 selectedServices = selectedServices.filter(s => s !== service);
-                opt.style.background = 'var(--bg-secondary)';
-                opt.style.color = 'var(--text-primary)';
+                opt.classList.remove('selected');
             } else {
                 selectedServices.push(service);
-                opt.style.background = 'var(--accent-orange)';
-                opt.style.color = 'white';
+                opt.classList.add('selected');
             }
-            nextBtn.textContent = `Continue (${selectedServices.length} selected)`;
         });
     });
-    nextBtn.addEventListener('click', () => {
+    
+    // Setup next button
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    const oldNext = nextBtn.cloneNode(true);
+    nextBtn.parentNode.replaceChild(oldNext, nextBtn);
+    
+    oldNext.addEventListener('click', () => {
         if (selectedServices.length === 0) {
-            showToast('Please select at least one service');
+            showToast('Please select at least one service', 'error');
             return;
         }
         onboardingData.services = selectedServices;
-        closeBottomSheet();
         showOnboardingStep3();
+    });
+    
+    // Setup back button
+    const backBtn = document.getElementById('onboarding-back-btn');
+    const oldBack = backBtn.cloneNode(true);
+    backBtn.parentNode.replaceChild(oldBack, backBtn);
+    
+    oldBack.addEventListener('click', () => {
+        showOnboardingStep1();
     });
 }
 
 function showOnboardingStep3() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Where is your workspace?</h3>
-        <p style="margin-bottom: 16px; color: var(--text-secondary);">Drop a pin on the map or describe your location</p>
-        <div id="onboard-map" style="height: 300px; border-radius: 16px; margin-bottom: 16px; background: var(--bg-secondary);"></div>
-        <input type="text" id="onboard-address" placeholder="Describe your address (e.g., beside First Bank, Lagos)" class="search-input" style="margin-bottom: 16px;">
-        <button id="onboard-next-3" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px;">Continue</button>
-    `);
+    currentOnboardingStep = 3;
+    updateOnboardingStepIndicator(3, 5);
+    showOnboardingBackButton(true);
+    setOnboardingNextButtonText('Continue');
+    
+    const content = `
+        <h2 class="onboarding-title">Where is your workspace?</h2>
+        <p class="onboarding-subtitle">Drop a pin on the map or describe your location</p>
+        <div id="onboarding-map" class="onboarding-map"></div>
+        <input type="text" id="onboard-address" placeholder="Describe your address (e.g., beside First Bank, Lagos)" class="onboarding-input" value="${onboardingData.addressText || ''}">
+    `;
+    
+    document.getElementById('onboarding-content').innerHTML = content;
+    
+    // Initialize map
     setTimeout(() => {
-        if (window.L && document.getElementById('onboard-map')) {
-            const map = L.map('onboard-map').setView([6.5244, 3.3792], 13);
+        if (window.L && document.getElementById('onboarding-map')) {
+            const map = L.map('onboarding-map').setView([6.5244, 3.3792], 13);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
             }).addTo(map);
+            
             let marker = null;
+            if (onboardingData.location) {
+                marker = L.marker([onboardingData.location.lat, onboardingData.location.lng]).addTo(map);
+                map.setView([onboardingData.location.lat, onboardingData.location.lng], 13);
+            }
+            
             map.on('click', (e) => {
                 if (marker) marker.remove();
                 marker = L.marker(e.latlng).addTo(map);
@@ -311,64 +435,144 @@ function showOnboardingStep3() {
             });
         }
     }, 100);
-    document.getElementById('onboard-next-3').addEventListener('click', () => {
-        const address = document.getElementById('onboard-address').value;
+    
+    // Setup next button
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    const oldNext = nextBtn.cloneNode(true);
+    nextBtn.parentNode.replaceChild(oldNext, nextBtn);
+    
+    oldNext.addEventListener('click', () => {
+        const address = document.getElementById('onboard-address').value.trim();
         if (!address && !onboardingData.location) {
-            showToast('Please set a location on map or enter address');
+            showToast('Please set a location on map or enter address', 'error');
             return;
         }
         onboardingData.addressText = address;
-        closeBottomSheet();
         showOnboardingStep4();
+    });
+    
+    // Setup back button
+    const backBtn = document.getElementById('onboarding-back-btn');
+    const oldBack = backBtn.cloneNode(true);
+    backBtn.parentNode.replaceChild(oldBack, backBtn);
+    
+    oldBack.addEventListener('click', () => {
+        showOnboardingStep2();
     });
 }
 
 function showOnboardingStep4() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">How Credits Work 💰</h3>
-        <p style="margin-bottom: 12px;">✅ 1 credit = 1 gig registration</p>
-        <p style="margin-bottom: 12px;">✅ Credits deducted ONLY after client reviews you</p>
-        <p style="margin-bottom: 12px;">✅ Buy credits: 5 for ₦2500 | 10 for ₦4500 | 20 for ₦8000</p>
-        <p style="margin-bottom: 24px;">✅ Without credits, you can still receive messages, just can't register gigs</p>
-        <button id="onboard-next-4" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px;">Got it! Continue</button>
-    `);
-    document.getElementById('onboard-next-4').addEventListener('click', () => {
-        closeBottomSheet();
+    currentOnboardingStep = 4;
+    updateOnboardingStepIndicator(4, 5);
+    showOnboardingBackButton(true);
+    setOnboardingNextButtonText('Got it!');
+    
+    const content = `
+        <h2 class="onboarding-title">How Credits Work 💰</h2>
+        <div class="onboarding-info-box">
+            <p>✅ 1 credit = 1 gig registration</p>
+            <p>✅ Credits deducted ONLY after client reviews you</p>
+            <p>✅ Buy credits: 5 for ₦2500 | 10 for ₦4500 | 20 for ₦8000</p>
+            <p>✅ Without credits, you can still receive messages, just can't register gigs</p>
+        </div>
+    `;
+    
+    document.getElementById('onboarding-content').innerHTML = content;
+    
+    // Setup next button
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    const oldNext = nextBtn.cloneNode(true);
+    nextBtn.parentNode.replaceChild(oldNext, nextBtn);
+    
+    oldNext.addEventListener('click', () => {
         showOnboardingStep5();
+    });
+    
+    // Setup back button
+    const backBtn = document.getElementById('onboarding-back-btn');
+    const oldBack = backBtn.cloneNode(true);
+    backBtn.parentNode.replaceChild(oldBack, backBtn);
+    
+    oldBack.addEventListener('click', () => {
+        showOnboardingStep3();
     });
 }
 
 function showOnboardingStep5() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Almost done!</h3>
-        <p style="margin-bottom: 16px;">Add a profile photo (optional)</p>
-        <div style="text-align: center; margin-bottom: 24px;">
-            <div id="photo-preview" style="width: 100px; height: 100px; border-radius: 50%; background: var(--bg-secondary); margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 40px;">📸</div>
+    currentOnboardingStep = 5;
+    updateOnboardingStepIndicator(5, 5);
+    showOnboardingBackButton(true);
+    setOnboardingNextButtonText('Complete Setup');
+    
+    const content = `
+        <h2 class="onboarding-title">Almost done!</h2>
+        <p class="onboarding-subtitle">Add a profile photo (optional)</p>
+        <div id="onboarding-photo-preview" class="onboarding-photo-preview">
+            ${onboardingData.photoFile ? '<img src="' + URL.createObjectURL(onboardingData.photoFile) + '">' : '📸'}
         </div>
-        <input type="file" id="profile-photo" accept="image/*" style="margin-bottom: 16px;">
-        <textarea id="onboard-bio" placeholder="Tell clients about yourself (optional)" class="search-input" style="margin-bottom: 16px; min-height: 80px;"></textarea>
-        <button id="onboard-finish" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px;">Complete Setup</button>
-    `);
-    const fileInput = document.getElementById('profile-photo');
-    const preview = document.getElementById('photo-preview');
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                preview.innerHTML = `<img src="${event.target.result}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
-                onboardingData.photoFile = file;
-            };
-            reader.readAsDataURL(file);
-        }
-    });
-    document.getElementById('onboard-finish').addEventListener('click', async () => {
+        <input type="file" id="onboarding-profile-photo" accept="image/*" style="display: none;">
+        <textarea id="onboard-bio" placeholder="Tell clients about yourself (optional)" class="onboarding-textarea">${onboardingData.bio || ''}</textarea>
+    `;
+    
+    document.getElementById('onboarding-content').innerHTML = content;
+    
+    // Photo preview click handler
+    const preview = document.getElementById('onboarding-photo-preview');
+    const fileInput = document.getElementById('onboarding-profile-photo');
+    
+    if (preview) {
+        preview.addEventListener('click', () => {
+            fileInput.click();
+        });
+    }
+    
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    preview.innerHTML = `<img src="${event.target.result}">`;
+                    onboardingData.photoFile = file;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+    
+    // Setup next button (Complete Setup)
+    const nextBtn = document.getElementById('onboarding-next-btn');
+    const oldNext = nextBtn.cloneNode(true);
+    nextBtn.parentNode.replaceChild(oldNext, nextBtn);
+    
+    oldNext.addEventListener('click', async () => {
         onboardingData.bio = document.getElementById('onboard-bio').value;
-        closeBottomSheet();
+        
+        // Upload photo if exists
+        if (onboardingData.photoFile) {
+            showToast('Uploading photo...');
+            try {
+                const photoURL = await uploadImage(onboardingData.photoFile, 'profiles');
+                onboardingData.photoURL = photoURL;
+            } catch (error) {
+                console.error('Photo upload error:', error);
+            }
+        }
+        
         showToast('Saving your profile...');
         await saveUserProfile();
+        hideOnboardingScreen();
         navigateToPage('home');
         showToast('Welcome to GigsCourt! 🎉');
+    });
+    
+    // Setup back button
+    const backBtn = document.getElementById('onboarding-back-btn');
+    const oldBack = backBtn.cloneNode(true);
+    backBtn.parentNode.replaceChild(oldBack, backBtn);
+    
+    oldBack.addEventListener('click', () => {
+        showOnboardingStep4();
     });
 }
 
@@ -385,6 +589,7 @@ async function saveUserProfile() {
         location: onboardingData.location || null,
         addressText: onboardingData.addressText || '',
         bio: onboardingData.bio || '',
+        photoURL: onboardingData.photoURL || null,
         credits: 0,
         gigCount: 0,
         rating: 0,
@@ -392,7 +597,12 @@ async function saveUserProfile() {
         createdAt: new Date().toISOString(),
         lastActive: new Date().toISOString()
     }, { merge: true });
-    await updateProfile(window.currentUser, { displayName: onboardingData.displayName });
+    
+    const updateData = { displayName: onboardingData.displayName };
+    if (onboardingData.photoURL) {
+        updateData.photoURL = onboardingData.photoURL;
+    }
+    await updateProfile(window.currentUser, updateData);
 }
 
 // ========== AUTH UI ==========
