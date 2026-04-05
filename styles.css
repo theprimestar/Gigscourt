@@ -95,6 +95,7 @@ button:active, .nav-item:active, .card:active {
 h1, h2, h3, h4 {
     font-weight: 600;
     letter-spacing: -0.02em;
+    color: var(--text-primary);
 }
 
 .logo {
@@ -195,6 +196,7 @@ h1, h2, h3, h4 {
     padding: var(--space-md) var(--space-lg);
     border-bottom: 1px solid var(--border-light);
     font-weight: 600;
+    color: var(--text-primary);
 }
 
 #clear-notifications {
@@ -225,6 +227,7 @@ h1, h2, h3, h4 {
     font-weight: 600;
     font-size: 14px;
     margin-bottom: 4px;
+    color: var(--text-primary);
 }
 
 .notification-body {
@@ -268,6 +271,7 @@ h1, h2, h3, h4 {
 
 .nav-item svg {
     transition: stroke 0.2s ease;
+    stroke: var(--text-muted);
 }
 
 .nav-item.active {
@@ -277,6 +281,10 @@ h1, h2, h3, h4 {
 .nav-item.active svg {
     stroke: var(--accent-orange);
     fill: none;
+}
+
+.nav-item span {
+    color: inherit;
 }
 
 /* ---------- MAIN PAGE CONTAINER ---------- */
@@ -290,6 +298,7 @@ h1, h2, h3, h4 {
     display: none;
     opacity: 0;
     transition: opacity 0.2s ease;
+    color: var(--text-primary);
 }
 
 .page.active {
@@ -348,6 +357,7 @@ h1, h2, h3, h4 {
     align-items: center;
     gap: var(--space-xs);
     flex-wrap: wrap;
+    color: var(--text-primary);
 }
 
 .active-badge {
@@ -423,6 +433,10 @@ h1, h2, h3, h4 {
     border-color: var(--accent-orange);
 }
 
+.search-input::placeholder {
+    color: var(--text-muted);
+}
+
 .view-toggle {
     display: flex;
     gap: var(--space-sm);
@@ -453,6 +467,7 @@ h1, h2, h3, h4 {
     display: flex;
     flex-direction: column;
     gap: var(--space-sm);
+    color: var(--text-primary);
 }
 
 #radius-slider {
@@ -497,6 +512,10 @@ h1, h2, h3, h4 {
     margin-bottom: var(--space-lg);
 }
 
+.chats-header h2 {
+    color: var(--text-primary);
+}
+
 .chats-list {
     display: flex;
     flex-direction: column;
@@ -529,6 +548,7 @@ h1, h2, h3, h4 {
 .chat-name {
     font-weight: 600;
     margin-bottom: 4px;
+    color: var(--text-primary);
 }
 
 .chat-last-message {
@@ -577,6 +597,7 @@ h1, h2, h3, h4 {
     font-size: 22px;
     font-weight: 700;
     margin-bottom: var(--space-xs);
+    color: var(--text-primary);
 }
 
 .profile-bio {
@@ -602,6 +623,7 @@ h1, h2, h3, h4 {
 .stat-number {
     font-size: 18px;
     font-weight: 700;
+    color: var(--text-primary);
 }
 
 .stat-label {
@@ -618,6 +640,7 @@ h1, h2, h3, h4 {
     border-radius: var(--radius-md);
     margin-bottom: var(--space-lg);
     font-size: 14px;
+    color: var(--text-primary);
 }
 
 .profile-actions {
@@ -667,6 +690,7 @@ h1, h2, h3, h4 {
     font-size: 16px;
     font-weight: 600;
     margin-bottom: var(--space-md);
+    color: var(--text-primary);
 }
 
 .portfolio-grid {
@@ -716,6 +740,7 @@ h1, h2, h3, h4 {
     flex: 1;
     overflow-y: auto;
     padding: 0 var(--space-lg) var(--space-xl);
+    color: var(--text-primary);
 }
 
 .sheet-overlay {
@@ -755,6 +780,7 @@ h1, h2, h3, h4 {
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg);
     animation: slideUp 0.3s ease;
+    color: var(--text-primary);
 }
 
 .toast-warning {
@@ -813,39 +839,4 @@ h1, h2, h3, h4 {
         right: auto;
         left: auto;
     }
-}  /* ← This closes the media query */
-/* END OF FILE */
-
-/* FORCE TEXT VISIBILITY - FIX BLANK SCREEN */
-body, .page, .page-content, .card, .card-name, .card-info, .nav-item, .logo, .header-inner, .bottom-nav {
-    color: var(--text-primary) !important;
-}
-
-body {
-    background-color: var(--bg-primary) !important;
-}
-
-#main-app {
-    display: block !important;
-    opacity: 1 !important;
-    background-color: var(--bg-primary) !important;
-}
-
-.page {
-    display: block !important;
-    opacity: 1 !important;
-}
-
-.page.active {
-    display: block !important;
-    opacity: 1 !important;
-}
-
-.nav-item span, .logo span {
-    color: inherit !important;
-}
-
-.empty-state {
-    color: var(--text-secondary) !important;
-    background: transparent !important;
 }
