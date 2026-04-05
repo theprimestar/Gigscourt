@@ -9,9 +9,14 @@
     opacity: 1 !important;
 }
 
-/* ========== CSS VARIABLES (Light Mode Default) ========== */
+/* ========================================
+   GigsCourt - Complete Styling
+   Instagram + Pinterest Inspired UI
+   Full Dark/Light Mode Support
+   ======================================== */
+
+/* ========== CSS VARIABLES ========== */
 :root {
-    /* Colors - Light Mode */
     --bg-primary: #ffffff;
     --bg-secondary: #fafafa;
     --bg-tertiary: #f5f5f5;
@@ -34,23 +39,20 @@
     --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
     --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.1);
     --shadow-xl: 0 8px 24px rgba(0, 0, 0, 0.12);
-    
-    /* Layout */
-    --header-height: 60px;
+    --header-height-normal: 70px;
+    --header-height-shrunk: 50px;
     --bottom-nav-height: 70px;
     --border-radius-sm: 8px;
     --border-radius-md: 12px;
     --border-radius-lg: 16px;
     --border-radius-xl: 20px;
     --border-radius-xxl: 30px;
-    
-    /* Transitions */
     --transition-fast: 0.15s ease;
     --transition-normal: 0.25s ease;
     --transition-slow: 0.4s ease;
 }
 
-/* ========== DARK MODE OVERRIDES ========== */
+/* ========== DARK MODE ========== */
 @media (prefers-color-scheme: dark) {
     :root {
         --bg-primary: #0f0f0f;
@@ -69,7 +71,7 @@
     }
 }
 
-/* ========== RESET & BASE ========== */
+/* ========== RESET ========== */
 * {
     margin: 0;
     padding: 0;
@@ -82,10 +84,9 @@ body {
     background: var(--bg-primary);
     color: var(--text-primary);
     overflow-x: hidden;
-    transition: background-color var(--transition-normal), color var(--transition-normal);
 }
 
-/* ========== SPLASH SCREEN (kept from original) ========== */
+/* ========== SPLASH SCREEN ========== */
 #splash-screen {
     position: fixed;
     top: 0;
@@ -120,18 +121,19 @@ body {
 #main-app {
     display: none;
     min-height: 100vh;
-    padding-bottom: var(--bottom-nav-height);
 }
 
-/* ========== HEADER (Instagram-style shrink) ========== */
+/* ========== SHRINKING HEADER (Instagram Style) ========== */
 #app-header {
-    position: sticky;
+    position: fixed;
     top: 0;
+    left: 0;
+    right: 0;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border-light);
-    padding: 12px 16px;
     z-index: 100;
-    transition: transform var(--transition-normal), background var(--transition-normal);
+    transition: all var(--transition-normal);
+    height: var(--header-height-normal);
     backdrop-filter: blur(10px);
     background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.95);
 }
@@ -142,10 +144,29 @@ body {
     }
 }
 
+#app-header.shrunk {
+    height: var(--header-height-shrunk);
+}
+
+#app-header.shrunk .logo {
+    font-size: 18px;
+}
+
+#app-header.shrunk .icon-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+#app-header.hidden-header {
+    transform: translateY(-100%);
+}
+
 .header-inner {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    height: 100%;
+    padding: 0 16px;
     max-width: 600px;
     margin: 0 auto;
 }
@@ -154,6 +175,7 @@ body {
     font-size: 24px;
     font-weight: 700;
     letter-spacing: -0.5px;
+    transition: font-size var(--transition-normal);
 }
 
 .logo span:first-child {
@@ -180,7 +202,7 @@ body {
     cursor: pointer;
     color: var(--text-primary);
     border-radius: 50%;
-    transition: background var(--transition-fast);
+    transition: all var(--transition-fast);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -210,7 +232,7 @@ body {
     display: none;
 }
 
-/* ========== NOTIFICATIONS DROPDOWN (Instagram-style) ========== */
+/* ========== NOTIFICATIONS DROPDOWN ========== */
 .notifications-dropdown {
     position: absolute;
     top: 60px;
@@ -226,15 +248,13 @@ body {
     animation: slideDown 0.2s ease;
 }
 
+#app-header.shrunk + .notifications-dropdown {
+    top: 45px;
+}
+
 @keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .notifications-dropdown.hidden {
@@ -292,71 +312,12 @@ body {
     font-size: 14px;
 }
 
-/* ========== BOTTOM NAVIGATION (Instagram-style) ========== */
-.bottom-nav {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--bg-primary);
-    border-top: 1px solid var(--border-light);
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    padding: 8px 16px 12px;
-    z-index: 100;
-    transition: transform var(--transition-normal);
-    backdrop-filter: blur(10px);
-    background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.95);
-}
-
-.bottom-nav.hidden {
-    transform: translateY(100%);
-}
-
-.nav-item {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 10px;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 6px 12px;
-    border-radius: var(--border-radius-md);
-    transition: all var(--transition-fast);
-}
-
-.nav-item svg {
-    width: 24px;
-    height: 24px;
-    stroke: currentColor;
-    fill: none;
-    transition: all var(--transition-fast);
-}
-
-.nav-item.active {
-    color: var(--accent-orange);
-}
-
-.nav-item.active svg {
-    fill: var(--accent-orange);
-    stroke: var(--accent-orange);
-}
-
-.nav-item:active {
-    transform: scale(0.95);
-    background: var(--bg-tertiary);
-}
-
 /* ========== PAGE CONTAINERS ========== */
 .page {
     display: none;
     min-height: 100vh;
     background: var(--bg-secondary);
+    padding-top: var(--header-height-normal);
 }
 
 .page.active {
@@ -369,7 +330,7 @@ body {
     padding: 0 0 20px 0;
 }
 
-/* ========== HOME PAGE CARDS (Horizontal Rectangles, at least 5 visible) ========== */
+/* ========== HOME PAGE CARDS ========== */
 .cards-feed {
     display: flex;
     flex-direction: column;
@@ -377,7 +338,6 @@ body {
     padding: 16px;
 }
 
-/* Home Card - Horizontal rectangle, wider than tall */
 #home-page .card {
     background: var(--bg-card);
     border-radius: var(--border-radius-xl);
@@ -460,7 +420,6 @@ body {
     border-radius: 20px;
     font-size: 12px;
     font-weight: 500;
-    transition: background var(--transition-fast);
 }
 
 .card-distance {
@@ -469,15 +428,6 @@ body {
     display: flex;
     align-items: center;
     gap: 4px;
-}
-
-/* Make sure at least 5 cards are visible without excessive scrolling */
-#home-page .page-content {
-    min-height: 100vh;
-}
-
-#home-page .cards-feed {
-    gap: 20px;
 }
 
 /* ========== SEARCH PAGE ========== */
@@ -523,7 +473,6 @@ body {
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all var(--transition-fast);
 }
 
 .toggle-btn.active {
@@ -564,13 +513,11 @@ body {
     border-radius: 50%;
     background: var(--accent-orange);
     cursor: pointer;
-    box-shadow: var(--shadow-sm);
 }
 
 .map-container {
     height: 400px;
     width: 100%;
-    border-radius: 0;
     overflow: hidden;
 }
 
@@ -586,7 +533,6 @@ body {
     display: none;
 }
 
-/* Search List Mode Cards - Slimmer rectangles, at least 9 visible */
 #search-list-feed {
     display: flex;
     flex-direction: column;
@@ -607,11 +553,6 @@ body {
 
 #search-list-feed .card:active {
     transform: scale(0.98);
-    background: var(--bg-tertiary);
-}
-
-#search-list-feed .card-header {
-    gap: 10px;
 }
 
 #search-list-feed .card-avatar {
@@ -623,25 +564,12 @@ body {
     font-size: 15px;
 }
 
-#search-list-feed .card-services {
-    gap: 6px;
-}
-
 #search-list-feed .service-tag {
     padding: 3px 10px;
     font-size: 11px;
 }
 
-#search-list-feed .card-distance {
-    font-size: 11px;
-}
-
-/* Ensure at least 9 cards fit on screen */
-#search-list-feed .card {
-    margin-bottom: 0;
-}
-
-/* ========== CHATS PAGE (Instagram DM style) ========== */
+/* ========== CHATS PAGE ========== */
 .chats-header {
     display: flex;
     justify-content: space-between;
@@ -670,7 +598,6 @@ body {
     padding: 12px 0;
     border-bottom: 1px solid var(--border-light);
     cursor: pointer;
-    transition: background var(--transition-fast);
 }
 
 .chat-item:active {
@@ -724,7 +651,7 @@ body {
     font-weight: 600;
 }
 
-/* ========== PROFILE PAGE (Pinterest/Instagram hybrid) ========== */
+/* ========== PROFILE PAGE ========== */
 #profile-content {
     padding: 0 16px 20px;
 }
@@ -767,7 +694,6 @@ body {
 .stat {
     text-align: center;
     cursor: pointer;
-    transition: opacity var(--transition-fast);
 }
 
 .stat:active {
@@ -810,7 +736,6 @@ body {
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all var(--transition-fast);
     text-align: center;
     border: none;
 }
@@ -822,18 +747,12 @@ body {
 
 .btn-primary:active {
     transform: scale(0.97);
-    background: var(--accent-orange-dark);
 }
 
 .btn-secondary {
     background: var(--bg-tertiary);
     color: var(--text-primary);
     border: 1px solid var(--border-light);
-}
-
-.btn-secondary:active {
-    transform: scale(0.97);
-    background: var(--bg-secondary);
 }
 
 .services-section, .portfolio-section {
@@ -859,14 +778,70 @@ body {
     object-fit: cover;
     border-radius: var(--border-radius-md);
     cursor: pointer;
-    transition: transform var(--transition-fast);
 }
 
 .portfolio-item:active {
     transform: scale(0.98);
 }
 
-/* ========== BOTTOM SHEET (Instagram share sheet style) ========== */
+/* ========== BOTTOM NAV ========== */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-light);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 8px 16px 12px;
+    z-index: 100;
+    transition: transform var(--transition-normal);
+    backdrop-filter: blur(10px);
+    background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.95);
+}
+
+.bottom-nav.hidden {
+    transform: translateY(100%);
+}
+
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 6px 12px;
+    border-radius: var(--border-radius-md);
+}
+
+.nav-item svg {
+    width: 24px;
+    height: 24px;
+    stroke: currentColor;
+    fill: none;
+}
+
+.nav-item.active {
+    color: var(--accent-orange);
+}
+
+.nav-item.active svg {
+    fill: var(--accent-orange);
+    stroke: var(--accent-orange);
+}
+
+.nav-item:active {
+    transform: scale(0.95);
+}
+
+/* ========== BOTTOM SHEET ========== */
 .bottom-sheet {
     position: fixed;
     bottom: 0;
@@ -917,31 +892,6 @@ body {
     visibility: visible;
 }
 
-/* ========== CHAT BUBBLES (Instagram DM style) ========== */
-.message-wrapper {
-    margin: 4px 0;
-}
-
-.message-wrapper .message-bubble {
-    max-width: 75%;
-    padding: 10px 14px;
-    border-radius: 20px;
-    font-size: 14px;
-    word-wrap: break-word;
-}
-
-.message-wrapper.outgoing .message-bubble {
-    background: var(--accent-orange);
-    color: white;
-    border-bottom-right-radius: 4px;
-}
-
-.message-wrapper.incoming .message-bubble {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border-bottom-left-radius: 4px;
-}
-
 /* ========== LOADING SPINNER ========== */
 .loading-spinner {
     width: 40px;
@@ -957,7 +907,7 @@ body {
     to { transform: rotate(360deg); }
 }
 
-/* ========== TOAST NOTIFICATIONS ========== */
+/* ========== TOAST ========== */
 .toast-container {
     position: fixed;
     bottom: 80px;
@@ -982,18 +932,11 @@ body {
     max-width: 90%;
     text-align: center;
     animation: toastIn 0.3s ease;
-    pointer-events: auto;
 }
 
 @keyframes toastIn {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .toast-error {
@@ -1004,76 +947,11 @@ body {
     background: rgba(52, 168, 83, 0.95);
 }
 
-/* ========== CREDIT PACKAGE BUTTONS ========== */
-.credit-package {
-    width: 100%;
-    padding: 16px;
-    margin-bottom: 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--border-radius-lg);
-    text-align: left;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    color: var(--text-primary);
-}
-
-.credit-package:active {
-    transform: scale(0.98);
-    background: var(--bg-tertiary);
-}
-
-/* ========== SERVICE OPTION BUTTONS ========== */
-.service-option {
-    padding: 12px;
-    background: var(--bg-secondary);
-    border-radius: var(--border-radius-md);
-    margin-bottom: 8px;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    color: var(--text-primary);
-}
-
-.service-option:active {
-    transform: scale(0.98);
-}
-
-/* ========== RECENT CLIENT BUTTONS ========== */
-.recent-client-btn {
-    width: 100%;
-    padding: 16px;
-    margin-bottom: 8px;
-    background: var(--bg-secondary);
-    border: none;
-    border-radius: var(--border-radius-lg);
-    text-align: left;
-    cursor: pointer;
-    transition: all var(--transition-fast);
-    color: var(--text-primary);
-}
-
-.recent-client-btn:active {
-    transform: scale(0.98);
-    background: var(--bg-tertiary);
-}
-
-/* ========== UTILITY CLASSES ========== */
+/* ========== UTILITIES ========== */
 .hidden {
     display: none !important;
 }
 
-.text-center {
-    text-align: center;
-}
-
-.mt-2 { margin-top: 8px; }
-.mt-3 { margin-top: 12px; }
-.mt-4 { margin-top: 16px; }
-.mb-2 { margin-bottom: 8px; }
-.mb-3 { margin-bottom: 12px; }
-.mb-4 { margin-bottom: 16px; }
-
-/* ========== RESPONSIVE ADJUSTMENTS ========== */
 @media (max-width: 480px) {
     .profile-actions {
         flex-direction: column;
@@ -1084,7 +962,6 @@ body {
     }
     
     .portfolio-grid {
-        grid-template-columns: repeat(3, 1fr);
         gap: 6px;
     }
     
@@ -1099,7 +976,6 @@ body {
     }
 }
 
-/* ========== SCROLLBAR STYLING (Webkit) ========== */
 ::-webkit-scrollbar {
     width: 4px;
 }
@@ -1111,36 +987,4 @@ body {
 ::-webkit-scrollbar-thumb {
     background: var(--border-medium);
     border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
-}
-
-/* ========== FOCUS VISIBLE (Accessibility) ========== */
-*:focus-visible {
-    outline: 2px solid var(--accent-orange);
-    outline-offset: 2px;
-}
-
-/* ========== SMOOTH SCROLLING ========== */
-html {
-    scroll-behavior: smooth;
-}
-
-/* ========== PREVENT PULL-TO-REFRESH INTERFERENCE ========== */
-body {
-    overscroll-behavior: none;
-}
-
-/* ========== CARD HOVER EFFECTS (Desktop only, but safe) ========== */
-@media (hover: hover) {
-    .card:hover, .chat-item:hover, .nav-item:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-md);
-    }
-    
-    .service-option:hover, .credit-package:hover {
-        background: var(--bg-tertiary);
-    }
 }
