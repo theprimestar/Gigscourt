@@ -802,6 +802,21 @@ async function loadProfile(userId = null) {
         const user = { id: userDoc.id, ...userDoc.data() };
         const isOwnProfile = targetId === window.auth.currentUser?.uid;
         const activeStatus = getActiveStatus(user);
+
+        // Update profile page header dynamically
+        const profileHeaderTitle = document.getElementById('profile-header-title');
+        const settingsBtn = document.getElementById('profile-settings-btn');
+        
+        if (profileHeaderTitle) {
+            if (isOwnProfile) {
+                profileHeaderTitle.textContent = 'Profile';
+                if (settingsBtn) settingsBtn.style.display = 'flex';
+            } else {
+                profileHeaderTitle.textContent = user.displayName || 'User';
+                if (settingsBtn) settingsBtn.style.display = 'none';
+            }
+        }
+        
         profileContent.innerHTML = `
             <div class="profile-header">
                 <img class="profile-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="" data-user-id="${user.id}">
