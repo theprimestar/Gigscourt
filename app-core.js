@@ -587,6 +587,11 @@ document.addEventListener('DOMContentLoaded', () => {
     clearNotificationsBtn = document.getElementById('clear-notifications');
     notificationBadge = document.getElementById('notification-badge');
     
+    // Make sure main app is HIDDEN initially (only shown after login)
+    if (mainApp) {
+        mainApp.style.display = 'none';
+    }
+    
     // Setup all core features that don't depend on auth
     setupBottomSheet();
     setupNavigation();
@@ -594,16 +599,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setupNotifications();
     setupProfilePictureHandler();
     
-    // Setup auth listener (this will eventually fire appReady for features)
+    // Setup auth listener (this will show auth screen or main app based on login state)
     setupAuthListener();
     
-    // Hide splash and show main app AFTER splash timeout, regardless of auth state
+    // Hide splash screen after timeout
     setTimeout(() => {
-        if (splashScreen && mainApp) {
+        if (splashScreen) {
             splashScreen.style.opacity = '0';
             setTimeout(() => {
                 splashScreen.style.display = 'none';
-                mainApp.style.display = 'block';
             }, 500);
         }
     }, 1500);
