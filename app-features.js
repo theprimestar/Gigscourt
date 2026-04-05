@@ -1046,36 +1046,94 @@ async function showRecentChatsForGig() {
 }
 
 async function showSettings() {
-    window.openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Settings</h3>
-        <button id="change-password-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px;">Change Password</button>
-        <button id="deactivate-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px; color: var(--error-red);">Deactivate Account</button>
-        <button id="logout-btn" class="btn-secondary" style="width: 100%;">Logout</button>
-    `);
-    document.getElementById('logout-btn')?.addEventListener('click', async () => {
-        await window.signOut(window.auth);
-        window.closeBottomSheet();
-        window.location.reload();
-    });
-    document.getElementById('deactivate-btn')?.addEventListener('click', async () => {
-        try {
-            const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-            await updateDoc(userRef, {
-                deactivatedAt: new Date().toISOString(),
-                deactivateExpires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-            });
-            window.showToast('Account deactivated. Will be deleted after 14 days.');
+    const settingsScreen = document.getElementById('settings-screen');
+    const mainApp = document.getElementById('main-app');
+    
+    // Hide main app, show settings screen
+    if (mainApp) {
+        mainApp.style.display = 'none';
+    }
+    if (settingsScreen) {
+        settingsScreen.classList.remove('hidden');
+    }
+    
+    // Get button references
+    const logoutBtn = document.getElementById('settings-logout-btn');
+    const deactivateBtn = document.getElementById('settings-deactivate-btn');
+    const changePasswordBtn = document.getElementById('settings-change-password-btn');
+    const closeBtn = document.getElementById('settings-close-btn');
+    
+    // Remove any existing listeners to prevent duplicates
+    const newLogoutBtn = logoutBtn?.cloneNode(true);
+    if (newLogoutBtn && logoutBtn) {
+        logoutBtn.parentNode.replaceChild(newLogoutBtn, logoutBtn);
+        newLogoutBtn.addEventListener('click', async () => {
             await window.signOut(window.auth);
             window.location.reload();
-        } catch (error) {
-            console.error('deactivate error:', error);
-            window.showToast('Error deactivating account', 'error');
-        }
-    });
-    document.getElementById('change-password-btn')?.addEventListener('click', async () => {
-        window.showToast('Password reset email sent');
-        await window.sendPasswordResetEmail(window.auth, window.auth.currentUser.email);
-    });
+        });
+    }
+    
+    const newDeactivateBtn = deactivateBtn?.cloneNode(true);
+    if (newDeactivateBtn && deactivateBtn) {
+        deactivateBtn.parentNode.replaceChild(newDeactivateBtn, deactivateBtn);
+        newDeactivateBtn.addEventListener('click', async () => {
+            if (confirm('Are you sure? Your account will be deactivated and deleted after 14 days.')) {
+                try {
+                    const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+                    await updateDoc(userRef, {
+                        deactivatedAt: new Date().toISOString(),
+                        deactivateExpires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+                    });
+                    window.showToast('Account deactivated. Will be deleted after 14 days.');
+                    await window.signOut(window.auth);
+                    window.location.reload();
+                } catch (error) {
+                    console.error('deactivate error:', error);
+                    window.showToast('Error deactivating account', 'error');
+                }
+            }
+        });
+    }
+    
+    const newChangePasswordBtn = changePasswordBtn?.cloneNode(true);
+    if (newChangePasswordBtn && changePasswordBtn) {
+        changePasswordBtn.parentNode.replaceChild(newChangePasswordBtn, changePasswordBtn);
+        newChangePasswordBtn.addEventListener('click', async () => {
+            const email = window.auth.currentUser?.email;
+            if (email) {
+                await window.sendPasswordResetEmail(window.auth, email);
+                window.showToast('Password reset email sent! Check your inbox.');
+            } else {
+                window.showToast('No email found', 'error');
+            }
+        });
+    }
+    
+    const newCloseBtn = closeBtn?.cloneNode(true);
+    if (newCloseBtn && closeBtn) {
+        closeBtn.parentNode.replaceChild(newCloseBtn, closeBtn);
+        newCloseBtn.addEventListener('click', () => {
+            // Hide settings screen, show main app
+            if (settingsScreen) {
+                settingsScreen.classList.add('hidden');
+            }
+            if (mainApp) {
+                mainApp.style.display = 'block';
+            }
+        });
+    }
+}
+
+function hideSettingsScreen() {
+    const settingsScreen = document.getElementById('settings-screen');
+    const mainApp = document.getElementById('main-app');
+    
+    if (settingsScreen) {
+        settingsScreen.classList.add('hidden');
+    }
+    if (mainApp) {
+        mainApp.style.display = 'block';
+    }
 }
 
 // ========== INITIALIZE FEATURES (only after appReady) ==========
