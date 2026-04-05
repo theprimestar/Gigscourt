@@ -1,258 +1,822 @@
 // ========================================
-// GigsCourt - Core Module (FIXED - Race Condition)
-// Authentication, Navigation, UI, Onboarding
+// GigsCourt - Features Module (FIXED - Waits for appReady)
+// Map, Chat, Gigs, Credits, Reviews, Profile, Portfolio, Uploads
 // ========================================
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-
-// ========== INITIALIZATION ==========
-const app = initializeApp(window.firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-
-// Make globally available
-window.auth = auth;
-window.db = db;
-window.app = app;
-window.sendPasswordResetEmail = sendPasswordResetEmail;
+import { increment } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // ========== DOM ELEMENTS ==========
-let splashScreen, mainApp, bottomNav, header, pageContainer, bottomSheet, sheetOverlay, sheetContent, toastContainer, notificationsBtn, notificationsDropdown, notificationsList, clearNotificationsBtn, notificationBadge;
+let homeFeed, searchServiceInput, radiusSlider, radiusValue, mapViewBtn, listViewBtn, mapContainer, searchListView, searchListFeed, chatsList, profileContent;
 
 // ========== STATE ==========
-window.currentUser = null;
-window.currentUserData = null;
-let currentPage = 'home';
-let scrollPositions = {
-    home: 0,
-    search: 0,
-    chats: 0,
-    profile: 0
-};
-let lastScrollY = 0;
-let isNavHidden = false;
-let appReadyFired = false;
+let currentMap = null;
+let currentMarkers = [];
+let currentListViewData = [];
+let currentChatUser = null;
+let currentChatId = null;
+let currentMessagesUnsubscribe = null;
+let currentUserLocation = null;
+let currentRadius = 5;
+let currentSearchService = '';
+let currentViewMode = 'map';
+let featuresInitialized = false;
 
-// ========== PRESET SERVICES (30) ==========
-const PRESET_SERVICES = [
-    "Tailoring / fashion design", "Barbing (men's haircutting)", "Hairdressing (braiding, wigs, styling)",
-    "Makeup artistry", "Shoe making / cobbling", "Phone repairs (hardware/software)",
-    "Computer repairs", "Electrical installation (wiring, fittings)", "Plumbing",
-    "Carpentry / furniture making", "Masonry / bricklaying", "Welding / metal fabrication",
-    "Tiling (floor/wall)", "POP ceiling installation", "Painting (house painting)",
-    "Auto mechanic (car repair)", "Motorcycle/tricycle repair", "Catering (event cooking)",
-    "Baking (cakes, pastries)", "Event decoration", "CCTV installation",
-    "Solar panel installation", "Generator repair", "AC (air conditioner) repair",
-    "Aluminum work (windows/doors)", "Interior decoration (home setup)",
-    "Laundry / dry cleaning service", "Upholstery (sofa/seat making & repair)",
-    "Printing & branding (flex, banners, T-shirts)", "POP screeding / wall finishing"
-];
+// ========== IMAGEKIT CONFIG ==========
+const IMAGEKIT_URL = 'https://ik.imagekit.io/Theprimestar';
+const IMAGEKIT_PUBLIC_KEY = 'public_hwM9hldZI+DqFY/pncPQCA5VRWo=';
 
-// ========== HAPTIC FEEDBACK ==========
-function haptic(type = 'light') {
-    if (!window.navigator.vibrate) return;
-    if (type === 'light') window.navigator.vibrate(10);
-    else if (type === 'heavy') window.navigator.vibrate(50);
+// ========== PAYSTACK CONFIG ==========
+const PAYSTACK_PUBLIC_KEY = 'pk_test_4f6ae42964ab8da60e2f1c77cfb6fe1cd30806cc';
+
+// ========== HELPER FUNCTIONS ==========
+function formatDistance(meters) {
+    if (meters < 1000) return `${Math.round(meters)}m away`;
+    return `${(meters / 1000).toFixed(1)}km away`;
 }
 
-// ========== TOAST ==========
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.innerHTML = `<span>${message}</span>`;
-    toastContainer.appendChild(toast);
-    setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}
-
-// ========== BOTTOM SHEET ==========
-function openBottomSheet(contentHtml) {
-    sheetContent.innerHTML = contentHtml;
-    bottomSheet.classList.add('open');
-    sheetOverlay.classList.add('visible');
-    haptic('light');
-    document.body.style.overflow = 'hidden';
-}
-
-function closeBottomSheet() {
-    bottomSheet.classList.remove('open');
-    sheetOverlay.classList.remove('visible');
-    document.body.style.overflow = '';
-}
-
-function setupBottomSheet() {
-    const dragHandle = document.querySelector('.sheet-drag-handle');
-    let startY = 0;
-    if (dragHandle) {
-        dragHandle.addEventListener('touchstart', (e) => {
-            startY = e.touches[0].clientY;
-        });
-        dragHandle.addEventListener('touchmove', (e) => {
-            const delta = e.touches[0].clientY - startY;
-            if (delta > 50) closeBottomSheet();
-        });
+function getActiveStatus(userData) {
+    const lastGigDate = userData.lastGigDate ? new Date(userData.lastGigDate) : null;
+    const monthlyGigs = userData.monthlyGigCount || 0;
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.setDate(now.getDate() - 7));
+    if ((lastGigDate && lastGigDate > sevenDaysAgo) || monthlyGigs >= 3) {
+        return { active: true, text: 'Active this week' };
     }
-    if (sheetOverlay) sheetOverlay.addEventListener('click', closeBottomSheet);
+    return { active: false, text: 'Inactive' };
 }
 
-// ========== NOTIFICATION DROPDOWN ==========
-function setupNotifications() {
-    if (!notificationsBtn) return;
-    notificationsBtn.addEventListener('click', () => {
-        notificationsDropdown.classList.toggle('hidden');
-        haptic('light');
-    });
-    if (clearNotificationsBtn) {
-        clearNotificationsBtn.addEventListener('click', () => {
-            const items = notificationsList.querySelectorAll('.notification-item');
-            items.forEach(item => item.remove());
-            notificationsList.innerHTML = '<div class="empty-state">No notifications yet</div>';
-            notificationBadge.classList.add('hidden');
-        });
-    }
-    document.addEventListener('click', (e) => {
-        if (notificationsBtn && notificationsDropdown && !notificationsBtn.contains(e.target) && !notificationsDropdown.contains(e.target)) {
-            notificationsDropdown.classList.add('hidden');
-        }
+function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI/180;
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+}
+
+// ========== IMAGE UPLOAD (ImageKit) ==========
+async function uploadImage(file, folder = 'profiles') {
+    return new Promise((resolve, reject) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('fileName', `${Date.now()}_${file.name}`);
+        formData.append('folder', `/GigsCourt/${folder}`);
+        formData.append('useUniqueFileName', 'true');
+        
+        fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Basic ${btoa(IMAGEKIT_PUBLIC_KEY + ':')}`
+            },
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.url) resolve(data.url);
+            else reject(data);
+        })
+        .catch(reject);
     });
 }
 
-function addNotification(title, body, link = '') {
-    const emptyState = notificationsList.querySelector('.empty-state');
-    if (emptyState) emptyState.remove();
-    const item = document.createElement('div');
-    item.className = 'notification-item';
-    item.innerHTML = `
-        <div class="notification-title">${title}</div>
-        <div class="notification-body">${body}</div>
-    `;
-    if (link) item.addEventListener('click', () => { window.location.hash = link; closeBottomSheet(); });
-    notificationsList.insertBefore(item, notificationsList.firstChild);
-    let count = notificationsList.children.length;
-    if (count > 0) {
-        notificationBadge.textContent = count;
-        notificationBadge.classList.remove('hidden');
-    }
-}
-
-// ========== PAGE NAVIGATION ==========
-function saveScrollPosition() {
-    const activePage = document.querySelector('.page.active');
-    if (activePage) {
-        scrollPositions[currentPage] = activePage.scrollTop || 0;
-    }
-}
-
-function restoreScrollPosition(pageId) {
-    const targetPage = document.getElementById(`${pageId}-page`);
-    if (targetPage && scrollPositions[pageId]) {
-        targetPage.scrollTop = scrollPositions[pageId];
-    }
-}
-
-function navigateToPage(pageId) {
-    saveScrollPosition();
-    const pages = document.querySelectorAll('.page');
-    const navItems = document.querySelectorAll('.nav-item');
-    pages.forEach(page => page.classList.remove('active'));
-    const targetPage = document.getElementById(`${pageId}-page`);
-    if (targetPage) targetPage.classList.add('active');
-    navItems.forEach(item => {
-        item.classList.remove('active');
-        if (item.dataset.page === pageId) item.classList.add('active');
-    });
-    currentPage = pageId;
-    restoreScrollPosition(pageId);
-    haptic('light');
-    
-    // Dispatch event for features file
-    window.dispatchEvent(new CustomEvent('navigate', { detail: { page: pageId } }));
-}
-
-function setupNavigation() {
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            const pageId = item.dataset.page;
-            navigateToPage(pageId);
-        });
-    });
-}
-
-// ========== SCROLL HANDLER ==========
-function setupScrollHandlers() {
-    const pages = document.querySelectorAll('.page');
-    pages.forEach(page => {
-        page.addEventListener('scroll', () => {
-            const currentScrollY = page.scrollTop;
-            const header = document.getElementById('app-header');
-            if (currentScrollY > lastScrollY && currentScrollY > 50) {
-                if (!isNavHidden) {
-                    bottomNav.classList.add('hidden');
-                    if (header) header.style.transform = 'translateY(-100%)';
-                    isNavHidden = true;
-                }
-            } else if (currentScrollY < lastScrollY) {
-                if (isNavHidden) {
-                    bottomNav.classList.remove('hidden');
-                    if (header) header.style.transform = 'translateY(0)';
-                    isNavHidden = false;
-                }
-            }
-            lastScrollY = currentScrollY;
-            saveScrollPosition();
-        });
-    });
-}
-
-// ========== ONBOARDING FLOW ==========
-let onboardingData = {};
-
-function showOnboarding() {
-    showOnboardingStep1();
-}
-
-function showOnboardingStep1() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Welcome to GigsCourt! 👋</h3>
-        <p style="margin-bottom: 24px; color: var(--text-secondary);">Let's set up your profile in a few steps</p>
-        <input type="text" id="onboard-name" placeholder="Full name" class="search-input" style="margin-bottom: 12px;">
-        <input type="tel" id="onboard-phone" placeholder="Phone number (e.g., 08012345678)" class="search-input" style="margin-bottom: 24px;">
-        <button id="onboard-next-1" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px;">Continue</button>
-    `);
-    document.getElementById('onboard-next-1').addEventListener('click', () => {
-        const name = document.getElementById('onboard-name').value;
-        const phone = document.getElementById('onboard-phone').value;
-        if (!name || !phone) {
-            showToast('Please enter name and phone number');
+// ========== 7-DAY AUTO-CANCEL ==========
+async function checkAndCancelExpiredGigs() {
+    try {
+        if (!window.db) {
+            console.warn('checkAndCancelExpiredGigs: db not ready');
             return;
         }
-        onboardingData.displayName = name;
-        onboardingData.phone = phone;
-        closeBottomSheet();
-        showOnboardingStep2();
+        const expiredGigs = await window.db.collection('gigs')
+            .where('status', '==', 'pending_review')
+            .where('expiresAt', '<', new Date().toISOString())
+            .get();
+        expiredGigs.forEach(async (doc) => {
+            await doc.ref.update({ status: 'cancelled' });
+            await window.db.collection('chats').doc(doc.data().chatId).update({ pendingReview: false });
+            window.addNotification('Gig Cancelled', 'Client did not review within 7 days. No credits deducted.');
+        });
+    } catch (error) {
+        console.error('checkAndCancelExpiredGigs error:', error);
+    }
+}
+
+// ========== HOME PAGE ==========
+async function loadHomeFeed() {
+    if (!homeFeed) return;
+    if (!window.db || !window.auth || !window.auth.currentUser) {
+        homeFeed.innerHTML = '<div class="empty-state">Loading...</div>';
+        return;
+    }
+    
+    try {
+        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+        const usersSnapshot = await window.db.collection('users').get();
+        let users = [];
+        usersSnapshot.forEach(doc => {
+            if (doc.id !== window.auth.currentUser?.uid && doc.data().services && doc.data().services.length > 0) {
+                users.push({ id: doc.id, ...doc.data() });
+            }
+        });
+        
+        if (currentUserLocation) {
+            users.forEach(user => {
+                if (user.location) {
+                    user.distance = calculateDistance(currentUserLocation.lat, currentUserLocation.lng, user.location.lat, user.location.lng);
+                } else {
+                    user.distance = Infinity;
+                }
+            });
+            users.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
+        }
+        
+        users.sort((a, b) => {
+            const aActive = getActiveStatus(a).active ? 1 : 0;
+            const bActive = getActiveStatus(b).active ? 1 : 0;
+            if (aActive !== bActive) return bActive - aActive;
+            return (b.rating || 0) - (a.rating || 0);
+        });
+        
+        if (users.length === 0) {
+            homeFeed.innerHTML = '<div class="empty-state">No providers found nearby</div>';
+            return;
+        }
+        
+        homeFeed.innerHTML = users.map(user => `
+            <div class="card" data-user-id="${user.id}">
+                <div class="card-header">
+                    <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="${user.displayName}">
+                    <div class="card-info">
+                        <div class="card-name">
+                            ${user.displayName || 'Anonymous'}
+                            ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
+                        </div>
+                        <div class="card-rating">
+                            <span class="star">★</span> ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0} gigs)
+                        </div>
+                    </div>
+                </div>
+                <div class="card-services">
+                    ${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}
+                </div>
+                <div class="card-distance">📍 ${user.distance ? formatDistance(user.distance) : 'Location not set'}</div>
+            </div>
+        `).join('');
+        
+        document.querySelectorAll('#home-feed .card').forEach(card => {
+            card.addEventListener('click', () => {
+                window.haptic('light');
+                showUserBottomSheet(card.dataset.userId);
+            });
+        });
+    } catch (error) {
+        console.error('loadHomeFeed error:', error);
+        homeFeed.innerHTML = '<div class="empty-state">Error loading feed. Pull to refresh.</div>';
+    }
+}
+
+// ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
+async function showUserBottomSheet(userId) {
+    try {
+        const userDoc = await window.db.collection('users').doc(userId).get();
+        const user = userDoc.data();
+        const activeStatus = getActiveStatus(user);
+        window.openBottomSheet(`
+            <div style="text-align: center; padding: 8px 0;">
+                <img src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
+                <h3>${user.displayName || 'Anonymous'}</h3>
+                ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
+                <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0} gigs)</div>
+                <p style="color: var(--text-secondary); margin: 8px 0;">${user.bio || 'No bio yet'}</p>
+                <div class="card-services" style="justify-content: center;">${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button id="view-full-profile" class="btn-primary" style="flex: 1;">View Full Profile</button>
+                    <button id="message-from-sheet" class="btn-secondary" style="flex: 1;">Message</button>
+                </div>
+            </div>
+        `);
+        document.getElementById('view-full-profile')?.addEventListener('click', () => {
+            window.closeBottomSheet();
+            loadProfile(userId);
+            window.navigateToPage('profile');
+        });
+        document.getElementById('message-from-sheet')?.addEventListener('click', () => {
+            window.closeBottomSheet();
+            openChat(userId);
+        });
+    } catch (error) {
+        console.error('showUserBottomSheet error:', error);
+        window.showToast('Error loading profile', 'error');
+    }
+}
+
+// ========== SEARCH (Map + List) ==========
+async function initMap() {
+    if (!mapContainer) return;
+    if (!window.L) {
+        console.error('Leaflet not loaded');
+        return;
+    }
+    currentMap = window.L.map(mapContainer).setView([6.5244, 3.3792], 13);
+    window.L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
+    }).addTo(currentMap);
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition((pos) => {
+            currentUserLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            currentMap.setView([currentUserLocation.lat, currentUserLocation.lng], 13);
+            window.L.marker([currentUserLocation.lat, currentUserLocation.lng]).bindPopup('You are here').addTo(currentMap);
+            performSearch();
+        }, () => performSearch());
+    } else {
+        performSearch();
+    }
+}
+
+async function performSearch() {
+    if (!window.db) return;
+    if (!currentSearchService && searchServiceInput) {
+        currentSearchService = searchServiceInput.value;
+    }
+    try {
+        let query = window.db.collection('users');
+        if (currentSearchService) {
+            query = query.where('services', 'array-contains', currentSearchService);
+        }
+        const snapshot = await query.get();
+        let users = [];
+        snapshot.forEach(doc => {
+            if (doc.id !== window.auth.currentUser?.uid && doc.data().services && doc.data().services.length > 0) {
+                users.push({ id: doc.id, ...doc.data() });
+            }
+        });
+        if (currentUserLocation) {
+            users.forEach(user => {
+                if (user.location) {
+                    user.distance = calculateDistance(currentUserLocation.lat, currentUserLocation.lng, user.location.lat, user.location.lng);
+                    user.withinRadius = user.distance <= currentRadius * 1000;
+                } else {
+                    user.withinRadius = false;
+                }
+            });
+            users = users.filter(u => u.withinRadius);
+            users.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
+        }
+        users.sort((a, b) => {
+            const aActive = getActiveStatus(a).active ? 1 : 0;
+            const bActive = getActiveStatus(b).active ? 1 : 0;
+            if (aActive !== bActive) return bActive - aActive;
+            return (b.rating || 0) - (a.rating || 0);
+        });
+        currentListViewData = users;
+        updateMapMarkers(users);
+        updateListView(users);
+    } catch (error) {
+        console.error('performSearch error:', error);
+    }
+}
+
+function updateMapMarkers(users) {
+    if (!currentMap) return;
+    currentMarkers.forEach(m => currentMap.removeLayer(m));
+    currentMarkers = [];
+    users.forEach(user => {
+        if (user.location) {
+            const activeStatus = getActiveStatus(user);
+            const markerColor = activeStatus.active ? '#E67E22' : '#999999';
+            const marker = window.L.circleMarker([user.location.lat, user.location.lng], {
+                radius: 12,
+                fillColor: markerColor,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).addTo(currentMap);
+            marker.bindPopup(`
+                <strong>${user.displayName || 'User'}</strong><br>
+                ${activeStatus.active ? '🟢 Active' : '⚪ Inactive'}<br>
+                ${user.services ? user.services[0] : ''}
+            `);
+            marker.on('click', () => showUserBottomSheet(user.id));
+            currentMarkers.push(marker);
+        }
     });
 }
 
-function showOnboardingStep2() {
-    let selectedServices = [];
-    const servicesHtml = PRESET_SERVICES.map(service => `
-        <div class="service-option" data-service="${service}" style="padding: 12px; background: var(--bg-secondary); border-radius: 10px; margin-bottom: 8px; cursor: pointer;">
+function updateListView(users) {
+    if (!searchListFeed) return;
+    if (users.length === 0) {
+        searchListFeed.innerHTML = '<div class="empty-state">No providers found</div>';
+        return;
+    }
+    searchListFeed.innerHTML = users.map(user => `
+        <div class="card" data-user-id="${user.id}">
+            <div class="card-header">
+                <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="${user.displayName}">
+                <div class="card-info">
+                    <div class="card-name">
+                        ${user.displayName || 'Anonymous'}
+                        ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
+                    </div>
+                    <div class="card-rating">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0})</div>
+                </div>
+            </div>
+            <div class="card-services">${(user.services || []).slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+            <div class="card-distance">📍 ${user.distance ? formatDistance(user.distance) : 'No location'}</div>
+        </div>
+    `).join('');
+    document.querySelectorAll('#search-list-feed .card').forEach(card => {
+        card.addEventListener('click', () => showUserBottomSheet(card.dataset.userId));
+    });
+}
+
+function setupSearch() {
+    if (searchServiceInput) {
+        searchServiceInput.addEventListener('input', (e) => {
+            currentSearchService = e.target.value;
+            performSearch();
+        });
+    }
+    if (radiusSlider && radiusValue) {
+        radiusSlider.addEventListener('input', (e) => {
+            currentRadius = parseInt(e.target.value);
+            radiusValue.textContent = currentRadius;
+            performSearch();
+        });
+    }
+    if (mapViewBtn && listViewBtn && mapContainer && searchListView) {
+        mapViewBtn.addEventListener('click', () => {
+            currentViewMode = 'map';
+            mapViewBtn.classList.add('active');
+            listViewBtn.classList.remove('active');
+            mapContainer.classList.remove('hidden');
+            searchListView.classList.add('hidden');
+            window.haptic('light');
+        });
+        listViewBtn.addEventListener('click', () => {
+            currentViewMode = 'list';
+            listViewBtn.classList.add('active');
+            mapViewBtn.classList.remove('active');
+            mapContainer.classList.add('hidden');
+            searchListView.classList.remove('hidden');
+            window.haptic('light');
+        });
+    }
+}
+
+// ========== CHAT SYSTEM (with Delete Message) ==========
+async function loadChats() {
+    if (!chatsList) return;
+    if (!window.db || !window.auth || !window.auth.currentUser) {
+        chatsList.innerHTML = '<div class="empty-state">Loading...</div>';
+        return;
+    }
+    try {
+        chatsList.innerHTML = '<div class="loading-spinner"></div>';
+        const chatsSnapshot = await window.db.collection('chats')
+            .where('participants', 'array-contains', window.auth.currentUser.uid)
+            .orderBy('lastMessageTime', 'desc')
+            .get();
+        if (chatsSnapshot.empty) {
+            chatsList.innerHTML = '<div class="empty-state">No messages yet</div>';
+            return;
+        }
+        const chats = [];
+        for (const chatDoc of chatsSnapshot.docs) {
+            const chat = { id: chatDoc.id, ...chatDoc.data() };
+            const otherUserId = chat.participants.find(p => p !== window.auth.currentUser.uid);
+            const userDoc = await window.db.collection('users').doc(otherUserId).get();
+            const userData = userDoc.data();
+            chats.push({ ...chat, otherUser: { id: otherUserId, ...userData } });
+        }
+        chatsList.innerHTML = chats.map(chat => `
+            <div class="chat-item" data-chat-id="${chat.id}" data-user-id="${chat.otherUser.id}">
+                <img class="chat-avatar" src="${chat.otherUser.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(chat.otherUser.displayName || 'User')}" alt="">
+                <div class="chat-details">
+                    <div class="chat-name">${chat.otherUser.displayName || 'User'}</div>
+                    <div class="chat-last-message">${chat.lastMessage || 'No messages'}</div>
+                </div>
+                <div class="chat-meta">
+                    <div class="chat-time">${chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</div>
+                    ${chat.pendingReview ? '<div class="pending-badge">Pending review</div>' : ''}
+                </div>
+            </div>
+        `).join('');
+        document.querySelectorAll('.chat-item').forEach(item => {
+            item.addEventListener('click', () => openChat(item.dataset.userId, item.dataset.chatId));
+        });
+    } catch (error) {
+        console.error('loadChats error:', error);
+        chatsList.innerHTML = '<div class="empty-state">Error loading chats</div>';
+    }
+}
+
+async function openChat(userId, chatId = null) {
+    currentChatUser = userId;
+    currentChatId = chatId;
+    let chat = chatId;
+    if (!chat) {
+        try {
+            const existingChat = await window.db.collection('chats')
+                .where('participants', 'array-contains', window.auth.currentUser.uid)
+                .get();
+            let found = null;
+            existingChat.forEach(doc => {
+                if (doc.data().participants.includes(userId)) found = doc.id;
+            });
+            chat = found;
+            if (!chat) {
+                const newChatRef = await window.db.collection('chats').add({
+                    participants: [window.auth.currentUser.uid, userId],
+                    createdAt: new Date().toISOString(),
+                    lastMessageTime: new Date().toISOString(),
+                    lastMessage: ''
+                });
+                chat = newChatRef.id;
+            }
+            currentChatId = chat;
+        } catch (error) {
+            console.error('openChat error:', error);
+            window.showToast('Error opening chat', 'error');
+            return;
+        }
+    }
+    try {
+        const userDoc = await window.db.collection('users').doc(userId).get();
+        const userData = userDoc.data();
+        window.openBottomSheet(`
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3>${userData.displayName || 'User'}</h3>
+                <button id="close-chat" class="icon-btn">✕</button>
+            </div>
+            <div id="chat-messages" style="height: 400px; overflow-y: auto; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;"></div>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="chat-input" placeholder="Type a message..." class="search-input" style="flex: 1;">
+                <button id="send-message" class="btn-primary" style="padding: 12px 20px;">Send</button>
+            </div>
+            <button id="register-gig-chat" class="btn-secondary" style="width: 100%; margin-top: 12px; padding: 12px; background: var(--accent-orange); color: white;">📋 Register Gig with this person</button>
+            <div id="pending-review-toast" style="display: none; margin-top: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;">⚠️ You have a pending review for a gig with this provider</div>
+        `);
+        document.getElementById('close-chat').addEventListener('click', () => window.closeBottomSheet());
+        const messagesDiv = document.getElementById('chat-messages');
+        const input = document.getElementById('chat-input');
+        document.getElementById('send-message').addEventListener('click', () => sendMessage(chat, input.value));
+        input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(chat, input.value); });
+        document.getElementById('register-gig-chat').addEventListener('click', () => registerGig(chat, userId));
+        if (currentMessagesUnsubscribe) currentMessagesUnsubscribe();
+        currentMessagesUnsubscribe = window.db.collection('chats').doc(chat).collection('messages')
+            .orderBy('timestamp', 'asc')
+            .onSnapshot(snapshot => {
+                messagesDiv.innerHTML = '';
+                snapshot.forEach(doc => {
+                    const msg = doc.data();
+                    const isMe = msg.senderId === window.auth.currentUser.uid;
+                    messagesDiv.innerHTML += `
+                        <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
+                            <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
+                                ${msg.text}
+                                ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
+                                <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+                            </div>
+                        </div>
+                    `;
+                });
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                document.querySelectorAll('.message-wrapper').forEach(wrapper => {
+                    let pressTimer;
+                    wrapper.addEventListener('touchstart', () => {
+                        pressTimer = setTimeout(() => {
+                            const messageId = wrapper.dataset.messageId;
+                            if (confirm('Delete this message?')) {
+                                window.db.collection('chats').doc(chat).collection('messages').doc(messageId).delete();
+                                window.haptic('heavy');
+                            }
+                        }, 500);
+                    });
+                    wrapper.addEventListener('touchend', () => clearTimeout(pressTimer));
+                    wrapper.addEventListener('touchmove', () => clearTimeout(pressTimer));
+                });
+            });
+        checkPendingReview(chat, userId);
+    } catch (error) {
+        console.error('openChat error:', error);
+        window.showToast('Error opening chat', 'error');
+    }
+}
+
+async function sendMessage(chatId, text) {
+    if (!text.trim()) return;
+    try {
+        await window.db.collection('chats').doc(chatId).collection('messages').add({
+            senderId: window.auth.currentUser.uid,
+            text: text,
+            timestamp: new Date().toISOString()
+        });
+        await window.db.collection('chats').doc(chatId).update({
+            lastMessage: text,
+            lastMessageTime: new Date().toISOString()
+        });
+        document.getElementById('chat-input').value = '';
+        window.haptic('light');
+    } catch (error) {
+        console.error('sendMessage error:', error);
+        window.showToast('Error sending message', 'error');
+    }
+}
+
+async function checkPendingReview(chatId, userId) {
+    try {
+        const pendingGig = await window.db.collection('gigs')
+            .where('providerId', '==', window.auth.currentUser.uid)
+            .where('clientId', '==', userId)
+            .where('status', '==', 'pending_review')
+            .get();
+        const toast = document.getElementById('pending-review-toast');
+        if (!pendingGig.empty && toast) {
+            toast.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('checkPendingReview error:', error);
+    }
+}
+
+// ========== REGISTER GIG ==========
+async function registerGig(chatId, clientId) {
+    try {
+        const userData = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
+        if ((userData.data().credits || 0) < 1) {
+            window.showToast('You need credits to register a gig. Buy credits first.', 'error');
+            buyCredits();
+            return;
+        }
+        await window.db.collection('gigs').add({
+            providerId: window.auth.currentUser.uid,
+            clientId: clientId,
+            chatId: chatId,
+            status: 'pending_review',
+            createdAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+        });
+        await window.db.collection('chats').doc(chatId).update({ pendingReview: true });
+        window.addNotification('Gig Registered', 'Client has been notified to review you');
+        window.showToast('Gig registered! Client will review within 7 days.');
+        window.haptic('heavy');
+    } catch (error) {
+        console.error('registerGig error:', error);
+        window.showToast('Error registering gig', 'error');
+    }
+}
+
+// ========== REVIEW SYSTEM ==========
+async function submitReview(providerId, clientId, rating, reviewText) {
+    try {
+        const reviewId = `${clientId}_${providerId}`;
+        await window.db.collection('reviews').doc(reviewId).set({
+            providerId: providerId,
+            clientId: clientId,
+            rating: rating,
+            review: reviewText,
+            updatedAt: new Date().toISOString()
+        });
+        const allReviews = await window.db.collection('reviews').where('providerId', '==', providerId).get();
+        let sum = 0, count = 0;
+        allReviews.forEach(doc => {
+            sum += doc.data().rating;
+            count++;
+        });
+        const avgRating = sum / count;
+        await window.db.collection('users').doc(providerId).update({
+            rating: avgRating,
+            gigCount: increment(1),
+            credits: increment(-1),
+            lastGigDate: new Date().toISOString(),
+            monthlyGigCount: increment(1)
+        });
+        const gigs = await window.db.collection('gigs')
+            .where('providerId', '==', providerId)
+            .where('clientId', '==', clientId)
+            .where('status', '==', 'pending_review')
+            .get();
+        gigs.forEach(doc => {
+            doc.ref.update({ status: 'completed', completedAt: new Date().toISOString() });
+        });
+        await window.db.collection('chats').doc(currentChatId).update({ pendingReview: false });
+        window.showToast(`Review submitted! ${rating} stars. Thank you!`);
+        window.haptic('heavy');
+    } catch (error) {
+        console.error('submitReview error:', error);
+        window.showToast('Error submitting review', 'error');
+    }
+}
+
+async function showReviews(providerId) {
+    try {
+        const reviews = await window.db.collection('reviews').where('providerId', '==', providerId).get();
+        if (reviews.empty) {
+            window.showToast('No reviews yet');
+            return;
+        }
+        let reviewsHtml = '<h3 style="margin-bottom: 16px;">Reviews</h3>';
+        reviews.forEach(doc => {
+            const review = doc.data();
+            reviewsHtml += `
+                <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
+                    <div style="font-weight: 600;">★ ${review.rating}</div>
+                    <p style="color: var(--text-secondary);">${review.review}</p>
+                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(review.updatedAt).toLocaleDateString()}</div>
+                </div>
+            `;
+        });
+        window.openBottomSheet(reviewsHtml);
+    } catch (error) {
+        console.error('showReviews error:', error);
+        window.showToast('Error loading reviews', 'error');
+    }
+}
+
+// ========== CREDITS (Paystack) ==========
+function buyCredits() {
+    const packages = [
+        { credits: 5, price: 2500 },
+        { credits: 10, price: 4500 },
+        { credits: 20, price: 8000 }
+    ];
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Buy Credits</h3>
+        ${packages.map(p => `
+            <button class="credit-package" data-credits="${p.credits}" data-price="${p.price}" style="width: 100%; padding: 16px; margin-bottom: 12px; background: var(--bg-secondary); border: 1px solid var(--border-light); border-radius: 16px; text-align: left;">
+                <strong>${p.credits} credits</strong> — ₦${p.price.toLocaleString()}
+            </button>
+        `).join('')}
+        <button id="transaction-history-btn" class="btn-secondary" style="width: 100%; margin-top: 12px;">View Transaction History</button>
+    `);
+    document.querySelectorAll('.credit-package').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const credits = parseInt(btn.dataset.credits);
+            const price = parseInt(btn.dataset.price);
+            window.closeBottomSheet();
+            if (window.PaystackPop) {
+                const handler = window.PaystackPop.setup({
+                    key: PAYSTACK_PUBLIC_KEY,
+                    email: window.auth.currentUser.email,
+                    amount: price * 100,
+                    currency: 'NGN',
+                    callback: async (response) => {
+                        try {
+                            await window.db.collection('users').doc(window.auth.currentUser.uid).update({
+                                credits: increment(credits)
+                            });
+                            await window.db.collection('transactions').add({
+                                userId: window.auth.currentUser.uid,
+                                type: 'credit_purchase',
+                                credits: credits,
+                                amount: price,
+                                reference: response.reference,
+                                createdAt: new Date().toISOString()
+                            });
+                            window.showToast(`Added ${credits} credits!`);
+                            window.haptic('heavy');
+                            loadProfile();
+                        } catch (error) {
+                            console.error('Credit purchase error:', error);
+                            window.showToast('Error processing purchase', 'error');
+                        }
+                    }
+                });
+                handler.openIframe();
+            } else {
+                window.showToast('Paystack not loaded. Please refresh.', 'error');
+            }
+        });
+    });
+    document.getElementById('transaction-history-btn')?.addEventListener('click', showTransactionHistory);
+}
+
+async function showTransactionHistory() {
+    try {
+        const transactions = await window.db.collection('transactions')
+            .where('userId', '==', window.auth.currentUser.uid)
+            .orderBy('createdAt', 'desc')
+            .get();
+        if (transactions.empty) {
+            window.showToast('No transactions yet');
+            return;
+        }
+        let html = '<h3 style="margin-bottom: 16px;">Transaction History</h3>';
+        transactions.forEach(doc => {
+            const t = doc.data();
+            html += `
+                <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
+                    <div><strong>${t.type === 'credit_purchase' ? '💰 Purchased' : '📋 Gig Used'}</strong></div>
+                    <div>${t.credits} credits • ₦${t.amount?.toLocaleString() || '0'}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(t.createdAt).toLocaleDateString()}</div>
+                </div>
+            `;
+        });
+        window.openBottomSheet(html);
+    } catch (error) {
+        console.error('showTransactionHistory error:', error);
+        window.showToast('Error loading transactions', 'error');
+    }
+}
+
+// ========== PROFILE PAGE (Complete) ==========
+async function loadProfile(userId = null) {
+    const targetId = userId || window.auth.currentUser?.uid;
+    if (!targetId || !profileContent) return;
+    if (!window.db) {
+        profileContent.innerHTML = '<div class="empty-state">Loading...</div>';
+        return;
+    }
+    try {
+        profileContent.innerHTML = '<div class="loading-spinner"></div>';
+        const userDoc = await window.db.collection('users').doc(targetId).get();
+        if (!userDoc.exists) {
+            profileContent.innerHTML = '<div class="empty-state">User not found</div>';
+            return;
+        }
+        const user = { id: userDoc.id, ...userDoc.data() };
+        const isOwnProfile = targetId === window.auth.currentUser?.uid;
+        const activeStatus = getActiveStatus(user);
+        profileContent.innerHTML = `
+            <div class="profile-header">
+                <img class="profile-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="" data-user-id="${user.id}">
+                <h2 class="profile-name">${user.displayName || 'Anonymous'}</h2>
+                <p class="profile-bio">${user.bio || 'No bio yet'}</p>
+                ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
+            </div>
+            <div class="profile-stats">
+                <div class="stat" data-stat="gigs">
+                    <div class="stat-number">${user.gigCount || 0}</div>
+                    <div class="stat-label">Gigs</div>
+                </div>
+                <div class="stat" data-stat="rating">
+                    <div class="stat-number">★ ${(user.rating || 0).toFixed(1)}</div>
+                    <div class="stat-label">Rating</div>
+                </div>
+                <div class="stat" data-stat="credits">
+                    <div class="stat-number">${user.credits || 0}</div>
+                    <div class="stat-label">Credits</div>
+                </div>
+            </div>
+            <div class="profile-address">📍 ${user.addressText || 'No address set'}</div>
+            <div class="profile-actions">
+                ${isOwnProfile ? `
+                    <button id="edit-profile-btn" class="btn-secondary">Edit Profile</button>
+                    <button id="register-gig-profile-btn" class="btn-primary">Register Gig</button>
+                    <button id="buy-credits-btn" class="btn-primary">Buy Credits</button>
+                    <button id="settings-btn" class="btn-secondary">Settings</button>
+                ` : `
+                    <button id="contact-now-btn" class="btn-primary">Contact Now</button>
+                `}
+            </div>
+            <div class="services-section">
+                <div class="section-title">Services Offered</div>
+                <div class="card-services" id="profile-services-list">${(user.services || []).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+                ${isOwnProfile ? '<button id="edit-services-btn" class="btn-secondary" style="margin-top: 12px;">Edit Services</button>' : ''}
+            </div>
+            <div class="portfolio-section">
+                <div class="section-title">Portfolio</div>
+                <div class="portfolio-grid" id="portfolio-grid">
+                    ${(user.portfolio || []).map(img => `<img src="${img}" class="portfolio-item">`).join('')}
+                </div>
+                ${isOwnProfile ? '<button id="add-portfolio-btn" class="btn-secondary" style="margin-top: 12px;">+ Add Portfolio Image (Max 15)</button>' : ''}
+            </div>
+        `;
+        if (isOwnProfile) {
+            document.getElementById('edit-profile-btn')?.addEventListener('click', editProfile);
+            document.getElementById('register-gig-profile-btn')?.addEventListener('click', showRecentChatsForGig);
+            document.getElementById('buy-credits-btn')?.addEventListener('click', buyCredits);
+            document.getElementById('settings-btn')?.addEventListener('click', showSettings);
+            document.getElementById('edit-services-btn')?.addEventListener('click', editServices);
+            document.getElementById('add-portfolio-btn')?.addEventListener('click', addPortfolioImage);
+        } else {
+            document.getElementById('contact-now-btn')?.addEventListener('click', () => openChat(user.id));
+        }
+        document.querySelectorAll('.portfolio-item').forEach(img => {
+            img.addEventListener('click', () => window.openBottomSheet(`<img src="${img.src}" style="width: 100%; border-radius: 20px;">`));
+        });
+        document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
+    } catch (error) {
+        console.error('loadProfile error:', error);
+        profileContent.innerHTML = '<div class="empty-state">Error loading profile. Pull to refresh.</div>';
+    }
+}
+
+async function editServices() {
+    let selectedServices = [...(window.currentUserData?.services || [])];
+    const servicesHtml = window.PRESET_SERVICES.map(service => `
+        <div class="service-option" data-service="${service}" style="padding: 12px; background: ${selectedServices.includes(service) ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${selectedServices.includes(service) ? 'white' : 'var(--text-primary)'}; border-radius: 10px; margin-bottom: 8px; cursor: pointer;">
             ${service}
         </div>
     `).join('');
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">What services do you offer?</h3>
-        <p style="margin-bottom: 16px; color: var(--text-secondary);;">Select all that apply</p>
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Edit Your Services</h3>
         <div id="services-list" style="max-height: 400px; overflow-y: auto;">${servicesHtml}</div>
-        <button id="onboard-next-2" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px; margin-top: 16px;">Continue (${selectedServices.length} selected)</button>
+        <button id="save-services" class="btn-primary" style="width: 100%; margin-top: 16px;">Save Changes</button>
     `);
     const serviceOptions = document.querySelectorAll('.service-option');
-    const nextBtn = document.getElementById('onboard-next-2');
     serviceOptions.forEach(opt => {
         opt.addEventListener('click', () => {
             const service = opt.dataset.service;
@@ -265,273 +829,259 @@ function showOnboardingStep2() {
                 opt.style.background = 'var(--accent-orange)';
                 opt.style.color = 'white';
             }
-            nextBtn.textContent = `Continue (${selectedServices.length} selected)`;
         });
     });
-    nextBtn.addEventListener('click', () => {
-        if (selectedServices.length === 0) {
-            showToast('Please select at least one service');
+    document.getElementById('save-services')?.addEventListener('click', async () => {
+        try {
+            await window.db.collection('users').doc(window.auth.currentUser.uid).update({ services: selectedServices });
+            window.closeBottomSheet();
+            window.showToast('Services updated!');
+            loadProfile();
+        } catch (error) {
+            console.error('editServices error:', error);
+            window.showToast('Error updating services', 'error');
+        }
+    });
+}
+
+async function addPortfolioImage() {
+    try {
+        const userDoc = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
+        const currentPortfolio = userDoc.data().portfolio || [];
+        if (currentPortfolio.length >= 15) {
+            window.showToast('Maximum 15 images. Delete some first.', 'error');
             return;
         }
-        onboardingData.services = selectedServices;
-        closeBottomSheet();
-        showOnboardingStep3();
-    });
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'image/*';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                window.showToast('Uploading...');
+                const url = await uploadImage(file, 'portfolio');
+                currentPortfolio.push(url);
+                await window.db.collection('users').doc(window.auth.currentUser.uid).update({ portfolio: currentPortfolio });
+                window.showToast('Portfolio updated!');
+                loadProfile();
+            }
+        };
+        input.click();
+    } catch (error) {
+        console.error('addPortfolioImage error:', error);
+        window.showToast('Error adding image', 'error');
+    }
 }
 
-function showOnboardingStep3() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Where is your workspace?</h3>
-        <p style="margin-bottom: 16px; color: var(--text-secondary);">Drop a pin on the map or describe your location</p>
-        <div id="onboard-map" style="height: 300px; border-radius: 16px; margin-bottom: 16px; background: var(--bg-secondary);"></div>
-        <input type="text" id="onboard-address" placeholder="Describe your address (e.g., beside First Bank, Lagos)" class="search-input" style="margin-bottom: 16px;">
-        <button id="onboard-next-3" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px;">Continue</button>
-    `);
-    setTimeout(() => {
-        if (window.L && document.getElementById('onboard-map')) {
-            const map = L.map('onboard-map').setView([6.5244, 3.3792], 13);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-            }).addTo(map);
-            let marker = null;
-            map.on('click', (e) => {
-                if (marker) marker.remove();
-                marker = L.marker(e.latlng).addTo(map);
-                onboardingData.location = { lat: e.latlng.lat, lng: e.latlng.lng };
-            });
-        }
-    }, 100);
-    document.getElementById('onboard-next-3').addEventListener('click', () => {
-        const address = document.getElementById('onboard-address').value;
-        if (!address && !onboardingData.location) {
-            showToast('Please set a location on map or enter address');
-            return;
-        }
-        onboardingData.addressText = address;
-        closeBottomSheet();
-        showOnboardingStep4();
-    });
-}
-
-function showOnboardingStep4() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">How Credits Work 💰</h3>
-        <p style="margin-bottom: 12px;">✅ 1 credit = 1 gig registration</p>
-        <p style="margin-bottom: 12px;">✅ Credits deducted ONLY after client reviews you</p>
-        <p style="margin-bottom: 12px;">✅ Buy credits: 5 for ₦2500 | 10 for ₦4500 | 20 for ₦8000</p>
-        <p style="margin-bottom: 24px;">✅ Without credits, you can still receive messages, just can't register gigs</p>
-        <button id="onboard-next-4" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px;">Got it! Continue</button>
-    `);
-    document.getElementById('onboard-next-4').addEventListener('click', () => {
-        closeBottomSheet();
-        showOnboardingStep5();
-    });
-}
-
-function showOnboardingStep5() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Almost done!</h3>
-        <p style="margin-bottom: 16px;">Add a profile photo (optional)</p>
-        <div style="text-align: center; margin-bottom: 24px;">
-            <div id="photo-preview" style="width: 100px; height: 100px; border-radius: 50%; background: var(--bg-secondary); margin: 0 auto; display: flex; align-items: center; justify-content: center; font-size: 40px;">📸</div>
-        </div>
-        <input type="file" id="profile-photo" accept="image/*" style="margin-bottom: 16px;">
-        <textarea id="onboard-bio" placeholder="Tell clients about yourself (optional)" class="search-input" style="margin-bottom: 16px; min-height: 80px;"></textarea>
-        <button id="onboard-finish" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px;">Complete Setup</button>
-    `);
-    const fileInput = document.getElementById('profile-photo');
-    const preview = document.getElementById('photo-preview');
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                preview.innerHTML = `<img src="${event.target.result}" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
-                onboardingData.photoFile = file;
+async function editProfile() {
+    try {
+        const userDoc = await window.db.collection('users').doc(window.auth.currentUser.uid).get();
+        const user = userDoc.data();
+        window.openBottomSheet(`
+            <h3 style="margin-bottom: 16px;">Edit Profile</h3>
+            <input type="text" id="edit-name" value="${user.displayName || ''}" placeholder="Name" class="search-input" style="margin-bottom: 12px;">
+            <input type="tel" id="edit-phone" value="${user.phone || ''}" placeholder="Phone" class="search-input" style="margin-bottom: 12px;">
+            <textarea id="edit-bio" placeholder="Bio" class="search-input" style="margin-bottom: 12px;">${user.bio || ''}</textarea>
+            <input type="text" id="edit-address" value="${user.addressText || ''}" placeholder="Address" class="search-input" style="margin-bottom: 12px;">
+            <button id="change-photo-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px;">Change Profile Photo</button>
+            <button id="save-profile" class="btn-primary">Save Changes</button>
+        `);
+        document.getElementById('change-photo-btn')?.addEventListener('click', async () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'image/*';
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    window.showToast('Uploading...');
+                    const url = await uploadImage(file, 'profiles');
+                    await window.db.collection('users').doc(window.auth.currentUser.uid).update({ photoURL: url });
+                    await window.updateProfile(window.auth.currentUser, { photoURL: url });
+                    window.showToast('Photo updated!');
+                    loadProfile();
+                }
             };
-            reader.readAsDataURL(file);
-        }
-    });
-    document.getElementById('onboard-finish').addEventListener('click', async () => {
-        onboardingData.bio = document.getElementById('onboard-bio').value;
-        closeBottomSheet();
-        showToast('Saving your profile...');
-        await saveUserProfile();
-        navigateToPage('home');
-        showToast('Welcome to GigsCourt! 🎉');
-    });
-}
-
-async function saveUserProfile() {
-    if (!window.currentUser) {
-        console.error('No current user');
-        return;
+            input.click();
+        });
+        document.getElementById('save-profile')?.addEventListener('click', async () => {
+            const updates = {
+                displayName: document.getElementById('edit-name').value,
+                phone: document.getElementById('edit-phone').value,
+                bio: document.getElementById('edit-bio').value,
+                addressText: document.getElementById('edit-address').value
+            };
+            await window.db.collection('users').doc(window.auth.currentUser.uid).update(updates);
+            await window.updateProfile(window.auth.currentUser, { displayName: updates.displayName });
+            window.closeBottomSheet();
+            window.showToast('Profile updated!');
+            loadProfile();
+        });
+    } catch (error) {
+        console.error('editProfile error:', error);
+        window.showToast('Error editing profile', 'error');
     }
-    const userRef = doc(db, 'users', window.currentUser.uid);
-    await setDoc(userRef, {
-        displayName: onboardingData.displayName,
-        phone: onboardingData.phone,
-        services: onboardingData.services,
-        location: onboardingData.location || null,
-        addressText: onboardingData.addressText || '',
-        bio: onboardingData.bio || '',
-        credits: 0,
-        gigCount: 0,
-        rating: 0,
-        totalRatingSum: 0,
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString()
-    }, { merge: true });
-    await updateProfile(window.currentUser, { displayName: onboardingData.displayName });
 }
 
-// ========== AUTH UI ==========
-function showAuthScreen() {
-    openBottomSheet(`
-        <h3 style="margin-bottom: 16px;">Welcome to GigsCourt</h3>
-        <input type="email" id="auth-email" placeholder="Email" class="search-input" style="margin-bottom: 12px;">
-        <input type="password" id="auth-password" placeholder="Password" class="search-input" style="margin-bottom: 16px;">
-        <button id="auth-login-btn" class="btn-primary" style="width: 100%; padding: 14px; border-radius: 30px; margin-bottom: 12px;">Login</button>
-        <button id="auth-signup-btn" class="btn-secondary" style="width: 100%; padding: 14px; border-radius: 30px;">Create Account</button>
+async function showRecentChatsForGig() {
+    try {
+        const chatsSnapshot = await window.db.collection('chats')
+            .where('participants', 'array-contains', window.auth.currentUser.uid)
+            .where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
+            .get();
+        const recentUsers = [];
+        for (const chatDoc of chatsSnapshot.docs) {
+            const chat = chatDoc.data();
+            const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
+            const userDoc = await window.db.collection('users').doc(otherId).get();
+            recentUsers.push({ id: otherId, ...userDoc.data(), chatId: chatDoc.id });
+        }
+        if (recentUsers.length === 0) {
+            window.showToast('No recent chats found');
+            return;
+        }
+        window.openBottomSheet(`
+            <h3 style="margin-bottom: 16px;">Select a client you worked with</h3>
+            ${recentUsers.map(u => `
+                <button class="recent-client-btn" data-user-id="${u.id}" data-chat-id="${u.chatId}" style="width: 100%; padding: 16px; margin-bottom: 8px; background: var(--bg-secondary); border: none; border-radius: 12px; text-align: left;">
+                    ${u.displayName || 'User'} - ${u.services ? u.services[0] : ''}
+                </button>
+            `).join('')}
+        `);
+        document.querySelectorAll('.recent-client-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                window.closeBottomSheet();
+                registerGig(btn.dataset.chatId, btn.dataset.userId);
+            });
+        });
+    } catch (error) {
+        console.error('showRecentChatsForGig error:', error);
+        window.showToast('Error loading recent chats', 'error');
+    }
+}
+
+async function showSettings() {
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Settings</h3>
+        <button id="change-password-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px;">Change Password</button>
+        <button id="deactivate-btn" class="btn-secondary" style="width: 100%; margin-bottom: 12px; color: var(--error-red);">Deactivate Account</button>
+        <button id="logout-btn" class="btn-secondary" style="width: 100%;">Logout</button>
     `);
-    document.getElementById('auth-login-btn').addEventListener('click', async () => {
-        const email = document.getElementById('auth-email').value;
-        const password = document.getElementById('auth-password').value;
+    document.getElementById('logout-btn')?.addEventListener('click', async () => {
+        await window.signOut(window.auth);
+        window.closeBottomSheet();
+        window.location.reload();
+    });
+    document.getElementById('deactivate-btn')?.addEventListener('click', async () => {
         try {
-            const userCred = await signInWithEmailAndPassword(auth, email, password);
-            window.currentUser = userCred.user;
-            closeBottomSheet();
-            showToast('Logged in!');
+            await window.db.collection('users').doc(window.auth.currentUser.uid).update({
+                deactivatedAt: new Date().toISOString(),
+                deactivateExpires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+            });
+            window.showToast('Account deactivated. Will be deleted after 14 days.');
+            await window.signOut(window.auth);
+            window.location.reload();
         } catch (error) {
-            showToast(error.message, 'error');
+            console.error('deactivate error:', error);
+            window.showToast('Error deactivating account', 'error');
         }
     });
-    document.getElementById('auth-signup-btn').addEventListener('click', async () => {
-        const email = document.getElementById('auth-email').value;
-        const password = document.getElementById('auth-password').value;
-        try {
-            const userCred = await createUserWithEmailAndPassword(auth, email, password);
-            window.currentUser = userCred.user;
-            closeBottomSheet();
-            showOnboarding();
-        } catch (error) {
-            showToast(error.message, 'error');
-        }
+    document.getElementById('change-password-btn')?.addEventListener('click', async () => {
+        window.showToast('Password reset email sent');
+        await window.sendPasswordResetEmail(window.auth, window.auth.currentUser.email);
     });
 }
 
-// ========== AUTH STATE LISTENER ==========
-function setupAuthListener() {
-    onAuthStateChanged(auth, async (user) => {
-        window.currentUser = user;
-        
-        if (user) {
-            try {
-                const userDoc = await getDoc(doc(db, 'users', user.uid));
-                if (userDoc.exists()) {
-                    window.currentUserData = userDoc.data();
-                    // User is logged in and data is loaded - fire appReady
-                    if (!appReadyFired) {
-                        appReadyFired = true;
-                        window.dispatchEvent(new CustomEvent('appReady'));
-                    }
-                } else {
-                    // New user needs onboarding - fire appReady anyway so UI shows
-                    if (!appReadyFired) {
-                        appReadyFired = true;
-                        window.dispatchEvent(new CustomEvent('appReady'));
-                    }
-                    showOnboarding();
-                }
-            } catch (error) {
-                console.error('Error loading user data:', error);
-                // Still fire appReady so app doesn't hang on blank screen
-                if (!appReadyFired) {
-                    appReadyFired = true;
-                    window.dispatchEvent(new CustomEvent('appReady'));
-                }
-                showToast('Error loading profile. Pull to refresh.', 'error');
-            }
-        } else {
-            // No user logged in - fire appReady so auth screen shows
-            if (!appReadyFired) {
-                appReadyFired = true;
-                window.dispatchEvent(new CustomEvent('appReady'));
-            }
-            showAuthScreen();
-        }
-    });
-}
-
-// ========== PROFILE PICTURE BOTTOM SHEET ==========
-function setupProfilePictureHandler() {
-    document.addEventListener('click', (e) => {
-        const avatar = e.target.closest('.profile-avatar, .card-avatar, .chat-avatar');
-        if (avatar && avatar.src) {
-            haptic('light');
-            openBottomSheet(`
-                <img src="${avatar.src}" style="width: 100%; border-radius: 20px; margin-bottom: 16px;">
-                <button id="close-sheet-btn" class="btn-secondary" style="width: 100%; padding: 12px; border-radius: 30px;">Close</button>
-            `);
-            document.getElementById('close-sheet-btn').addEventListener('click', closeBottomSheet);
-        }
-    });
-}
-
-// ========== HIDE SPLASH AND SHOW MAIN APP ==========
-function showMainApp() {
-    if (splashScreen && mainApp) {
-        splashScreen.style.opacity = '0';
-        setTimeout(() => {
-            splashScreen.style.display = 'none';
-            mainApp.style.display = 'block';
-        }, 500);
-    }
-}
-
-// ========== INITIALIZE CORE ==========
-document.addEventListener('DOMContentLoaded', () => {
+// ========== INITIALIZE FEATURES (only after appReady) ==========
+async function initFeatures() {
+    if (featuresInitialized) return;
+    featuresInitialized = true;
+    
     // Get DOM elements
-    splashScreen = document.getElementById('splash-screen');
-    mainApp = document.getElementById('main-app');
-    bottomNav = document.getElementById('bottom-nav');
-    header = document.getElementById('app-header');
-    pageContainer = document.getElementById('page-container');
-    bottomSheet = document.getElementById('bottom-sheet');
-    sheetOverlay = document.getElementById('sheet-overlay');
-    sheetContent = document.getElementById('sheet-content');
-    toastContainer = document.getElementById('toast-container');
-    notificationsBtn = document.getElementById('notifications-btn');
-    notificationsDropdown = document.getElementById('notifications-dropdown');
-    notificationsList = document.getElementById('notifications-list');
-    clearNotificationsBtn = document.getElementById('clear-notifications');
-    notificationBadge = document.getElementById('notification-badge');
+    homeFeed = document.getElementById('home-feed');
+    searchServiceInput = document.getElementById('search-service-input');
+    radiusSlider = document.getElementById('radius-slider');
+    radiusValue = document.getElementById('radius-value');
+    mapViewBtn = document.getElementById('map-view-btn');
+    listViewBtn = document.getElementById('list-view-btn');
+    mapContainer = document.getElementById('map-container');
+    searchListView = document.getElementById('search-list-view');
+    searchListFeed = document.getElementById('search-list-feed');
+    chatsList = document.getElementById('chats-list');
+    profileContent = document.getElementById('profile-content');
     
-    // Setup all core features that don't depend on auth
-    setupBottomSheet();
-    setupNavigation();
-    setupScrollHandlers();
-    setupNotifications();
-    setupProfilePictureHandler();
+    // Run initial data loads with error handling
+    try {
+        await checkAndCancelExpiredGigs();
+    } catch (e) {
+        console.error('checkAndCancelExpiredGigs failed:', e);
+    }
     
-    // Setup auth listener (this will eventually fire appReady)
-    setupAuthListener();
+    try {
+        if (homeFeed) await loadHomeFeed();
+    } catch (e) {
+        console.error('loadHomeFeed failed:', e);
+        if (homeFeed) homeFeed.innerHTML = '<div class="empty-state">Failed to load feed. Pull to refresh.</div>';
+    }
     
-    // Listen for appReady to show main app
-    window.addEventListener('appReady', () => {
-        showMainApp();
+    try {
+        if (searchServiceInput) setupSearch();
+    } catch (e) {
+        console.error('setupSearch failed:', e);
+    }
+    
+    try {
+        if (mapContainer && window.L) await initMap();
+    } catch (e) {
+        console.error('initMap failed:', e);
+    }
+    
+    try {
+        if (chatsList) await loadChats();
+    } catch (e) {
+        console.error('loadChats failed:', e);
+        if (chatsList) chatsList.innerHTML = '<div class="empty-state">Failed to load chats</div>';
+    }
+    
+    try {
+        if (profileContent) await loadProfile();
+    } catch (e) {
+        console.error('loadProfile failed:', e);
+        if (profileContent) profileContent.innerHTML = '<div class="empty-state">Failed to load profile</div>';
+    }
+    
+    // Set up navigation event listener for tab changes
+    window.addEventListener('navigate', (e) => {
+        if (e.detail.page === 'home' && homeFeed) {
+            loadHomeFeed().catch(err => console.error('Navigate loadHomeFeed error:', err));
+        }
+        if (e.detail.page === 'chats' && chatsList) {
+            loadChats().catch(err => console.error('Navigate loadChats error:', err));
+        }
+        if (e.detail.page === 'profile' && profileContent) {
+            loadProfile().catch(err => console.error('Navigate loadProfile error:', err));
+        }
     });
+}
+
+// ========== WAIT FOR appReady EVENT ==========
+document.addEventListener('DOMContentLoaded', () => {
+    // If app is already ready (rare case), init immediately
+    if (window.db && window.auth && window.currentUser !== undefined) {
+        initFeatures();
+    } else {
+        // Wait for appReady event from core
+        window.addEventListener('appReady', () => {
+            initFeatures();
+        });
+    }
 });
 
-// Expose functions for features file
-window.showToast = showToast;
-window.openBottomSheet = openBottomSheet;
-window.closeBottomSheet = closeBottomSheet;
-window.addNotification = addNotification;
-window.navigateToPage = navigateToPage;
-window.PRESET_SERVICES = PRESET_SERVICES;
-window.haptic = haptic;
-window.db = db;
-window.auth = auth;
-window.updateProfile = updateProfile;
-window.signOut = signOut;
+// Expose functions globally
+window.loadHomeFeed = loadHomeFeed;
+window.loadProfile = loadProfile;
+window.loadChats = loadChats;
+window.performSearch = performSearch;
+window.buyCredits = buyCredits;
+window.submitReview = submitReview;
+window.registerGig = registerGig;
+window.uploadImage = uploadImage;
