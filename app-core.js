@@ -552,6 +552,7 @@ function showAuthScreen() {
             }
         });
     }
+}
 
 function hideAuthScreen() {
     const authScreen = document.getElementById('auth-screen');
