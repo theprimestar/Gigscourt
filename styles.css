@@ -815,3 +815,37 @@ h1, h2, h3, h4 {
     }
 }  /* ← This closes the media query */
 /* END OF FILE */
+
+/* FORCE TEXT VISIBILITY - FIX BLANK SCREEN */
+body, .page, .page-content, .card, .card-name, .card-info, .nav-item, .logo, .header-inner, .bottom-nav {
+    color: var(--text-primary) !important;
+}
+
+body {
+    background-color: var(--bg-primary) !important;
+}
+
+#main-app {
+    display: block !important;
+    opacity: 1 !important;
+    background-color: var(--bg-primary) !important;
+}
+
+.page {
+    display: block !important;
+    opacity: 1 !important;
+}
+
+.page.active {
+    display: block !important;
+    opacity: 1 !important;
+}
+
+.nav-item span, .logo span {
+    color: inherit !important;
+}
+
+.empty-state {
+    color: var(--text-secondary) !important;
+    background: transparent !important;
+}
