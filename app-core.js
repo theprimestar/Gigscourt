@@ -186,27 +186,38 @@ function setupNavigation() {
 
 // ========== SCROLL HANDLER ==========
 function setupScrollHandlers() {
-    const pages = document.querySelectorAll('.page');
-    pages.forEach(page => {
-        page.addEventListener('scroll', () => {
-            const currentScrollY = page.scrollTop;
-            const header = document.getElementById('app-header');
-            if (currentScrollY > lastScrollY && currentScrollY > 50) {
-                if (!isNavHidden) {
-                    bottomNav.classList.add('hidden');
-                    if (header) header.style.transform = 'translateY(-100%)';
-                    isNavHidden = true;
-                }
-            } else if (currentScrollY < lastScrollY) {
-                if (isNavHidden) {
-                    bottomNav.classList.remove('hidden');
-                    if (header) header.style.transform = 'translateY(0)';
-                    isNavHidden = false;
-                }
+    const homePage = document.getElementById('home-page');
+    const header = document.getElementById('app-header');
+    
+    if (!homePage || !header) return;
+    
+    homePage.addEventListener('scroll', () => {
+        const scrollY = homePage.scrollTop;
+        
+        // Handle header shrink/expand
+        if (scrollY > 10) {
+            header.classList.add('shrunk');
+        } else {
+            header.classList.remove('shrunk');
+        }
+        
+        // Handle hide/show on scroll (Instagram style)
+        if (scrollY > lastScrollY && scrollY > 50) {
+            if (!isNavHidden) {
+                bottomNav.classList.add('hidden');
+                header.classList.add('hidden-header');
+                isNavHidden = true;
             }
-            lastScrollY = currentScrollY;
-            saveScrollPosition();
-        });
+        } else if (scrollY < lastScrollY) {
+            if (isNavHidden) {
+                bottomNav.classList.remove('hidden');
+                header.classList.remove('hidden-header');
+                isNavHidden = false;
+            }
+        }
+        
+        lastScrollY = scrollY;
+        saveScrollPosition();
     });
 }
 
