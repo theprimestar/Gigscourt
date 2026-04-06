@@ -930,6 +930,7 @@ async function addPortfolioImage() {
         const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
         const userDoc = await getDoc(userRef);
         const currentPortfolio = userDoc.data().portfolio || [];
+        console.log('Portfolio length:', currentPortfolio.length);
         if (currentPortfolio.length >= 15) {
             window.showToast('Maximum 15 images. Delete some first.', 'error');
             return;
@@ -937,6 +938,7 @@ async function addPortfolioImage() {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
+        console.log('About to call input.click()');
         input.onchange = async (e) => {
             const file = e.target.files[0];
             if (file) {
@@ -949,6 +951,7 @@ async function addPortfolioImage() {
             }
         };
         input.click();
+        console.log('input.click() called');
     } catch (error) {
         console.error('addPortfolioImage error:', error);
         window.showToast('Error adding image', 'error');
