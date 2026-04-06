@@ -96,7 +96,8 @@ async function uploadImage(file, folder = 'profiles') {
         formData.append('folder', `/GigsCourt/${folder}`);
         formData.append('useUniqueFileName', 'true');
         
-        // Add authentication parameters
+        // Add authentication parameters (including publicKey)
+        formData.append('publicKey', authParams.publicKey);
         formData.append('signature', authParams.signature);
         formData.append('token', authParams.token);
         formData.append('expire', authParams.expire);
