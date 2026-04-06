@@ -928,30 +928,33 @@ async function addPortfolioImage() {
     console.log('addPortfolioImage function called');
     try {
         const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-        const userDoc = await getDoc(userRef);
-        const currentPortfolio = userDoc.data().portfolio || [];
-        console.log('Portfolio length:', currentPortfolio.length);
-        if (currentPortfolio.length >= 15) {
-            window.showToast('Maximum 15 images. Delete some first.', 'error');
-            return;
-        }
+        
+        // Create and click input FIRST (synchronously, no await)
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
-        console.log('About to call input.click()');
+        
         input.onchange = async (e) => {
             const file = e.target.files[0];
             if (file) {
                 window.showToast('Uploading...');
                 const url = await uploadImage(file, 'portfolio');
+                
+                // Now do the Firestore operations after upload
+                const userDoc = await getDoc(userRef);
+                const currentPortfolio = userDoc.data().portfolio || [];
+                if (currentPortfolio.length >= 15) {
+                    window.showToast('Maximum 15 images. Delete some first.', 'error');
+                    return;
+                }
                 currentPortfolio.push(url);
                 await updateDoc(userRef, { portfolio: currentPortfolio });
                 window.showToast('Portfolio updated!');
                 loadProfile();
             }
         };
+        
         input.click();
-        console.log('input.click() called');
     } catch (error) {
         console.error('addPortfolioImage error:', error);
         window.showToast('Error adding image', 'error');
