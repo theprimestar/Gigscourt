@@ -1,4 +1,4 @@
-import ImageKit from 'imagekit';
+import ImageKit from '@imagekit/nodejs';
 
 export default async function handler(req, res) {
     // Allow requests from anywhere (for testing)
@@ -23,8 +23,16 @@ export default async function handler(req, res) {
             urlEndpoint: process.env.IMAGEKIT_URL_ENDPOINT,
         });
         
-        const authParams = imagekit.getAuthenticationParameters();
-        res.status(200).json(authParams);
+        // Use helper.getAuthenticationParameters() as per official docs
+        const authParams = imagekit.helper.getAuthenticationParameters();
+        
+        // The helper does NOT return publicKey, so we add it manually
+        res.status(200).json({
+            signature: authParams.signature,
+            token: authParams.token,
+            expire: authParams.expire,
+            publicKey: process.env.IMAGEKIT_PUBLIC_KEY
+        });
     } catch (error) {
         console.error("Auth error:", error);
         res.status(500).json({ error: error.message });
