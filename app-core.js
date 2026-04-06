@@ -73,7 +73,9 @@ function showToast(message, type = 'info') {
 // ========== BOTTOM SHEET ==========
 function openBottomSheet(contentHtml) {
     sheetContent.innerHTML = contentHtml;
+    bottomSheet.classList.remove('hidden');
     bottomSheet.classList.add('open');
+    sheetOverlay.classList.remove('hidden');
     sheetOverlay.classList.add('visible');
     haptic('light');
     document.body.style.overflow = 'hidden';
@@ -81,7 +83,9 @@ function openBottomSheet(contentHtml) {
 
 function closeBottomSheet() {
     bottomSheet.classList.remove('open');
+    bottomSheet.classList.add('hidden');
     sheetOverlay.classList.remove('visible');
+    sheetOverlay.classList.add('hidden');
     document.body.style.overflow = '';
 }
 
