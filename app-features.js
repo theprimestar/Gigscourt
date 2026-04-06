@@ -140,7 +140,22 @@ async function checkAndCancelExpiredGigs() {
             await updateDoc(docSnapshot.ref, { status: 'cancelled' });
             const chatRef = doc(window.db, 'chats', docSnapshot.data().chatId);
             await updateDoc(chatRef, { pendingReview: false });
+            
+            // Notify provider
             window.addNotification('Gig Expired', 'Client did not review within 7 days. No credits deducted.');
+            
+            // Notify client
+            const expiredGig = docSnapshot.data();
+            const clientRef = doc(window.db, 'users', expiredGig.clientId);
+            const clientDoc = await getDoc(clientRef);
+            const providerRef = doc(window.db, 'users', expiredGig.providerId);
+            const providerDoc = await getDoc(providerRef);
+            const providerName = providerDoc.data()?.displayName || 'Provider';
+            
+            window.addNotification(
+                'Gig Expired',
+                `⏰ Your pending review for ${providerName} has expired.`
+            );
         }
     } catch (error) {
         console.error('checkAndCancelExpiredGigs error:', error);
@@ -590,6 +605,23 @@ async function sendMessage(chatId, text) {
             lastMessage: text,
             lastMessageTime: new Date().toISOString()
         });
+        
+        // Get chat data to find other participant
+        const chatDoc = await getDoc(chatRef);
+        const chatData = chatDoc.data();
+        const otherUserId = chatData.participants.find(p => p !== window.auth.currentUser.uid);
+        
+        // Notify the other user
+        const otherUserRef = doc(window.db, 'users', otherUserId);
+        const otherUserDoc = await getDoc(otherUserRef);
+        const senderName = window.currentUserData?.displayName || 'Someone';
+        
+        window.addNotification(
+            'New Message',
+            `💬 New message from ${senderName}`,
+            `/chat/${chatId}`
+        );
+        
         document.getElementById('chat-input').value = '';
         window.haptic('light');
     } catch (error) {
@@ -879,7 +911,21 @@ async function registerGig(chatId, clientId) {
         });
         const chatRef = doc(window.db, 'chats', chatId);
         await updateDoc(chatRef, { pendingReview: true });
+        
+        // Notify provider
         window.addNotification('Gig Registered', 'Client has been notified to review you');
+        
+        // Notify client
+        const clientRef = doc(window.db, 'users', clientId);
+        const clientDoc = await getDoc(clientRef);
+        const clientName = clientDoc.data()?.displayName || 'Client';
+        const providerName = window.currentUserData?.displayName || 'Provider';
+        window.addNotification(
+            'New Gig Registration',
+            `📋 ${providerName} registered a gig with you. Please review within 7 days.`,
+            `/chat/${chatId}`
+        );
+        
         window.showToast('Gig registered! Client will review within 7 days.');
         window.haptic('heavy');
         
@@ -941,6 +987,17 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         
         const chatRef = doc(window.db, 'chats', currentChatId);
         await updateDoc(chatRef, { pendingReview: false });
+        
+        // Notify provider about review
+        const providerRef = doc(window.db, 'users', providerId);
+        const providerDoc = await getDoc(providerRef);
+        const providerName = providerDoc.data()?.displayName || 'Provider';
+        const clientName = window.currentUserData?.displayName || 'Client';
+        window.addNotification(
+            'New Review',
+            `⭐ ${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`
+        );
+        
         window.showToast(`Review submitted! ${rating} stars. Thank you!`);
         window.haptic('heavy');
     } catch (error) {
