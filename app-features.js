@@ -140,7 +140,7 @@ async function checkAndCancelExpiredGigs() {
             await updateDoc(docSnapshot.ref, { status: 'cancelled' });
             const chatRef = doc(window.db, 'chats', docSnapshot.data().chatId);
             await updateDoc(chatRef, { pendingReview: false });
-            window.addNotification('Gig Cancelled', 'Client did not review within 7 days. No credits deducted.');
+            window.addNotification('Gig Expired', 'Client did not review within 7 days. No credits deducted.');
         }
     } catch (error) {
         console.error('checkAndCancelExpiredGigs error:', error);
@@ -514,9 +514,13 @@ async function openChat(userId, chatId = null) {
                 <input type="text" id="chat-input" placeholder="Type a message..." class="search-input" style="flex: 1;">
                 <button id="send-message" class="btn-primary" style="padding: 12px 20px;">Send</button>
             </div>
-            <div id="pending-review-toast" style="display: none; margin-top: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;">⚠️ You have a pending review for a gig with this provider</div>
+            <div id="pending-review-toast-provider" style="display: none; margin-top: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
+            <div id="pending-review-toast-client" style="display: none; margin-top: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
             <button id="register-gig-chat" class="btn-secondary" style="width: 100%; margin-top: 12px; padding: 12px; background: var(--accent-orange); color: white;">📋 Register Gig with this person</button>
-            <button id="submit-review-chat" class="btn-primary" style="width: 100%; margin-top: 12px; padding: 12px; display: none;">⭐ Submit Review</button>
+            <div style="display: flex; gap: 12px; margin-top: 12px;">
+                <button id="submit-review-chat" class="btn-primary" style="flex: 1; padding: 12px; display: none;">⭐ Submit Review</button>
+                <button id="cancel-gig-chat" class="btn-secondary" style="flex: 1; padding: 12px; display: none; border-color: var(--error-red); color: var(--error-red);">❌ Cancel Gig</button>
+            </div>
         `);
         document.getElementById('close-chat').addEventListener('click', () => window.closeBottomSheet());
         const messagesDiv = document.getElementById('chat-messages');
@@ -524,7 +528,8 @@ async function openChat(userId, chatId = null) {
         document.getElementById('send-message').addEventListener('click', () => sendMessage(chat, input.value));
         input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(chat, input.value); });
         document.getElementById('register-gig-chat').addEventListener('click', () => registerGig(chat, userId));
-       document.getElementById('submit-review-chat')?.addEventListener('click', () => showReviewBottomSheet(userId, chat));
+        document.getElementById('submit-review-chat')?.addEventListener('click', () => showReviewBottomSheet(userId, chat));
+        document.getElementById('cancel-gig-chat')?.addEventListener('click', () => cancelGig(chat, userId));
         if (currentMessagesUnsubscribe) currentMessagesUnsubscribe();
         
         const messagesRef = collection(window.db, 'chats', chat, 'messages');
@@ -562,9 +567,9 @@ async function openChat(userId, chatId = null) {
             });
         });
         
-        // Check if current user is the client with a pending gig
-        await checkAndShowReviewButton(chat, userId);
-        checkPendingReview(chat, userId);
+        // Check gig status and update UI accordingly
+        await checkGigStatusAndUpdateUI(chat, userId);
+        
     } catch (error) {
         console.error('openChat error:', error);
         window.showToast('Error opening chat', 'error');
@@ -603,12 +608,235 @@ async function checkPendingReview(chatId, userId) {
             where('status', '==', 'pending_review')
         );
         const pendingGig = await getDocs(q);
-        const toast = document.getElementById('pending-review-toast');
+        const toast = document.getElementById('pending-review-toast-provider');
         if (!pendingGig.empty && toast) {
             toast.style.display = 'block';
         }
     } catch (error) {
         console.error('checkPendingReview error:', error);
+    }
+}
+
+async function checkGigStatusAndUpdateUI(chatId, userId) {
+    try {
+        const currentUser = window.auth.currentUser.uid;
+        
+        // Query for pending gig where current user is provider
+        const providerGigQuery = query(
+            collection(window.db, 'gigs'),
+            where('providerId', '==', currentUser),
+            where('clientId', '==', userId),
+            where('status', '==', 'pending_review')
+        );
+        const providerGig = await getDocs(providerGigQuery);
+        
+        // Query for pending gig where current user is client
+        const clientGigQuery = query(
+            collection(window.db, 'gigs'),
+            where('clientId', '==', currentUser),
+            where('providerId', '==', userId),
+            where('status', '==', 'pending_review')
+        );
+        const clientGig = await getDocs(clientGigQuery);
+        
+        const registerBtn = document.getElementById('register-gig-chat');
+        const reviewBtn = document.getElementById('submit-review-chat');
+        const cancelBtn = document.getElementById('cancel-gig-chat');
+        const providerToast = document.getElementById('pending-review-toast-provider');
+        const clientToast = document.getElementById('pending-review-toast-client');
+        
+        // Get other user's name for toasts
+        const otherUserRef = doc(window.db, 'users', userId);
+        const otherUserDoc = await getDoc(otherUserRef);
+        const otherUserName = otherUserDoc.data()?.displayName || 'User';
+        
+        if (providerGig.size > 0) {
+            // Current user is provider with pending gig
+            if (registerBtn) {
+                registerBtn.disabled = true;
+                registerBtn.style.opacity = '0.5';
+                registerBtn.style.cursor = 'not-allowed';
+            }
+            if (providerToast) {
+                providerToast.textContent = `⏳ Waiting for ${otherUserName} to review this gig`;
+                providerToast.style.display = 'block';
+            }
+            if (reviewBtn) reviewBtn.style.display = 'none';
+            if (cancelBtn) cancelBtn.style.display = 'none';
+        } 
+        else if (clientGig.size > 0) {
+            // Current user is client with pending gig
+            if (registerBtn) {
+                registerBtn.disabled = true;
+                registerBtn.style.opacity = '0.5';
+                registerBtn.style.cursor = 'not-allowed';
+            }
+            if (clientToast) {
+                clientToast.textContent = `⭐ You have a pending review for ${otherUserName}`;
+                clientToast.style.display = 'block';
+            }
+            if (reviewBtn) reviewBtn.style.display = 'block';
+            if (cancelBtn) cancelBtn.style.display = 'block';
+        }
+        else {
+            // No pending gig
+            if (registerBtn) {
+                registerBtn.disabled = false;
+                registerBtn.style.opacity = '1';
+                registerBtn.style.cursor = 'pointer';
+            }
+            if (providerToast) providerToast.style.display = 'none';
+            if (clientToast) clientToast.style.display = 'none';
+            if (reviewBtn) reviewBtn.style.display = 'none';
+            if (cancelBtn) cancelBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('checkGigStatusAndUpdateUI error:', error);
+    }
+}
+
+async function cancelGig(chatId, providerId) {
+    try {
+        // Show confirmation dialog
+        const confirmed = confirm('⚠️ Cancel Gig Request\n\nAre you sure you want to cancel this gig?\n\n• The provider will be notified\n\n[OK] to Cancel  [Cancel] to Go Back');
+        
+        if (!confirmed) return;
+        
+        const currentUser = window.auth.currentUser.uid;
+        
+        // Find the pending gig where current user is client
+        const gigsQuery = query(
+            collection(window.db, 'gigs'),
+            where('clientId', '==', currentUser),
+            where('providerId', '==', providerId),
+            where('status', '==', 'pending_review')
+        );
+        const gigSnapshot = await getDocs(gigsQuery);
+        
+        if (gigSnapshot.empty) {
+            window.showToast('No pending gig found to cancel', 'error');
+            return;
+        }
+        
+        // Update gig status to cancelled_by_client
+        const gigDoc = gigSnapshot.docs[0];
+        await updateDoc(gigDoc.ref, { 
+            status: 'cancelled_by_client',
+            cancelledAt: new Date().toISOString()
+        });
+        
+        // Update chat to remove pending review flag
+        const chatRef = doc(window.db, 'chats', chatId);
+        await updateDoc(chatRef, { pendingReview: false });
+        
+        // Notify provider
+        const providerRef = doc(window.db, 'users', providerId);
+        const providerDoc = await getDoc(providerRef);
+        const providerName = providerDoc.data()?.displayName || 'Provider';
+        
+        window.addNotification(
+            'Gig Cancelled',
+            `${providerName} has cancelled the gig request. No credits were deducted.`
+        );
+        
+        window.showToast('✅ Gig cancelled successfully', 'success');
+        
+        // Close and reopen chat to refresh UI
+        window.closeBottomSheet();
+        setTimeout(() => {
+            openChat(providerId, chatId);
+        }, 500);
+        
+    } catch (error) {
+        console.error('cancelGig error:', error);
+        window.showToast('Error cancelling gig', 'error');
+    }
+}
+
+async function checkAndShowReviewButton(chatId, userId) {
+    try {
+        const gigsRef = collection(window.db, 'gigs');
+        const q = query(
+            gigsRef,
+            where('clientId', '==', window.auth.currentUser.uid),
+            where('providerId', '==', userId),
+            where('status', '==', 'pending_review')
+        );
+        const pendingGig = await getDocs(q);
+        
+        const registerBtn = document.getElementById('register-gig-chat');
+        const reviewBtn = document.getElementById('submit-review-chat');
+        
+        if (!pendingGig.empty) {
+            if (registerBtn) registerBtn.style.display = 'none';
+            if (reviewBtn) reviewBtn.style.display = 'block';
+        } else {
+            if (registerBtn) registerBtn.style.display = 'block';
+            if (reviewBtn) reviewBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('checkAndShowReviewButton error:', error);
+    }
+}
+
+async function showReviewBottomSheet(providerId, chatId) {
+    try {
+        const providerRef = doc(window.db, 'users', providerId);
+        const providerDoc = await getDoc(providerRef);
+        const provider = providerDoc.data();
+        
+        let selectedRating = 0;
+        
+        const starsHtml = [1, 2, 3, 4, 5].map(star => `
+            <span class="review-star" data-rating="${star}" style="font-size: 40px; cursor: pointer; color: #ccc; transition: all 0.15s ease;">★</span>
+        `).join('');
+        
+        window.openBottomSheet(`
+            <h3 style="margin-bottom: 8px; text-align: center;">Review ${provider.displayName || 'Provider'}</h3>
+            <p style="margin-bottom: 16px; text-align: center; color: var(--text-secondary);">How was your experience?</p>
+            <div id="rating-stars" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 20px;">
+                ${starsHtml}
+            </div>
+            <textarea id="review-comment" placeholder="Share your experience (optional)" class="search-input" style="margin-bottom: 16px; min-height: 100px;"></textarea>
+            <button id="submit-review-btn" class="btn-primary" style="width: 100%; padding: 14px;">Submit Review</button>
+        `);
+        
+        // Star rating handler
+        document.querySelectorAll('.review-star').forEach(star => {
+            star.addEventListener('click', () => {
+                selectedRating = parseInt(star.dataset.rating);
+                document.querySelectorAll('.review-star').forEach((s, index) => {
+                    if (index < selectedRating) {
+                        s.style.color = '#ffc107';
+                    } else {
+                        s.style.color = '#ccc';
+                    }
+                });
+            });
+        });
+        
+        // Submit review handler
+        const submitBtn = document.getElementById('submit-review-btn');
+        if (submitBtn) {
+            const newSubmitBtn = submitBtn.cloneNode(true);
+            submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
+            
+            newSubmitBtn.addEventListener('click', async () => {
+                if (selectedRating === 0) {
+                    window.showToast('Please select a rating', 'error');
+                    return;
+                }
+                const comment = document.getElementById('review-comment')?.value || '';
+                window.closeBottomSheet();
+                await submitReview(providerId, window.auth.currentUser.uid, selectedRating, comment);
+                // Refresh chat view
+                window.closeBottomSheet();
+                openChat(providerId, chatId);
+            });
+        }
+    } catch (error) {
+        console.error('showReviewBottomSheet error:', error);
+        window.showToast('Error loading review screen', 'error');
     }
 }
 
@@ -704,6 +932,24 @@ async function showReviewBottomSheet(providerId, chatId) {
 // ========== REGISTER GIG ==========
 async function registerGig(chatId, clientId) {
     try {
+        // Check if there's already a pending gig between these users
+        const existingGigQuery = query(
+            collection(window.db, 'gigs'),
+            where('providerId', '==', window.auth.currentUser.uid),
+            where('clientId', '==', clientId),
+            where('status', '==', 'pending_review')
+        );
+        const existingGig = await getDocs(existingGigQuery);
+        
+        if (!existingGig.empty) {
+            // Get client name for toast
+            const clientRef = doc(window.db, 'users', clientId);
+            const clientDoc = await getDoc(clientRef);
+            const clientName = clientDoc.data()?.displayName || 'Client';
+            window.showToast(`⚠️ You already have a pending gig with ${clientName}. Wait for review.`, 'error');
+            return;
+        }
+        
         const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
         const userDoc = await getDoc(userRef);
         if ((userDoc.data().credits || 0) < 1) {
@@ -725,6 +971,13 @@ async function registerGig(chatId, clientId) {
         window.addNotification('Gig Registered', 'Client has been notified to review you');
         window.showToast('Gig registered! Client will review within 7 days.');
         window.haptic('heavy');
+        
+        // Close and reopen chat to refresh UI
+        window.closeBottomSheet();
+        setTimeout(() => {
+            openChat(clientId, chatId);
+        }, 500);
+        
     } catch (error) {
         console.error('registerGig error:', error);
         window.showToast('Error registering gig', 'error');
