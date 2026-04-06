@@ -925,6 +925,7 @@ async function editServices() {
 }
 
 async function addPortfolioImage() {
+    console.log('addPortfolioImage function called');
     try {
         const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
         const userDoc = await getDoc(userRef);
