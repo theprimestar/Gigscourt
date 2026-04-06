@@ -514,8 +514,9 @@ async function openChat(userId, chatId = null) {
                 <input type="text" id="chat-input" placeholder="Type a message..." class="search-input" style="flex: 1;">
                 <button id="send-message" class="btn-primary" style="padding: 12px 20px;">Send</button>
             </div>
-            <button id="register-gig-chat" class="btn-secondary" style="width: 100%; margin-top: 12px; padding: 12px; background: var(--accent-orange); color: white;">📋 Register Gig with this person</button>
             <div id="pending-review-toast" style="display: none; margin-top: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;">⚠️ You have a pending review for a gig with this provider</div>
+            <button id="register-gig-chat" class="btn-secondary" style="width: 100%; margin-top: 12px; padding: 12px; background: var(--accent-orange); color: white;">📋 Register Gig with this person</button>
+            <button id="submit-review-chat" class="btn-primary" style="width: 100%; margin-top: 12px; padding: 12px; display: none;">⭐ Submit Review</button>
         `);
         document.getElementById('close-chat').addEventListener('click', () => window.closeBottomSheet());
         const messagesDiv = document.getElementById('chat-messages');
@@ -523,6 +524,7 @@ async function openChat(userId, chatId = null) {
         document.getElementById('send-message').addEventListener('click', () => sendMessage(chat, input.value));
         input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(chat, input.value); });
         document.getElementById('register-gig-chat').addEventListener('click', () => registerGig(chat, userId));
+       document.getElementById('submit-review-chat')?.addEventListener('click', () => showReviewBottomSheet(userId, chat));
         if (currentMessagesUnsubscribe) currentMessagesUnsubscribe();
         
         const messagesRef = collection(window.db, 'chats', chat, 'messages');
@@ -559,6 +561,9 @@ async function openChat(userId, chatId = null) {
                 wrapper.addEventListener('touchmove', () => clearTimeout(pressTimer));
             });
         });
+        
+        // Check if current user is the client with a pending gig
+        await checkAndShowReviewButton(chat, userId);
         checkPendingReview(chat, userId);
     } catch (error) {
         console.error('openChat error:', error);
@@ -604,6 +609,95 @@ async function checkPendingReview(chatId, userId) {
         }
     } catch (error) {
         console.error('checkPendingReview error:', error);
+    }
+}
+
+async function checkAndShowReviewButton(chatId, userId) {
+    try {
+        const gigsRef = collection(window.db, 'gigs');
+        const q = query(
+            gigsRef,
+            where('clientId', '==', window.auth.currentUser.uid),
+            where('providerId', '==', userId),
+            where('status', '==', 'pending_review')
+        );
+        const pendingGig = await getDocs(q);
+        
+        const registerBtn = document.getElementById('register-gig-chat');
+        const reviewBtn = document.getElementById('submit-review-chat');
+        
+        if (!pendingGig.empty) {
+            // User is a client with pending review
+            if (registerBtn) registerBtn.style.display = 'none';
+            if (reviewBtn) reviewBtn.style.display = 'block';
+        } else {
+            // No pending gig as client
+            if (registerBtn) registerBtn.style.display = 'block';
+            if (reviewBtn) reviewBtn.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('checkAndShowReviewButton error:', error);
+    }
+}
+
+async function showReviewBottomSheet(providerId, chatId) {
+    try {
+        const providerRef = doc(window.db, 'users', providerId);
+        const providerDoc = await getDoc(providerRef);
+        const provider = providerDoc.data();
+        
+        let selectedRating = 0;
+        
+        const starsHtml = [1, 2, 3, 4, 5].map(star => `
+            <span class="review-star" data-rating="${star}" style="font-size: 40px; cursor: pointer; color: #ccc; transition: all 0.15s ease;">★</span>
+        `).join('');
+        
+        window.openBottomSheet(`
+            <h3 style="margin-bottom: 8px; text-align: center;">Review ${provider.displayName || 'Provider'}</h3>
+            <p style="margin-bottom: 16px; text-align: center; color: var(--text-secondary);">How was your experience?</p>
+            <div id="rating-stars" style="display: flex; justify-content: center; gap: 8px; margin-bottom: 20px;">
+                ${starsHtml}
+            </div>
+            <textarea id="review-comment" placeholder="Share your experience (optional)" class="search-input" style="margin-bottom: 16px; min-height: 100px;"></textarea>
+            <button id="submit-review-btn" class="btn-primary" style="width: 100%; padding: 14px;">Submit Review</button>
+        `);
+        
+        // Star rating handler
+        document.querySelectorAll('.review-star').forEach(star => {
+            star.addEventListener('click', () => {
+                selectedRating = parseInt(star.dataset.rating);
+                document.querySelectorAll('.review-star').forEach((s, index) => {
+                    if (index < selectedRating) {
+                        s.style.color = '#ffc107';
+                    } else {
+                        s.style.color = '#ccc';
+                    }
+                });
+            });
+        });
+        
+        // Submit review handler
+        const submitBtn = document.getElementById('submit-review-btn');
+        if (submitBtn) {
+            const newSubmitBtn = submitBtn.cloneNode(true);
+            submitBtn.parentNode.replaceChild(newSubmitBtn, submitBtn);
+            
+            newSubmitBtn.addEventListener('click', async () => {
+                if (selectedRating === 0) {
+                    window.showToast('Please select a rating', 'error');
+                    return;
+                }
+                const comment = document.getElementById('review-comment')?.value || '';
+                window.closeBottomSheet();
+                await submitReview(providerId, window.auth.currentUser.uid, selectedRating, comment);
+                // Refresh chat view
+                window.closeBottomSheet();
+                openChat(providerId, chatId);
+            });
+        }
+    } catch (error) {
+        console.error('showReviewBottomSheet error:', error);
+        window.showToast('Error loading review screen', 'error');
     }
 }
 
