@@ -70,29 +70,54 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     return R * c;
 }
 
-// ========== IMAGE UPLOAD (ImageKit) ==========
+// ========== IMAGE UPLOAD (ImageKit with Authentication) ==========
+async function getImageKitAuthParams() {
+    try {
+        const response = await fetch('/api/imagekit-auth');
+        if (!response.ok) {
+            throw new Error('Failed to get authentication parameters');
+        }
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Auth error:', error);
+        throw error;
+    }
+}
+
 async function uploadImage(file, folder = 'profiles') {
-    return new Promise((resolve, reject) => {
+    try {
+        // Get authentication parameters from your backend
+        const authParams = await getImageKitAuthParams();
+        
         const formData = new FormData();
         formData.append('file', file);
         formData.append('fileName', `${Date.now()}_${file.name}`);
         formData.append('folder', `/GigsCourt/${folder}`);
         formData.append('useUniqueFileName', 'true');
         
-        fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
+        // Add authentication parameters
+        formData.append('signature', authParams.signature);
+        formData.append('token', authParams.token);
+        formData.append('expire', authParams.expire);
+        
+        const response = await fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Basic ${btoa(IMAGEKIT_PUBLIC_KEY + ':')}`
-            },
             body: formData
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.url) resolve(data.url);
-            else reject(data);
-        })
-        .catch(reject);
-    });
+        });
+        
+        const data = await response.json();
+        
+        if (data.url) {
+            return data.url;
+        } else {
+            console.error('Upload error:', data);
+            throw new Error(data.message || 'Upload failed');
+        }
+    } catch (error) {
+        console.error('uploadImage error:', error);
+        throw error;
+    }
 }
 
 // ========== 7-DAY AUTO-CANCEL ==========
