@@ -1656,3 +1656,7 @@ body {
     transform: scale(0.98);
     background: rgba(230, 126, 34, 0.1);
 }
+
+.bottom-sheet.open {
+    transform: translateY(0) !important;
+}
