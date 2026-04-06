@@ -1287,3 +1287,4 @@ window.submitReview = submitReview;
 window.registerGig = registerGig;
 window.uploadImage = uploadImage;
 window.showSettings = showSettings;
+window.addPortfolioImage = addPortfolioImage;
