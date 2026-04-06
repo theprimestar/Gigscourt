@@ -4,7 +4,7 @@
   "description": "GigsCourt - Connect with local gig workers",
   "main": "index.html",
   "dependencies": {
-    "imagekit": "^4.0.0"
+    "@imagekit/nodejs": "^7.1.1"
   },
   "scripts": {
     "start": "vercel dev"
