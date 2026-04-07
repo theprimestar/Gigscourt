@@ -19,6 +19,13 @@ import {
     deleteDoc 
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+// Supabase configuration - YOU MUST REPLACE THESE WITH YOUR ACTUAL VALUES
+const SUPABASE_URL = 'https://qifzdrkpxzosdturjpex.supabase.co';  // ← REPLACE THIS
+const SUPABASE_ANON_KEY = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';  // ← REPLACE THIS
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 // ========== DOM ELEMENTS ==========
 let homeFeed, searchServiceInput, radiusSlider, radiusValue, mapViewBtn, listViewBtn, mapContainer, searchListView, searchListFeed, chatsList, profileContent;
 
@@ -34,6 +41,11 @@ let currentRadius = 5;
 let currentSearchService = '';
 let currentViewMode = 'map';
 let featuresInitialized = false;
+// Supabase home feed pagination
+let homeFeedOffset = 0;
+let isHomeFeedLoading = false;
+let hasMoreHomeFeed = true;
+const HOME_FEED_LIMIT = 20;
 
 // ========== IMAGEKIT CONFIG ==========
 const IMAGEKIT_URL = 'https://ik.imagekit.io/Theprimestar';
@@ -68,6 +80,26 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
+}
+
+// Helper: Fetch provider profiles from Firestore by user IDs
+async function fetchProviderProfilesFromFirestore(userIds) {
+    if (!userIds || userIds.length === 0) return {};
+    
+    try {
+        const usersRef = collection(window.db, 'users');
+        const q = query(usersRef, where('__name__', 'in', userIds));
+        const snapshot = await getDocs(q);
+        
+        const profiles = {};
+        snapshot.forEach(doc => {
+            profiles[doc.id] = doc.data();
+        });
+        return profiles;
+    } catch (error) {
+        console.error('fetchProviderProfilesFromFirestore error:', error);
+        return {};
+    }
 }
 
 // ========== IMAGE UPLOAD (ImageKit with Authentication) ==========
@@ -162,56 +194,104 @@ async function checkAndCancelExpiredGigs() {
     }
 }
 
-// ========== HOME PAGE ==========
-async function loadHomeFeed() {
+// ========== HOME PAGE (Supabase - Infinite Scroll) ==========
+async function loadHomeFeed(reset = false) {
     if (!homeFeed) return;
-    if (!window.db || !window.auth || !window.auth.currentUser) {
-        homeFeed.innerHTML = '<div class="empty-state">Loading...</div>';
+    if (!window.auth?.currentUser) {
+        homeFeed.innerHTML = '<div class="empty-state">Please log in to see providers</div>';
         return;
     }
     
-    try {
+    // Reset if requested
+    if (reset) {
         homeFeed.innerHTML = '<div class="loading-spinner"></div>';
-        const usersRef = collection(window.db, 'users');
-        const usersSnapshot = await getDocs(usersRef);
-        let users = [];
-        usersSnapshot.forEach(doc => {
-            const userData = doc.data();
-            if (doc.id !== window.auth.currentUser?.uid && userData.services && userData.services.length > 0) {
-                users.push({ id: doc.id, ...userData });
-            }
-        });
+        homeFeedOffset = 0;
+        hasMoreHomeFeed = true;
+        while (homeFeed.firstChild) {
+            homeFeed.removeChild(homeFeed.firstChild);
+        }
+    }
+    
+    // Stop if already loading or no more data
+    if (isHomeFeedLoading || !hasMoreHomeFeed) return;
+    
+    isHomeFeedLoading = true;
+    
+    try {
+        // Get user location
+        let currentLat = 6.5244;
+        let currentLng = 3.3792;
         
         if (currentUserLocation) {
-            users.forEach(user => {
-                if (user.location) {
-                    user.distance = calculateDistance(currentUserLocation.lat, currentUserLocation.lng, user.location.lat, user.location.lng);
-                } else {
-                    user.distance = Infinity;
-                }
-            });
-            users.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
+            currentLat = currentUserLocation.lat;
+            currentLng = currentUserLocation.lng;
         }
         
-        users.sort((a, b) => {
-            const aActive = getActiveStatus(a).active ? 1 : 0;
-            const bActive = getActiveStatus(b).active ? 1 : 0;
-            if (aActive !== bActive) return bActive - aActive;
-            return (b.rating || 0) - (a.rating || 0);
-        });
+        // Query Supabase with offset pagination
+        const { data: providers, error } = await supabase
+            .from('provider_locations')
+            .select('user_id, lat, lng, rating, last_gig_date, monthly_gig_count')
+            .order('rating', { ascending: false })
+            .range(homeFeedOffset, homeFeedOffset + HOME_FEED_LIMIT - 1);
         
-        if (users.length === 0) {
-            homeFeed.innerHTML = '<div class="empty-state">No providers found nearby</div>';
+        if (error) throw error;
+        
+        // Check if no more providers
+        if (!providers || providers.length === 0) {
+            hasMoreHomeFeed = false;
+            if (homeFeed.children.length === 0) {
+                homeFeed.innerHTML = '<div class="empty-state">No providers found nearby</div>';
+            }
+            isHomeFeedLoading = false;
             return;
         }
         
-        homeFeed.innerHTML = users.map(user => `
+        // Update offset for next load
+        homeFeedOffset += providers.length;
+        
+        // If fewer than limit, no more data
+        if (providers.length < HOME_FEED_LIMIT) {
+            hasMoreHomeFeed = false;
+        }
+        
+        // Fetch full profiles from Firestore
+        const userIds = providers.map(p => p.user_id);
+        const profiles = await fetchProviderProfilesFromFirestore(userIds);
+        
+        // Merge data
+        const mergedProviders = providers.map(provider => {
+            const profile = profiles[provider.user_id] || {};
+            return {
+                id: provider.user_id,
+                displayName: profile.displayName || 'Anonymous',
+                photoURL: profile.photoURL || null,
+                rating: profile.rating || provider.rating || 0,
+                gigCount: profile.gigCount || 0,
+                services: profile.services || [],
+                distance: calculateDistance(currentLat, currentLng, provider.lat, provider.lng),
+                last_gig_date: provider.last_gig_date,
+                monthly_gig_count: provider.monthly_gig_count
+            };
+        });
+        
+        // Sort by distance (closest first)
+        mergedProviders.sort((a, b) => a.distance - b.distance);
+        
+        // Sort active providers first
+        mergedProviders.sort((a, b) => {
+            const aActive = getActiveStatus(a).active ? 1 : 0;
+            const bActive = getActiveStatus(b).active ? 1 : 0;
+            return bActive - aActive;
+        });
+        
+        // Create HTML for new cards
+        const cardsHtml = mergedProviders.map(user => `
             <div class="card" data-user-id="${user.id}">
                 <div class="card-header">
-                    <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="${user.displayName}">
+                    <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}">
                     <div class="card-info">
                         <div class="card-name">
-                            ${user.displayName || 'Anonymous'}
+                            ${user.displayName}
                             ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
                         </div>
                         <div class="card-rating">
@@ -222,20 +302,49 @@ async function loadHomeFeed() {
                 <div class="card-services">
                     ${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}
                 </div>
-                <div class="card-distance">📍 ${user.distance ? formatDistance(user.distance) : 'Location not set'}</div>
+                <div class="card-distance">📍 ${formatDistance(user.distance)}</div>
             </div>
         `).join('');
         
-        document.querySelectorAll('#home-feed .card').forEach(card => {
+        // Append to feed
+        homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
+        
+        // Attach click listeners to new cards
+        document.querySelectorAll('#home-feed .card:not([data-listener])').forEach(card => {
+            card.setAttribute('data-listener', 'true');
             card.addEventListener('click', () => {
                 window.haptic('light');
                 showUserBottomSheet(card.dataset.userId);
             });
         });
+        
     } catch (error) {
         console.error('loadHomeFeed error:', error);
-        homeFeed.innerHTML = '<div class="empty-state">Error loading feed. Pull to refresh.</div>';
+        if (homeFeed.children.length === 0) {
+            homeFeed.innerHTML = '<div class="empty-state">Error loading feed. Pull to refresh.</div>';
+        }
+    } finally {
+        isHomeFeedLoading = false;
     }
+}
+
+// ========== INFINITE SCROLL ==========
+function setupInfiniteScroll() {
+    const homePage = document.getElementById('home-page');
+    if (!homePage) return;
+    
+    homePage.addEventListener('scroll', () => {
+        const scrollTop = homePage.scrollTop;
+        const scrollHeight = homePage.scrollHeight;
+        const clientHeight = homePage.clientHeight;
+        
+        // Load more when 200px from bottom
+        if (scrollTop + clientHeight >= scrollHeight - 200) {
+            if (!isHomeFeedLoading && hasMoreHomeFeed) {
+                loadHomeFeed(false);
+            }
+        }
+    });
 }
 
 // ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
@@ -1531,9 +1640,10 @@ async function initFeatures() {
     
     try {
         if (homeFeed) {
-            await loadHomeFeed();
-            console.log('loadHomeFeed completed');
-        }
+    await loadHomeFeed(true);  // true = reset/clear existing feed
+    setupInfiniteScroll();      // add infinite scroll listener
+    console.log('loadHomeFeed completed');
+}
     } catch (e) {
         console.error('loadHomeFeed failed:', e);
         if (homeFeed) homeFeed.innerHTML = '<div class="empty-state">Failed to load feed. Pull to refresh.</div>';
