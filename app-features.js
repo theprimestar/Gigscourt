@@ -178,46 +178,6 @@ async function uploadImage(file, folder = 'profiles') {
     }
 }
 
-// ========== 7-DAY AUTO-CANCEL ==========
-async function checkAndCancelExpiredGigs() {
-    try {
-        if (!window.db) {
-            console.warn('checkAndCancelExpiredGigs: db not ready');
-            return;
-        }
-        const gigsRef = collection(window.db, 'gigs');
-        const q = query(
-            gigsRef, 
-            where('status', '==', 'pending_review'),
-            where('expiresAt', '<', new Date().toISOString())
-        );
-        const expiredGigs = await getDocs(q);
-        
-        for (const docSnapshot of expiredGigs.docs) {
-            await updateDoc(docSnapshot.ref, { status: 'cancelled' });
-            const chatRef = doc(window.db, 'chats', docSnapshot.data().chatId);
-            await updateDoc(chatRef, { pendingReview: false });
-            
-            // Notify provider
-            window.addNotification('Gig Expired', 'Client did not review within 7 days. No credits deducted.');
-            
-            // Notify client
-            const expiredGig = docSnapshot.data();
-            const clientRef = doc(window.db, 'users', expiredGig.clientId);
-            const clientDoc = await getDoc(clientRef);
-            const providerRef = doc(window.db, 'users', expiredGig.providerId);
-            const providerDoc = await getDoc(providerRef);
-            const providerName = providerDoc.data()?.displayName || 'Provider';
-            
-            window.addNotification(
-                'Gig Expired',
-                `⏰ Your pending review for ${providerName} has expired.`
-            );
-        }
-    } catch (error) {
-        console.error('checkAndCancelExpiredGigs error:', error);
-    }
-}
 
 // ========== HOME PAGE (Supabase - Infinite Scroll) ==========
 async function loadHomeFeed(reset = false) {
@@ -1861,12 +1821,6 @@ async function initFeatures() {
     });
     
     // Run initial data loads with error handling
-    try {
-        await checkAndCancelExpiredGigs();
-        console.log('checkAndCancelExpiredGigs completed');
-    } catch (e) {
-        console.error('checkAndCancelExpiredGigs failed:', e);
-    }
     
     try {
         if (homeFeed) {
