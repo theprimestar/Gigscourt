@@ -56,6 +56,7 @@ let homeFeedOffset = 0;
 let isHomeFeedLoading = false;
 let hasMoreHomeFeed = true;
 const HOME_FEED_LIMIT = 20;
+let chatListUnsubscribe = null;
 // Supabase search pagination
 let searchOffset = 0;
 let isSearchLoading = false;
@@ -357,6 +358,37 @@ function setupInfiniteScroll() {
             }
         }
     });
+}
+
+// ========== UPDATE MESSAGES TAB BADGE ==========
+function updateMessagesTabBadge(count) {
+    const messagesTab = document.querySelector('.nav-item[data-page="chats"]');
+    if (!messagesTab) return;
+    
+    // Remove existing badge if any
+    const existingBadge = messagesTab.querySelector('.tab-badge');
+    if (existingBadge) existingBadge.remove();
+    
+    if (count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'tab-badge';
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.cssText = `
+            position: absolute;
+            top: -5px;
+            right: -10px;
+            background: var(--accent-orange);
+            color: white;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 20px;
+            min-width: 18px;
+            text-align: center;
+        `;
+        messagesTab.style.position = 'relative';
+        messagesTab.appendChild(badge);
+    }
 }
 
 // ========== INFINITE SCROLL FOR SEARCH ==========
@@ -731,41 +763,77 @@ function setupSearch() {
     }
 }
 
-// ========== CHAT SYSTEM (with Delete Message) ==========
+// ========== CHAT LIST (REAL-TIME WITH UNREAD COUNTS) ==========
+let chatListUnsubscribe = null;
+
 async function loadChats() {
     if (!chatsList) return;
     if (!window.db || !window.auth || !window.auth.currentUser) {
         chatsList.innerHTML = '<div class="empty-state">Loading...</div>';
         return;
     }
-    try {
-        chatsList.innerHTML = '<div class="loading-spinner"></div>';
-        const chatsRef = collection(window.db, 'chats');
-        const q = query(
-            chatsRef, 
-            where('participants', 'array-contains', window.auth.currentUser.uid),
-            orderBy('lastMessageTime', 'desc')
-        );
-        const chatsSnapshot = await getDocs(q);
-        
-        if (chatsSnapshot.empty) {
+    
+    // Show loading state
+    chatsList.innerHTML = '<div class="loading-spinner"></div>';
+    
+    // Clean up previous listener if exists
+    if (chatListUnsubscribe) {
+        chatListUnsubscribe();
+        chatListUnsubscribe = null;
+    }
+    
+    // Build query
+    const chatsRef = collection(window.db, 'chats');
+    const q = query(
+        chatsRef, 
+        where('participants', 'array-contains', window.auth.currentUser.uid),
+        orderBy('lastMessageTime', 'desc')
+    );
+    
+    // Set up real-time listener
+    chatListUnsubscribe = onSnapshot(q, async (snapshot) => {
+        if (snapshot.empty) {
             chatsList.innerHTML = '<div class="empty-state">No messages yet</div>';
+            updateMessagesTabBadge(0);
             return;
         }
+        
+        // Collect all chat data
         const chats = [];
-        for (const chatDoc of chatsSnapshot.docs) {
+        let totalUnread = 0;
+        
+        for (const chatDoc of snapshot.docs) {
             const chat = { id: chatDoc.id, ...chatDoc.data() };
             const otherUserId = chat.participants.find(p => p !== window.auth.currentUser.uid);
+            
+            // Get unread count for current user
+            const unreadCount = chat.unreadCount?.[window.auth.currentUser.uid] || 0;
+            totalUnread += unreadCount;
+            
+            // Fetch other user's profile from Firestore
             const userRef = doc(window.db, 'users', otherUserId);
             const userDoc = await getDoc(userRef);
             const userData = userDoc.data();
-            chats.push({ ...chat, otherUser: { id: otherUserId, ...userData } });
+            
+            chats.push({ 
+                ...chat, 
+                otherUser: { id: otherUserId, ...userData },
+                unreadCount: unreadCount
+            });
         }
+        
+        // Update badge on Messages tab
+        updateMessagesTabBadge(totalUnread);
+        
+        // Render chat list
         chatsList.innerHTML = chats.map(chat => `
             <div class="chat-item" data-chat-id="${chat.id}" data-user-id="${chat.otherUser.id}">
                 <img class="chat-avatar" src="${chat.otherUser.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(chat.otherUser.displayName || 'User')}" alt="">
                 <div class="chat-details">
-                    <div class="chat-name">${chat.otherUser.displayName || 'User'}</div>
+                    <div class="chat-name">
+                        ${chat.otherUser.displayName || 'User'}
+                        ${chat.unreadCount > 0 ? `<span class="unread-badge">${chat.unreadCount}</span>` : ''}
+                    </div>
                     <div class="chat-last-message">${chat.lastMessage || 'No messages'}</div>
                 </div>
                 <div class="chat-meta">
@@ -774,13 +842,16 @@ async function loadChats() {
                 </div>
             </div>
         `).join('');
+        
+        // Attach click listeners
         document.querySelectorAll('.chat-item').forEach(item => {
             item.addEventListener('click', () => openChat(item.dataset.userId, item.dataset.chatId));
         });
-    } catch (error) {
-        console.error('loadChats error:', error);
-        chatsList.innerHTML = '<div class="empty-state">Error loading chats</div>';
-    }
+        
+    }, (error) => {
+        console.error('Chat list listener error:', error);
+        chatsList.innerHTML = '<div class="empty-state">Error loading chats. Pull to refresh.</div>';
+    });
 }
 
 async function openChat(userId, chatId = null) {
@@ -814,6 +885,13 @@ async function openChat(userId, chatId = null) {
             return;
         }
     }
+
+    // Reset unread count for this chat room
+const chatRoomRef = doc(window.db, 'chats', chat);
+await updateDoc(chatRoomRef, {
+    [`unreadCount.${window.auth.currentUser.uid}`]: 0
+});
+    
     try {
         const userRef = doc(window.db, 'users', userId);
         const userDoc = await getDoc(userRef);
@@ -900,10 +978,11 @@ async function sendMessage(chatId, text) {
             timestamp: new Date().toISOString()
         });
         const chatRef = doc(window.db, 'chats', chatId);
-        await updateDoc(chatRef, {
-            lastMessage: text,
-            lastMessageTime: new Date().toISOString()
-        });
+await updateDoc(chatRef, {
+    lastMessage: text,
+    lastMessageTime: new Date().toISOString(),
+    [`unreadCount.${otherUserId}`]: increment(1)
+});
         
         // Get chat data to find other participant
         const chatDoc = await getDoc(chatRef);
@@ -1715,6 +1794,11 @@ async function showSettings() {
     if (newLogoutBtn && logoutBtn) {
         logoutBtn.parentNode.replaceChild(newLogoutBtn, logoutBtn);
         newLogoutBtn.addEventListener('click', async () => {
+            // Clean up chat list listener before logout
+            if (chatListUnsubscribe) {
+                chatListUnsubscribe();
+                chatListUnsubscribe = null;
+            }
             await window.signOut(window.auth);
             window.location.reload();
         });
