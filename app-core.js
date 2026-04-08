@@ -612,13 +612,13 @@ async function saveUserProfile() {
     await updateProfile(window.currentUser, updateData);
     
     // ========================================
-    // SYNC TO SUPABASE (for home feed)
+    // SYNC TO SUPABASE (for home feed) - using UPSERT to prevent duplicates
     // ========================================
     if (onboardingData.location && onboardingData.location.lat && onboardingData.location.lng) {
         try {
             const { error: supabaseError } = await supabase
                 .from('provider_locations')
-                .insert({
+                .upsert({
                     user_id: window.currentUser.uid,
                     lat: onboardingData.location.lat,
                     lng: onboardingData.location.lng,
@@ -627,7 +627,7 @@ async function saveUserProfile() {
                     rating: 0,
                     last_gig_date: null,
                     monthly_gig_count: 0
-                });
+                }, { onConflict: 'user_id' });
             
             if (supabaseError) {
                 console.error('Supabase sync error:', supabaseError);
@@ -638,7 +638,7 @@ async function saveUserProfile() {
             console.error('Failed to sync to Supabase:', err);
         }
     } else {
-        console.warn('No location data available, skipping Supabase sync');
+        console.warn('No location data available, skipping Supabase sync. Location:', onboardingData.location);
     }
 }
 
