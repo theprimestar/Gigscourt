@@ -977,17 +977,20 @@ async function sendMessage(chatId, text) {
             text: text,
             timestamp: new Date().toISOString()
         });
-        const chatRef = doc(window.db, 'chats', chatId);
-await updateDoc(chatRef, {
-    lastMessage: text,
-    lastMessageTime: new Date().toISOString(),
-    [`unreadCount.${otherUserId}`]: increment(1)
-});
         
-        // Get chat data to find other participant
+        const chatRef = doc(window.db, 'chats', chatId);
+        
+        // Get chat data to find other participant (BEFORE updating)
         const chatDoc = await getDoc(chatRef);
         const chatData = chatDoc.data();
         const otherUserId = chatData.participants.find(p => p !== window.auth.currentUser.uid);
+        
+        // Update chat room with last message and increment unread count for receiver
+        await updateDoc(chatRef, {
+            lastMessage: text,
+            lastMessageTime: new Date().toISOString(),
+            [`unreadCount.${otherUserId}`]: increment(1)
+        });
         
         // Notify the other user
         const otherUserRef = doc(window.db, 'users', otherUserId);
