@@ -7,6 +7,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, sendEmailVerification } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js';
 
 // Supabase configuration
 const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
@@ -17,6 +18,12 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const app = initializeApp(window.firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Initialize FCM
+let messaging = null;
+if ('Notification' in window && 'serviceWorker' in navigator) {
+    messaging = getMessaging(app);
+}
 
 // Make globally available
 window.auth = auth;
@@ -74,6 +81,51 @@ function showToast(message, type = 'info') {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
     }, 3000);
+}
+
+// ========== FCM NOTIFICATIONS ==========
+async function requestNotificationPermission() {
+    if (!messaging) {
+        console.log('FCM not supported');
+        return null;
+    }
+    
+    try {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+            console.log('Notification permission denied');
+            return null;
+        }
+        
+        const vapidKey = 'BAqzckZL6w2k3sX1v6kRso0kTytmC7SYTa8BlUQrOtiasqhhChuD-5G-K1NsarUvWoNmeqab2GgP6kOHUyCQ9XE';
+        const token = await getToken(messaging, { vapidKey: vapidKey });
+        
+        console.log('FCM Token:', token);
+        
+        if (window.currentUser && token) {
+            const userRef = doc(db, 'users', window.currentUser.uid);
+            await updateDoc(userRef, {
+                fcmToken: token,
+                fcmTokenUpdated: new Date().toISOString()
+            });
+        }
+        
+        return token;
+    } catch (error) {
+        console.error('Error getting FCM token:', error);
+        return null;
+    }
+}
+
+function setupFCMForegroundListener() {
+    if (!messaging) return;
+    
+    onMessage(messaging, (payload) => {
+        console.log('Foreground message:', payload);
+        const title = payload.notification?.title || 'GigsCourt';
+        const body = payload.notification?.body || '';
+        showToast(`${title}: ${body}`, 'info');
+    });
 }
 
 // ========== BOTTOM SHEET ==========
@@ -944,6 +996,11 @@ function setupAuthListener() {
                         window.dispatchEvent(new CustomEvent('appReady'));
                     }
                     navigateToPage('home');
+                    // Request notification permission after login
+                    setTimeout(() => {
+                        requestNotificationPermission();
+                        setupFCMForegroundListener();
+                    }, 2000);
                 } else {
     // New user - needs email verification first
     hideAuthScreen();
