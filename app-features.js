@@ -228,14 +228,15 @@ async function loadHomeFeed(reset = false) {
     isHomeFeedLoading = true;
     
     try {
-        // Get user location
-        let currentLat = 6.5244;
-        let currentLng = 3.3792;
-        
-        if (currentUserLocation) {
-            currentLat = currentUserLocation.lat;
-            currentLng = currentUserLocation.lng;
+        // Get user location - NO DEFAULT FALLBACK
+        if (!currentUserLocation) {
+            homeFeed.innerHTML = '<div class="empty-state">Enable location to see providers near you</div>';
+            isHomeFeedLoading = false;
+            return;
         }
+        
+        let currentLat = currentUserLocation.lat;
+        let currentLng = currentUserLocation.lng;
         
         // Query Supabase with offset pagination
         const { data: providers, error } = await supabase
@@ -294,8 +295,11 @@ async function loadHomeFeed(reset = false) {
             return bActive - aActive;
         });
         
+        // Filter out the current user so they don't see themselves
+        const filteredProviders = mergedProviders.filter(provider => provider.id !== window.auth.currentUser.uid);
+        
         // Create HTML for new cards
-        const cardsHtml = mergedProviders.map(user => `
+        const cardsHtml = filteredProviders.map(user => `
             <div class="card" data-user-id="${user.id}">
                 <div class="card-header">
                     <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}">
