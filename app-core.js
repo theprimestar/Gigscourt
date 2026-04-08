@@ -6,6 +6,12 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, sendEmailVerification } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+// Supabase configuration
+const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
+const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 // ========== INITIALIZATION ==========
 const app = initializeApp(window.firebaseConfig);
@@ -604,6 +610,36 @@ async function saveUserProfile() {
         updateData.photoURL = onboardingData.photoURL;
     }
     await updateProfile(window.currentUser, updateData);
+    
+    // ========================================
+    // SYNC TO SUPABASE (for home feed)
+    // ========================================
+    if (onboardingData.location && onboardingData.location.lat && onboardingData.location.lng) {
+        try {
+            const { error: supabaseError } = await supabase
+                .from('provider_locations')
+                .insert({
+                    user_id: window.currentUser.uid,
+                    lat: onboardingData.location.lat,
+                    lng: onboardingData.location.lng,
+                    location: `POINT(${onboardingData.location.lng} ${onboardingData.location.lat})`,
+                    service: onboardingData.services && onboardingData.services.length > 0 ? onboardingData.services[0] : null,
+                    rating: 0,
+                    last_gig_date: null,
+                    monthly_gig_count: 0
+                });
+            
+            if (supabaseError) {
+                console.error('Supabase sync error:', supabaseError);
+            } else {
+                console.log('Supabase sync successful for user:', window.currentUser.uid);
+            }
+        } catch (err) {
+            console.error('Failed to sync to Supabase:', err);
+        }
+    } else {
+        console.warn('No location data available, skipping Supabase sync');
+    }
 }
 
 // ========== AUTH UI ==========
