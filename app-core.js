@@ -8,7 +8,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js';
-
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy, writeBatch } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 // Supabase configuration
 const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
 const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
@@ -165,18 +165,23 @@ function setupBottomSheet() {
 // ========== NOTIFICATION DROPDOWN ==========
 function setupNotifications() {
     if (!notificationsBtn) return;
-    notificationsBtn.addEventListener('click', () => {
+    
+    notificationsBtn.addEventListener('click', async () => {
         notificationsDropdown.classList.toggle('hidden');
         haptic('light');
+        
+        // Load notifications from Firestore when dropdown opens
+        if (notificationsDropdown.classList.contains('hidden') === false) {
+            await loadNotificationsFromFirestore();
+        }
     });
+    
     if (clearNotificationsBtn) {
-        clearNotificationsBtn.addEventListener('click', () => {
-            const items = notificationsList.querySelectorAll('.notification-item');
-            items.forEach(item => item.remove());
-            notificationsList.innerHTML = '<div class="empty-state">No notifications yet</div>';
-            notificationBadge.classList.add('hidden');
+        clearNotificationsBtn.addEventListener('click', async () => {
+            await markAllNotificationsAsRead();
         });
     }
+    
     document.addEventListener('click', (e) => {
         if (notificationsBtn && notificationsDropdown && !notificationsBtn.contains(e.target) && !notificationsDropdown.contains(e.target)) {
             notificationsDropdown.classList.add('hidden');
@@ -184,7 +189,25 @@ function setupNotifications() {
     });
 }
 
-function addNotification(title, body, link = '') {
+async function addNotification(title, body, link = '') {
+    // 1. Save to Firestore (persistent)
+    if (window.currentUser) {
+        try {
+            const notificationRef = collection(db, 'users', window.currentUser.uid, 'notifications');
+            await addDoc(notificationRef, {
+                title: title,
+                body: body,
+                link: link,
+                read: false,
+                createdAt: new Date().toISOString(),
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            });
+        } catch (error) {
+            console.error('Failed to save notification to Firestore:', error);
+        }
+    }
+    
+    // 2. Also show in dropdown (in-memory for immediate display)
     const emptyState = notificationsList.querySelector('.empty-state');
     if (emptyState) emptyState.remove();
     const item = document.createElement('div');
@@ -195,10 +218,119 @@ function addNotification(title, body, link = '') {
     `;
     if (link) item.addEventListener('click', () => { window.location.hash = link; closeBottomSheet(); });
     notificationsList.insertBefore(item, notificationsList.firstChild);
-    let count = notificationsList.children.length;
-    if (count > 0) {
-        notificationBadge.textContent = count;
-        notificationBadge.classList.remove('hidden');
+    
+    // 3. Update badge count
+    await updateNotificationBadgeCount();
+}
+
+// ========== LOAD NOTIFICATIONS FROM FIRESTORE ==========
+async function loadNotificationsFromFirestore() {
+    if (!window.currentUser) return;
+    
+    try {
+        const notificationsRef = collection(db, 'users', window.currentUser.uid, 'notifications');
+        const q = query(
+            notificationsRef,
+            where('read', '==', false),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
+        const snapshot = await getDocs(q);
+        
+        // Clear current dropdown
+        while (notificationsList.firstChild) {
+            notificationsList.removeChild(notificationsList.firstChild);
+        }
+        
+        if (snapshot.empty) {
+            notificationsList.innerHTML = '<div class="empty-state">No notifications yet</div>';
+            notificationBadge.classList.add('hidden');
+            return;
+        }
+        
+        // Add each notification to dropdown
+        snapshot.forEach(doc => {
+            const notif = doc.data();
+            const item = document.createElement('div');
+            item.className = 'notification-item';
+            item.dataset.notificationId = doc.id;
+            item.innerHTML = `
+                <div class="notification-title">${notif.title}</div>
+                <div class="notification-body">${notif.body}</div>
+            `;
+            if (notif.link) {
+                item.addEventListener('click', () => {
+                    markNotificationAsRead(doc.id);
+                    window.location.hash = notif.link;
+                    closeBottomSheet();
+                });
+            }
+            notificationsList.appendChild(item);
+        });
+        
+        // Update badge count
+        await updateNotificationBadgeCount();
+        
+    } catch (error) {
+        console.error('Error loading notifications:', error);
+    }
+}
+
+// ========== UPDATE NOTIFICATION BADGE COUNT ==========
+async function updateNotificationBadgeCount() {
+    if (!window.currentUser) return;
+    
+    try {
+        const notificationsRef = collection(db, 'users', window.currentUser.uid, 'notifications');
+        const q = query(notificationsRef, where('read', '==', false));
+        const snapshot = await getDocs(q);
+        const count = snapshot.size;
+        
+        if (count > 0) {
+            notificationBadge.textContent = count;
+            notificationBadge.classList.remove('hidden');
+        } else {
+            notificationBadge.classList.add('hidden');
+        }
+    } catch (error) {
+        console.error('Error updating badge count:', error);
+    }
+}
+
+// ========== MARK NOTIFICATION AS READ ==========
+async function markNotificationAsRead(notificationId) {
+    if (!window.currentUser) return;
+    
+    try {
+        const notifRef = doc(db, 'users', window.currentUser.uid, 'notifications', notificationId);
+        await updateDoc(notifRef, { read: true });
+        await updateNotificationBadgeCount();
+    } catch (error) {
+        console.error('Error marking notification as read:', error);
+    }
+}
+
+// ========== MARK ALL NOTIFICATIONS AS READ ==========
+async function markAllNotificationsAsRead() {
+    if (!window.currentUser) return;
+    
+    try {
+        const notificationsRef = collection(db, 'users', window.currentUser.uid, 'notifications');
+        const q = query(notificationsRef, where('read', '==', false));
+        const snapshot = await getDocs(q);
+        
+        const batch = writeBatch(db);
+        snapshot.forEach(doc => {
+            const notifRef = doc(db, 'users', window.currentUser.uid, 'notifications', doc.id);
+            batch.update(notifRef, { read: true });
+        });
+        await batch.commit();
+        
+        await updateNotificationBadgeCount();
+        await loadNotificationsFromFirestore();
+        
+    } catch (error) {
+        console.error('Error marking all as read:', error);
     }
 }
 
@@ -996,6 +1128,16 @@ function setupAuthListener() {
                         window.dispatchEvent(new CustomEvent('appReady'));
                     }
                     navigateToPage('home');
+
+                    // Load notifications from Firestore
+                    loadNotificationsFromFirestore();
+                    
+                    // Request notification permission after login
+                    setTimeout(() => {
+                        requestNotificationPermission();
+                        setupFCMForegroundListener();
+                    }, 2000);
+                    
                     // Request notification permission after login
                     setTimeout(() => {
                         requestNotificationPermission();
