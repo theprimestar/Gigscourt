@@ -56,6 +56,11 @@ let homeFeedOffset = 0;
 let isHomeFeedLoading = false;
 let hasMoreHomeFeed = true;
 const HOME_FEED_LIMIT = 20;
+// Supabase search pagination
+let searchOffset = 0;
+let isSearchLoading = false;
+let hasMoreSearch = true;
+const SEARCH_LIMIT = 20;
 
 // ========== IMAGEKIT CONFIG ==========
 const IMAGEKIT_URL = 'https://ik.imagekit.io/Theprimestar';
@@ -90,6 +95,16 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
     const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     return R * c;
+}
+
+// Helper: Convert radius (km) to Leaflet zoom level
+function getZoomLevelFromRadius(radiusKm) {
+    if (radiusKm <= 1) return 14;
+    if (radiusKm <= 2) return 13;
+    if (radiusKm <= 5) return 12;
+    if (radiusKm <= 10) return 11;
+    if (radiusKm <= 20) return 10;
+    return 9;
 }
 
 // Helper: Fetch provider profiles from Firestore by user IDs
@@ -384,6 +399,25 @@ function setupInfiniteScroll() {
     });
 }
 
+// ========== INFINITE SCROLL FOR SEARCH ==========
+function setupSearchInfiniteScroll() {
+    const searchPage = document.getElementById('search-page');
+    if (!searchPage) return;
+    
+    searchPage.addEventListener('scroll', () => {
+        const scrollTop = searchPage.scrollTop;
+        const scrollHeight = searchPage.scrollHeight;
+        const clientHeight = searchPage.clientHeight;
+        
+        // Load more when 200px from bottom
+        if (scrollTop + clientHeight >= scrollHeight - 200) {
+            if (!isSearchLoading && hasMoreSearch) {
+                performSearch(false);
+            }
+        }
+    });
+}
+
 // ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
 async function showUserBottomSheet(userId) {
     try {
@@ -434,59 +468,207 @@ async function initMap() {
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition((pos) => {
             currentUserLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-            currentMap.setView([currentUserLocation.lat, currentUserLocation.lng], 13);
+            // Set initial zoom based on default radius (1km = zoom 14)
+            const zoomLevel = getZoomLevelFromRadius(currentRadius);
+            currentMap.setView([currentUserLocation.lat, currentUserLocation.lng], zoomLevel);
             window.L.marker([currentUserLocation.lat, currentUserLocation.lng]).bindPopup('You are here').addTo(currentMap);
             performSearch();
+        }, () => performSearch());
         }, () => performSearch());
     } else {
         performSearch();
     }
 }
 
-async function performSearch() {
+async function performSearch(reset = false) {
     if (!window.db) return;
-    if (!currentSearchService && searchServiceInput) {
-        currentSearchService = searchServiceInput.value;
-    }
-    try {
-        const usersRef = collection(window.db, 'users');
-        let q;
-        if (currentSearchService) {
-            q = query(usersRef, where('services', 'array-contains', currentSearchService));
-        } else {
-            q = query(usersRef);
+    
+    // Reset pagination if requested
+    if (reset) {
+        if (searchListFeed) {
+            searchListFeed.innerHTML = '<div class="loading-spinner"></div>';
         }
-        const snapshot = await getDocs(q);
-        let users = [];
-        snapshot.forEach(doc => {
-            const userData = doc.data();
-            if (doc.id !== window.auth.currentUser?.uid && userData.services && userData.services.length > 0) {
-                users.push({ id: doc.id, ...userData });
+        searchOffset = 0;
+        hasMoreSearch = true;
+        if (searchListFeed) {
+            while (searchListFeed.firstChild) {
+                searchListFeed.removeChild(searchListFeed.firstChild);
             }
-        });
-        if (currentUserLocation) {
-            users.forEach(user => {
-                if (user.location) {
-                    user.distance = calculateDistance(currentUserLocation.lat, currentUserLocation.lng, user.location.lat, user.location.lng);
-                    user.withinRadius = user.distance <= currentRadius * 1000;
-                } else {
-                    user.withinRadius = false;
-                }
-            });
-            users = users.filter(u => u.withinRadius);
-            users.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
         }
-        users.sort((a, b) => {
+    }
+    
+    // Stop if already loading or no more data
+    if (isSearchLoading || !hasMoreSearch) return;
+    
+    isSearchLoading = true;
+    
+    try {
+        // Get current service and radius
+        const service = currentSearchService || searchServiceInput?.value;
+        const radiusMeters = (currentRadius || 5) * 1000;
+        
+        // Get user location - fetch if not available
+        if (!currentUserLocation) {
+            const location = await new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                    resolve(null);
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        resolve({
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        });
+                    },
+                    () => {
+                        resolve(null);
+                    }
+                );
+            });
+            
+            if (!location) {
+                if (reset && searchListFeed) {
+                    searchListFeed.innerHTML = '<div class="empty-state">Enable location to search for providers</div>';
+                }
+                isSearchLoading = false;
+                return;
+            }
+            currentUserLocation = location;
+        }
+        
+        let currentLat = currentUserLocation.lat;
+        let currentLng = currentUserLocation.lng;
+        
+        // Build Supabase query
+        let query = supabase
+            .from('provider_locations')
+            .select('user_id, lat, lng, rating, last_gig_date, monthly_gig_count')
+            .limit(SEARCH_LIMIT);
+        
+        // Add service filter if selected
+        if (service && service !== '') {
+            query = query.eq('service', service);
+        }
+        
+        // Add offset for pagination
+        query = query.range(searchOffset, searchOffset + SEARCH_LIMIT - 1);
+        
+        const { data: providers, error } = await query;
+        
+        if (error) throw error;
+        
+        // Check if no more providers
+        if (!providers || providers.length === 0) {
+            hasMoreSearch = false;
+            if (reset && searchListFeed && searchListFeed.children.length === 0) {
+                searchListFeed.innerHTML = '<div class="empty-state">No providers found. Try a different service or radius.</div>';
+            }
+            isSearchLoading = false;
+            return;
+        }
+        
+        // Update offset for next load
+        searchOffset += providers.length;
+        
+        if (providers.length < SEARCH_LIMIT) {
+            hasMoreSearch = false;
+        }
+        
+        // Calculate distance for each provider and filter by radius
+        const providersWithDistance = providers.map(provider => {
+            const distance = calculateDistance(currentLat, currentLng, provider.lat, provider.lng);
+            return { ...provider, distance };
+        });
+        
+        const filteredProviders = providersWithDistance.filter(p => p.distance <= radiusMeters);
+        
+        // If filtering removed too many, try to load more
+        if (filteredProviders.length === 0 && providers.length > 0) {
+            isSearchLoading = false;
+            await performSearch(false);
+            return;
+        }
+        
+        // Fetch full profiles from Firestore
+        const userIds = filteredProviders.map(p => p.user_id);
+        const profiles = await fetchProviderProfilesFromFirestore(userIds);
+        
+        // Merge data
+        const mergedProviders = filteredProviders.map(provider => {
+            const profile = profiles[provider.user_id] || {};
+            return {
+                id: provider.user_id,
+                displayName: profile.displayName || 'Anonymous',
+                photoURL: profile.photoURL || null,
+                rating: profile.rating || provider.rating || 0,
+                gigCount: profile.gigCount || 0,
+                services: profile.services || [],
+                distance: provider.distance,
+                last_gig_date: provider.last_gig_date,
+                monthly_gig_count: provider.monthly_gig_count
+            };
+        });
+        
+        // Sort by distance (closest first)
+        mergedProviders.sort((a, b) => a.distance - b.distance);
+        
+        // Sort active providers first
+        mergedProviders.sort((a, b) => {
             const aActive = getActiveStatus(a).active ? 1 : 0;
             const bActive = getActiveStatus(b).active ? 1 : 0;
-            if (aActive !== bActive) return bActive - aActive;
-            return (b.rating || 0) - (a.rating || 0);
+            return bActive - aActive;
         });
-        currentListViewData = users;
-        updateMapMarkers(users);
-        updateListView(users);
+        
+        // Filter out current user
+        const filteredResults = mergedProviders.filter(p => p.id !== window.auth.currentUser?.uid);
+        
+        // Create HTML for cards
+        const cardsHtml = filteredResults.map(user => `
+            <div class="card" data-user-id="${user.id}">
+                <div class="card-header">
+                    <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}">
+                    <div class="card-info">
+                        <div class="card-name">
+                            ${user.displayName}
+                            ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
+                        </div>
+                        <div class="card-rating">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0})</div>
+                    </div>
+                </div>
+                <div class="card-services">${(user.services || []).slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+                <div class="card-distance">📍 ${formatDistance(user.distance)}</div>
+            </div>
+        `).join('');
+        
+        // Append to feed
+        if (reset) {
+            if (searchListFeed) searchListFeed.innerHTML = cardsHtml;
+        } else {
+            if (searchListFeed) searchListFeed.insertAdjacentHTML('beforeend', cardsHtml);
+        }
+        
+        // Attach click listeners to new cards
+        document.querySelectorAll('#search-list-feed .card:not([data-listener])').forEach(card => {
+            card.setAttribute('data-listener', 'true');
+            card.addEventListener('click', () => {
+                window.haptic('light');
+                showUserBottomSheet(card.dataset.userId);
+            });
+        });
+        
+        // Update map markers if in map view
+        if (currentViewMode === 'map' && currentMap) {
+            updateMapMarkers(filteredResults);
+        }
+        
     } catch (error) {
         console.error('performSearch error:', error);
+        if (reset && searchListFeed && searchListFeed.children.length === 0) {
+            searchListFeed.innerHTML = '<div class="empty-state">Error loading search results. Try again.</div>';
+        }
+    } finally {
+        isSearchLoading = false;
     }
 }
 
@@ -548,14 +730,26 @@ function setupSearch() {
     if (searchServiceInput) {
         searchServiceInput.addEventListener('input', (e) => {
             currentSearchService = e.target.value;
-            performSearch();
+            searchOffset = 0;
+            hasMoreSearch = true;
+            performSearch(true);
         });
     }
     if (radiusSlider && radiusValue) {
         radiusSlider.addEventListener('input', (e) => {
             currentRadius = parseInt(e.target.value);
             radiusValue.textContent = currentRadius;
-            performSearch();
+            
+            // Update map zoom if map exists
+            if (currentMap && currentUserLocation) {
+                const zoomLevel = getZoomLevelFromRadius(currentRadius);
+                currentMap.setView([currentUserLocation.lat, currentUserLocation.lng], zoomLevel);
+            }
+            
+            // Reset and perform search
+            searchOffset = 0;
+            hasMoreSearch = true;
+            performSearch(true);
         });
     }
     if (mapViewBtn && listViewBtn && mapContainer && searchListView) {
@@ -1689,6 +1883,7 @@ async function initFeatures() {
     try {
         if (searchServiceInput) {
             setupSearch();
+            setupSearchInfiniteScroll();
             console.log('setupSearch completed');
         }
     } catch (e) {
