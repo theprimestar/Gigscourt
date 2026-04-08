@@ -424,7 +424,26 @@ function showOnboardingStep3() {
     // Initialize map
     setTimeout(() => {
         if (window.L && document.getElementById('onboarding-map')) {
-            const map = L.map('onboarding-map').setView([6.5244, 3.3792], 13);
+            // Try to get user's current location first
+            let defaultLat = 6.5244;
+            let defaultLng = 3.3792;
+            
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        defaultLat = position.coords.latitude;
+                        defaultLng = position.coords.longitude;
+                        // Center map on user's location
+                        map.setView([defaultLat, defaultLng], 13);
+                    },
+                    () => {
+                        // User denied or error, keep default Lagos
+                        console.log('Could not get user location, using default');
+                    }
+                );
+            }
+            
+            const map = L.map('onboarding-map').setView([defaultLat, defaultLng], 13);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
             }).addTo(map);
