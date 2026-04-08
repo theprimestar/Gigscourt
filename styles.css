@@ -1660,3 +1660,34 @@ body {
 .bottom-sheet.open {
     transform: translateY(0) !important;
 }
+
+/* Unread badge on chat list */
+.unread-badge {
+    display: inline-block;
+    background: var(--accent-orange);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 20px;
+    margin-left: 8px;
+}
+
+/* Tab badge on Messages icon */
+.tab-badge {
+    position: absolute;
+    top: -5px;
+    right: -10px;
+    background: var(--accent-orange);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 20px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.nav-item {
+    position: relative;
+}
