@@ -63,6 +63,31 @@ let isSearchLoading = false;
 let hasMoreSearch = true;
 const SEARCH_LIMIT = 20;
 
+// ========== SEND PUSH NOTIFICATION ==========
+async function sendPushNotification(userId, title, body, clickAction = '/') {
+    if (!userId) return;
+    
+    try {
+        const response = await fetch('/api/send-notification', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                userId: userId,
+                title: title,
+                body: body,
+                clickAction: clickAction
+            })
+        });
+        
+        const result = await response.json();
+        console.log('Notification sent:', result);
+    } catch (error) {
+        console.error('Failed to send notification:', error);
+    }
+}
+
 // ========== IMAGEKIT CONFIG ==========
 const IMAGEKIT_URL = 'https://ik.imagekit.io/Theprimestar';
 const IMAGEKIT_PUBLIC_KEY = 'public_hwM9hldZI+DqFY/pncPQCA5VRWo=';
@@ -1001,6 +1026,14 @@ async function sendMessage(chatId, text) {
             `/chat/${chatId}`
         );
         
+        // Send push notification to the other user
+        await sendPushNotification(
+            otherUserId,
+            'New Message',
+            `${senderName}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
+            `/chat/${chatId}`
+        );
+        
         document.getElementById('chat-input').value = '';
         window.haptic('light');
     } catch (error) {
@@ -1148,6 +1181,14 @@ async function cancelGig(chatId, providerId) {
         window.addNotification(
             'Gig Cancelled',
             `${providerName} has cancelled the gig request. No credits were deducted.`
+        );
+        
+        // Send push notification to the provider
+        await sendPushNotification(
+            providerId,
+            'Gig Cancelled',
+            `${window.currentUserData?.displayName || 'Client'} cancelled the gig request. No credits were deducted.`,
+            `/chat/${chatId}`
         );
         
         window.showToast('✅ Gig cancelled successfully', 'success');
@@ -1305,6 +1346,14 @@ async function registerGig(chatId, clientId) {
             `/chat/${chatId}`
         );
         
+        // Send push notification to the client
+        await sendPushNotification(
+            clientId,
+            'New Gig Request',
+            `${providerName} registered a gig with you. Please review within 7 days.`,
+            `/chat/${chatId}`
+        );
+        
         window.showToast('Gig registered! Client will review within 7 days.');
         window.haptic('heavy');
         
@@ -1375,6 +1424,14 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         window.addNotification(
             'New Review',
             `⭐ ${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`
+        );
+        
+        // Send push notification to the provider
+        await sendPushNotification(
+            providerId,
+            'New Review',
+            `${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`,
+            `/profile/${providerId}`
         );
         
         window.showToast(`Review submitted! ${rating} stars. Thank you!`);
