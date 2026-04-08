@@ -228,11 +228,34 @@ async function loadHomeFeed(reset = false) {
     isHomeFeedLoading = true;
     
     try {
-        // Get user location - NO DEFAULT FALLBACK
+        // Get user location - fetch if not available
         if (!currentUserLocation) {
-            homeFeed.innerHTML = '<div class="empty-state">Enable location to see providers near you</div>';
-            isHomeFeedLoading = false;
-            return;
+            // Try to get location now
+            const location = await new Promise((resolve) => {
+                if (!navigator.geolocation) {
+                    resolve(null);
+                    return;
+                }
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        resolve({
+                            lat: position.coords.latitude,
+                            lng: position.coords.longitude
+                        });
+                    },
+                    () => {
+                        resolve(null);
+                    }
+                );
+            });
+            
+            if (!location) {
+                homeFeed.innerHTML = '<div class="empty-state">Enable location to see providers near you</div>';
+                isHomeFeedLoading = false;
+                return;
+            }
+            
+            currentUserLocation = location;
         }
         
         let currentLat = currentUserLocation.lat;
