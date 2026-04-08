@@ -474,7 +474,6 @@ async function initMap() {
             window.L.marker([currentUserLocation.lat, currentUserLocation.lng]).bindPopup('You are here').addTo(currentMap);
             performSearch();
         }, () => performSearch());
-        }, () => performSearch());
     } else {
         performSearch();
     }
