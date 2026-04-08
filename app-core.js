@@ -229,11 +229,10 @@ async function loadNotificationsFromFirestore() {
     try {
         const notificationsRef = collection(db, 'users', window.currentUser.uid, 'notifications');
         const q = query(
-            notificationsRef,
-            where('read', '==', false),
-            orderBy('createdAt', 'desc'),
-            limit(50)
-        );
+    notificationsRef,
+    orderBy('createdAt', 'desc'),
+    limit(50)
+);
         const snapshot = await getDocs(q);
         
         // Clear current dropdown
