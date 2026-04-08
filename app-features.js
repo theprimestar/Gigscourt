@@ -764,8 +764,6 @@ function setupSearch() {
 }
 
 // ========== CHAT LIST (REAL-TIME WITH UNREAD COUNTS) ==========
-let chatListUnsubscribe = null;
-
 async function loadChats() {
     if (!chatsList) return;
     if (!window.db || !window.auth || !window.auth.currentUser) {
