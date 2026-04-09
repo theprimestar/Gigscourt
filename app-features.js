@@ -257,7 +257,7 @@ async function uploadImage(file, folder = 'profiles') {
 
 
 // ========== HOME PAGE (Supabase - Infinite Scroll) ==========
-async function loadHomeFeed(reset = false) {
+async function loadHomeFeed(reset = false, skipSpinner = false) {
     if (!homeFeed) return;
     
     // If no user, show spinner instead of error message
@@ -285,7 +285,9 @@ async function loadHomeFeed(reset = false) {
     
     // Reset if requested
     if (reset) {
-        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+        if (!skipSpinner) {
+            homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+        }
         homeFeedOffset = 0;
         hasMoreHomeFeed = true;
         while (homeFeed.firstChild) {
@@ -521,17 +523,27 @@ function handleTouchMove(e, page) {
     if (!state.enabled || state.isRefreshing) return;
     
     const container = state.container;
-    if (container.scrollTop > 0) {
+    
+    // CRITICAL: Only block scroll if we're at the very top AND pulling down
+    const isAtTop = container.scrollTop <= 0;
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - state.startY;
+    const isPullingDown = deltaY > 0;
+    
+    // If not at top, or not pulling down, let normal scroll happen
+    if (!isAtTop || !isPullingDown) {
         state.isPulling = false;
         return;
     }
     
-    const currentY = e.touches[0].clientY;
-    const deltaY = currentY - state.startY;
+    // We're at top and pulling down - this is a pull-to-refresh gesture
+    // Only prevent default when we're actively pulling (deltaY > 5 for early detection)
+    if (deltaY > 5) {
+        e.preventDefault();
+    }
     
-    // Only activate if pulling down
+    // Only start showing indicator after a small threshold (10px)
     if (deltaY > 10) {
-        e.preventDefault(); // Prevent page scroll
         state.isPulling = true;
         state.currentY = currentY;
         
@@ -626,13 +638,15 @@ async function triggerRefresh(page) {
     
     try {
         if (page === 'home') {
-            await window.loadHomeFeed(true);
+            // Pass skipSpinner = true to prevent internal spinner
+            await window.loadHomeFeed(true, true);
         } else if (page === 'profile') {
             // Get current profile ID if viewing someone else's profile
             const profileHeader = document.getElementById('profile-header-title');
             const isOwnProfile = profileHeader && profileHeader.textContent === 'Profile';
             const viewingUserId = isOwnProfile ? null : (window.currentViewedUserId || null);
-            await window.loadProfile(viewingUserId);
+            // Pass skipSpinner = true to prevent internal spinner
+            await window.loadProfile(viewingUserId, true);
         }
         
         // Haptic feedback on completion
@@ -1876,7 +1890,7 @@ async function showTransactionHistory() {
 }
 
 // ========== PROFILE PAGE (Complete) ==========
-async function loadProfile(userId = null) {
+async function loadProfile(userId = null, skipSpinner = false) {
     const targetId = userId || window.auth.currentUser?.uid;
     if (!targetId || !profileContent) return;
     if (!window.db) {
@@ -1884,7 +1898,9 @@ async function loadProfile(userId = null) {
         return;
     }
     try {
-        profileContent.innerHTML = '<div class="loading-spinner"></div>';
+        if (!skipSpinner) {
+            profileContent.innerHTML = '<div class="loading-spinner"></div>';
+        }
         const userRef = doc(window.db, 'users', targetId);
         const userDoc = await getDoc(userRef);
         if (!userDoc.exists) {
