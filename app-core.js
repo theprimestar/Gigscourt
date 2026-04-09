@@ -876,9 +876,9 @@ async function saveUserProfile() {
     }
     const userRef = doc(db, 'users', window.currentUser.uid);
     await setDoc(userRef, {
-        displayName: onboardingData.displayName,
-        phone: onboardingData.phone,
-        services: onboardingData.services,
+        displayName: onboardingData.displayName || 'User',
+        phone: onboardingData.phone || '',
+        services: onboardingData.services || [],
         location: onboardingData.location || null,
         addressText: onboardingData.addressText || '',
         bio: onboardingData.bio || '',
