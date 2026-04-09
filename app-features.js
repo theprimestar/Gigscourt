@@ -74,6 +74,7 @@ let pullToRefreshState = {
         pullDistance: 0,
         isPulling: false,
         isRefreshing: false,
+        startedAtTop: false,
         threshold: 80,
         maxPull: 100,
         indicator: null,
@@ -89,6 +90,7 @@ let pullToRefreshState = {
         pullDistance: 0,
         isPulling: false,
         isRefreshing: false,
+        startedAtTop: false,
         threshold: 80,
         maxPull: 100,
         indicator: null,
@@ -513,8 +515,11 @@ function handleTouchStart(e, page) {
     
     const container = state.container;
     
-    // Only track if at the very top
-    if (container.scrollTop > 1) return;
+    // Record whether we started at the top (allowing 1px margin)
+    state.startedAtTop = (container.scrollTop <= 1);
+    
+    // Only track if we actually started at the top
+    if (!state.startedAtTop) return;
     
     state.startY = e.touches[0].clientY;
     state.isPulling = false;
@@ -524,11 +529,19 @@ function handleTouchMove(e, page) {
     const state = pullToRefreshState[page];
     if (!state.enabled || state.isRefreshing) return;
     
+    // CRITICAL: Only allow pull-to-refresh if we STARTED at the top
+    // This prevents accidental triggers from rubber-band bounce
+    if (!state.startedAtTop) {
+        state.isPulling = false;
+        return;
+    }
+    
     const container = state.container;
     
-    // STRICT CHECK: Must be at the very top (allow 1px margin for rounding errors)
+    // Double-check we're still at or above the top
     if (container.scrollTop > 1) {
         state.isPulling = false;
+        state.startedAtTop = false;
         return;
     }
     
@@ -541,7 +554,6 @@ function handleTouchMove(e, page) {
         return;
     }
     
-    // We are at top AND pulling down - this is a pull-to-refresh gesture
     // Only prevent default after a deliberate pull (15px)
     if (deltaY > 15) {
         e.preventDefault();
