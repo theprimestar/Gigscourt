@@ -324,6 +324,12 @@ body {
     display: block;
 }
 
+/* Prevent native overscroll bounce on pages with custom pull-to-refresh */
+#home-page,
+#profile-page {
+    overscroll-behavior-y: none;
+}
+
 .page-content {
     max-width: 600px;
     margin: 0 auto;
