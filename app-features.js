@@ -30,7 +30,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
         const auth = getAuth();
         const user = auth.currentUser;
         if (user) {
-            return await user.getIdToken(false);
+            return await user.getIdToken(true);
         }
         return null;
     }
