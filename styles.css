@@ -907,6 +907,62 @@ body {
     to { transform: rotate(360deg); }
 }
 
+/* ========== PULL TO REFRESH ========== */
+.pull-to-refresh {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: height 0.2s ease, opacity 0.2s ease;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    gap: 6px;
+}
+
+.pull-to-refresh.visible {
+    opacity: 1;
+}
+
+.pull-to-refresh .pull-spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid var(--border-light);
+    border-top-color: var(--accent-orange);
+    border-radius: 50%;
+    animation: none;
+}
+
+.pull-to-refresh.refreshing .pull-spinner {
+    animation: spin 0.8s linear infinite;
+}
+
+.pull-to-refresh .pull-text {
+    transition: color 0.15s ease;
+}
+
+.pull-to-refresh.release .pull-text {
+    color: var(--accent-orange);
+}
+
+/* Height states for pull-to-refresh */
+.pull-to-refresh[data-state="pulling"] {
+    /* Height set by JavaScript */
+}
+
+.pull-to-refresh[data-state="release"] {
+    /* Height set by JavaScript */
+}
+
+.pull-to-refresh[data-state="refreshing"] {
+    /* Height set by JavaScript */
+    opacity: 1;
+}
+
 /* ========== TOAST ========== */
 .toast-container {
     position: fixed;
