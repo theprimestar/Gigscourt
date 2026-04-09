@@ -796,29 +796,67 @@ function showOnboardingStep5() {
     nextBtn.parentNode.replaceChild(oldNext, nextBtn);
     
     oldNext.addEventListener('click', async () => {
+        // PREVENT DOUBLE CLICKS
+        oldNext.disabled = true;
+        oldNext.textContent = 'Creating account...';
+        oldNext.style.opacity = '0.7';
+        oldNext.style.cursor = 'not-allowed';
+        
         onboardingData.bio = document.getElementById('onboard-bio').value;
         
         // Upload photo if exists
         if (onboardingData.photoFile) {
-            showToast('Uploading photo...');
+            // Show uploading message (we'll create a simple status display)
+            const statusDiv = document.createElement('div');
+            statusDiv.id = 'onboarding-status';
+            statusDiv.style.cssText = 'text-align: center; margin-top: 16px; color: var(--text-secondary); font-size: 14px;';
+            statusDiv.textContent = '📸 Uploading photo...';
+            document.getElementById('onboarding-content').appendChild(statusDiv);
+            
             try {
                 const photoURL = await uploadImage(onboardingData.photoFile, 'profiles');
                 onboardingData.photoURL = photoURL;
+                statusDiv.textContent = '✅ Photo uploaded!';
             } catch (error) {
                 console.error('Photo upload error:', error);
+                statusDiv.textContent = '⚠️ Photo upload failed. You can add it later in your profile.';
+                // Continue anyway - don't block account creation
             }
         }
         
-        showToast('Saving your profile...');
-        await saveUserProfile();
-        hideOnboardingScreen();
-        navigateToPage('home');
-        showToast('Welcome to GigsCourt! 🎉');
+        // Update or create status
+        let statusDiv = document.getElementById('onboarding-status');
+        if (!statusDiv) {
+            statusDiv = document.createElement('div');
+            statusDiv.id = 'onboarding-status';
+            statusDiv.style.cssText = 'text-align: center; margin-top: 16px; color: var(--text-secondary); font-size: 14px;';
+            document.getElementById('onboarding-content').appendChild(statusDiv);
+        }
+        statusDiv.textContent = '💾 Saving your profile...';
         
-        // Force refresh token and reload home feed
-        setTimeout(() => {
-            forceRefreshHomeFeed();
-        }, 500);
+        try {
+            await saveUserProfile();
+            hideOnboardingScreen();
+            navigateToPage('home');
+            showToast('Welcome to GigsCourt! 🎉');
+            
+            // Force refresh token and reload home feed
+            setTimeout(() => {
+                forceRefreshHomeFeed();
+            }, 500);
+        } catch (error) {
+            console.error('Save profile error:', error);
+            // Re-enable button on error so user can try again
+            oldNext.disabled = false;
+            oldNext.textContent = 'Complete Setup';
+            oldNext.style.opacity = '1';
+            oldNext.style.cursor = 'pointer';
+            
+            if (statusDiv) {
+                statusDiv.textContent = '❌ Error saving profile. Please try again.';
+                statusDiv.style.color = 'var(--error-red)';
+            }
+        }
     });
     
     // Setup back button
