@@ -326,8 +326,22 @@ body {
 
 /* Prevent native overscroll bounce on pages with custom pull-to-refresh */
 #home-page,
-#profile-page {
+#profile-page,
+#home-page .page-content,
+#profile-page .page-content,
+#home-feed,
+#profile-content {
     overscroll-behavior-y: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* Lock body when home or profile is active */
+body:has(#home-page.active),
+body:has(#profile-page.active) {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
 }
 
 .page-content {
