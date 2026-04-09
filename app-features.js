@@ -36,6 +36,70 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     }
 });
 
+// ========== SUPABASE HELPER FUNCTIONS ==========
+async function fetchProviderProfilesFromSupabase(userIds) {
+    if (!userIds || userIds.length === 0) return {};
+    
+    try {
+        const { data: profiles, error } = await supabase
+            .from('provider_profiles')
+            .select('*')
+            .in('user_id', userIds);
+        
+        if (error) throw error;
+        
+        const profilesMap = {};
+        profiles.forEach(profile => {
+            profilesMap[profile.user_id] = {
+                displayName: profile.display_name,
+                photoURL: profile.photo_url,
+                bio: profile.bio,
+                phone: profile.phone,
+                addressText: profile.address_text,
+                services: profile.services ? profile.services.split(',').map(s => s.trim()) : [],
+                portfolio: profile.portfolio || [],
+                credits: profile.credits || 0,
+                gigCount: profile.gig_count || 0,
+                rating: profile.rating || 0
+            };
+        });
+        return profilesMap;
+    } catch (error) {
+        console.error('fetchProviderProfilesFromSupabase error:', error);
+        return {};
+    }
+}
+
+async function getSingleProfileFromSupabase(userId) {
+    try {
+        const { data: profile, error } = await supabase
+            .from('provider_profiles')
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+        
+        if (error || !profile) return null;
+        
+        return {
+            id: profile.user_id,
+            displayName: profile.display_name,
+            photoURL: profile.photo_url,
+            bio: profile.bio,
+            phone: profile.phone,
+            addressText: profile.address_text,
+            services: profile.services ? profile.services.split(',').map(s => s.trim()) : [],
+            portfolio: profile.portfolio || [],
+            credits: profile.credits || 0,
+            gigCount: profile.gig_count || 0,
+            rating: profile.rating || 0,
+            totalRatingSum: profile.total_rating_sum || 0
+        };
+    } catch (error) {
+        console.error('getSingleProfileFromSupabase error:', error);
+        return null;
+    }
+}
+
 // ========== DOM ELEMENTS ==========
 let homeFeed, searchServiceInput, radiusSlider, radiusValue, mapViewBtn, listViewBtn, mapContainer, searchListView, searchListFeed, chatsList, profileContent;
 
