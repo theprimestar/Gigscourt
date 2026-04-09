@@ -874,58 +874,91 @@ async function saveUserProfile() {
         console.error('No current user');
         return;
     }
-    const userRef = doc(db, 'users', window.currentUser.uid);
-    await setDoc(userRef, {
-        displayName: onboardingData.displayName || 'User',
-        phone: onboardingData.phone || '',
-        services: onboardingData.services || [],
-        location: onboardingData.location || null,
-        addressText: onboardingData.addressText || '',
-        bio: onboardingData.bio || '',
-        photoURL: onboardingData.photoURL || null,
-        credits: 0,
-        gigCount: 0,
-        rating: 0,
-        totalRatingSum: 0,
-        createdAt: new Date().toISOString(),
-        lastActive: new Date().toISOString()
-    }, { merge: true });
     
+    const userId = window.currentUser.uid;
+    const servicesList = (onboardingData.services || []).join(', ');
+    const portfolio = onboardingData.portfolio || [];
+    
+    // 1. Save to Supabase provider_profiles
+    try {
+        const { error: profileError } = await supabase
+            .from('provider_profiles')
+            .upsert({
+                user_id: userId,
+                display_name: onboardingData.displayName || 'User',
+                phone: onboardingData.phone || '',
+                bio: onboardingData.bio || '',
+                address_text: onboardingData.addressText || '',
+                services: servicesList,
+                photo_url: onboardingData.photoURL || null,
+                portfolio: portfolio,
+                credits: 0,
+                gig_count: 0,
+                rating: 0,
+                total_rating_sum: 0,
+                created_at: new Date().toISOString(),
+                last_active: new Date().toISOString()
+            }, { onConflict: 'user_id' });
+        
+        if (profileError) {
+            console.error('Supabase profile save error:', profileError);
+            throw profileError;
+        }
+        console.log('Supabase profile saved for user:', userId);
+    } catch (err) {
+        console.error('Failed to save profile to Supabase:', err);
+        throw err;
+    }
+    
+    // 2. Save to Supabase provider_locations (if location exists)
+    if (onboardingData.location && onboardingData.location.lat && onboardingData.location.lng) {
+        try {
+            const { error: locationError } = await supabase
+                .from('provider_locations')
+                .upsert({
+                    user_id: userId,
+                    lat: onboardingData.location.lat,
+                    lng: onboardingData.location.lng,
+                    location: `POINT(${onboardingData.location.lng} ${onboardingData.location.lat})`,
+                    services: servicesList,
+                    rating: 0,
+                    gig_count: 0,
+                    last_gig_date: null,
+                    monthly_gig_count: 0
+                }, { onConflict: 'user_id' });
+            
+            if (locationError) {
+                console.error('Supabase location sync error:', locationError);
+            } else {
+                console.log('Supabase location synced for user:', userId);
+            }
+        } catch (err) {
+            console.error('Failed to sync location to Supabase:', err);
+        }
+    } else {
+        console.warn('No location data available, skipping Supabase location sync.');
+    }
+    
+    // 3. Update Firebase Auth profile
     const updateData = { displayName: onboardingData.displayName };
     if (onboardingData.photoURL) {
         updateData.photoURL = onboardingData.photoURL;
     }
     await updateProfile(window.currentUser, updateData);
     
-    // ========================================
-    // SYNC TO SUPABASE (for home feed) - using UPSERT to prevent duplicates
-    // ========================================
-    if (onboardingData.location && onboardingData.location.lat && onboardingData.location.lng) {
-        try {
-            const { error: supabaseError } = await supabase
-                .from('provider_locations')
-                .upsert({
-                    user_id: window.currentUser.uid,
-                    lat: onboardingData.location.lat,
-                    lng: onboardingData.location.lng,
-                    location: `POINT(${onboardingData.location.lng} ${onboardingData.location.lat})`,
-                    service: onboardingData.services && onboardingData.services.length > 0 ? onboardingData.services[0] : null,
-                    rating: 0,
-                    last_gig_date: null,
-                    monthly_gig_count: 0
-                }, { onConflict: 'user_id' });
-            
-            if (supabaseError) {
-                console.error('Supabase sync error:', supabaseError);
-            } else {
-                console.log('Supabase sync successful for user:', window.currentUser.uid);
-            }
-        } catch (err) {
-            console.error('Failed to sync to Supabase:', err);
-        }
-    } else {
-        console.warn('No location data available, skipping Supabase sync. Location:', onboardingData.location);
-    }
+    // 4. Set current user data in memory
+    window.currentUserData = {
+        displayName: onboardingData.displayName || 'User',
+        phone: onboardingData.phone || '',
+        bio: onboardingData.bio || '',
+        addressText: onboardingData.addressText || '',
+        services: onboardingData.services || [],
+        photoURL: onboardingData.photoURL || null,
+        portfolio: portfolio,
+        credits: 0,
+        gigCount: 0,
+        rating: 0
+    };
 }
 
 // ========== AUTH UI ==========
