@@ -209,9 +209,28 @@ async function uploadImage(file, folder = 'profiles') {
 // ========== HOME PAGE (Supabase - Infinite Scroll) ==========
 async function loadHomeFeed(reset = false) {
     if (!homeFeed) return;
+    
+    // If no user, show spinner instead of error message
     if (!window.auth?.currentUser) {
-        homeFeed.innerHTML = '<div class="empty-state">Please log in to see providers</div>';
-        return;
+        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+        // Wait for user to appear (Firebase restore)
+        let attempts = 0;
+        const maxAttempts = 20; // 2 seconds max (20 * 100ms)
+        
+        while (!window.auth?.currentUser && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        // If still no user after waiting, show login message
+        if (!window.auth?.currentUser) {
+            homeFeed.innerHTML = '<div class="empty-state">Please log in to see providers</div>';
+            return;
+        }
+        
+        // User appeared, continue to load feed
+        // Reset the feed container and proceed
+        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
     }
     
     // Reset if requested
