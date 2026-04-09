@@ -1171,24 +1171,38 @@ async function setupAuthListener() {
         try {
             const userDoc = await getDoc(doc(db, 'users', user.uid));
             if (userDoc.exists()) {
-                window.currentUserData = userDoc.data();
-                if (!appReadyFired) {
-                    appReadyFired = true;
-                    window.dispatchEvent(new CustomEvent('appReady'));
-                }
-                navigateToPage('home');
+    window.currentUserData = userDoc.data();
+    
+    // IMPORTANT: Do NOT fire 'appReady' yet.
+    // We will wait for the token refresh so Supabase has the correct auth.
+    // This prevents the home feed from loading twice and causing flicker.
+    
+    navigateToPage('home');
+    
+    // Show a loading spinner immediately so user isn't staring at blank screen
+    const homeFeed = document.getElementById('home-feed');
+    if (homeFeed) {
+        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+    }
 
-                    // Force refresh token and reload home feed
-                    setTimeout(() => {
-                        forceRefreshHomeFeed();
-                    }, 500);
-
-                loadNotificationsFromFirestore();
-                
-                setTimeout(() => {
-                    requestNotificationPermission();
-                    setupFCMForegroundListener();
-                }, 2000);
+    loadNotificationsFromFirestore();
+    
+    setTimeout(() => {
+        requestNotificationPermission();
+        setupFCMForegroundListener();
+    }, 2000);
+    
+    // Wait for token refresh, THEN fire appReady so features load once with proper auth
+    setTimeout(async () => {
+        await forceRefreshHomeFeed();
+        
+        // Now fire appReady so other features can initialize
+        if (!appReadyFired) {
+            appReadyFired = true;
+            window.dispatchEvent(new CustomEvent('appReady'));
+        }
+    }, 500);
+}
                 
             } else {
                 hideAuthScreen();
