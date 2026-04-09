@@ -1203,7 +1203,8 @@ async function setupAuthListener() {
         }
     }, 500);
 }
-                
+        }
+
             } else {
                 hideAuthScreen();
                 if (!appReadyFired) {
