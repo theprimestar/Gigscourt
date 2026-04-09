@@ -47,8 +47,8 @@ let lastScrollY = 0;
 let isNavHidden = false;
 let appReadyFired = false;
 let appReadyTimeout = null;
-let authResolved = false;
-let splashScreenTimer = null;
+let authStateChecked = false;
+let authScreenTimeout = null;
 
 // ========== PRESET SERVICES (30) ==========
 const PRESET_SERVICES = [
@@ -1129,96 +1129,78 @@ function hideVerificationScreen() {
 }
 
 // ========== AUTH STATE LISTENER ==========
-function setupAuthListener() {
-    onAuthStateChanged(auth, async (user) => {
-        window.currentUser = user;
+async function setupAuthListener() {
+    // Wait for Firebase to settle initial auth state
+    await auth.authStateReady();
+    
+    // Get the final current user after auth state is settled
+    const user = auth.currentUser;
+    window.currentUser = user;
+    
+    if (user) {
+        // User is logged in - hide auth screen immediately
+        hideAuthScreen();
         
-        // Cancel any pending splash timer
-        if (splashScreenTimer) {
-            clearTimeout(splashScreenTimer);
-            splashScreenTimer = null;
-        }
-        
-        if (user) {
-            // User is logged in
-            try {
-                const userDoc = await getDoc(doc(db, 'users', user.uid));
-                if (userDoc.exists()) {
-                    window.currentUserData = userDoc.data();
-                    // Existing user - hide auth screen, show main app
-                    hideAuthScreen();
-                    if (!appReadyFired) {
-                        appReadyFired = true;
-                        window.dispatchEvent(new CustomEvent('appReady'));
-                    }
-                    navigateToPage('home');
-
-                    // Refresh home feed to ensure it loads correctly
-                    if (typeof loadHomeFeed === 'function') {
-                        setTimeout(() => {
-                            loadHomeFeed(true);
-                        }, 500);
-                    }
-
-                    // Load notifications from Firestore
-                    loadNotificationsFromFirestore();
-                    
-                    // Request notification permission after login
-                    setTimeout(() => {
-                        requestNotificationPermission();
-                        setupFCMForegroundListener();
-                    }, 2000);
-                    
-                } else {
-                    // New user - needs email verification first
-                    hideAuthScreen();
-                    if (!appReadyFired) {
-                        appReadyFired = true;
-                        window.dispatchEvent(new CustomEvent('appReady'));
-                    }
-                    
-                    // Check if email is verified
-                    if (user.emailVerified) {
-                        showOnboarding();
-                    } else {
-                        showVerificationRequiredScreen();
-                    }
-                }
-            } catch (error) {
-                console.error('Error loading user data:', error);
+        try {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists()) {
+                window.currentUserData = userDoc.data();
                 if (!appReadyFired) {
                     appReadyFired = true;
                     window.dispatchEvent(new CustomEvent('appReady'));
                 }
-                showToast('Error loading profile. Please refresh.', 'error');
+                navigateToPage('home');
+
+                // Refresh home feed
+                if (typeof loadHomeFeed === 'function') {
+                    setTimeout(() => {
+                        loadHomeFeed(true);
+                    }, 500);
+                }
+
+                loadNotificationsFromFirestore();
+                
+                setTimeout(() => {
+                    requestNotificationPermission();
+                    setupFCMForegroundListener();
+                }, 2000);
+                
+            } else {
+                hideAuthScreen();
+                if (!appReadyFired) {
+                    appReadyFired = true;
+                    window.dispatchEvent(new CustomEvent('appReady'));
+                }
+                
+                if (user.emailVerified) {
+                    showOnboarding();
+                } else {
+                    showVerificationRequiredScreen();
+                }
             }
-            
-            // Hide splash screen after auth is resolved
-            hideSplashScreen();
-            
-        } else {
-            // No user logged in
-            window.currentUserData = null;
-            
-            // If this is the first time we see no user, show spinner
-            if (!authResolved) {
-                showSplashSpinner();
+        } catch (error) {
+            console.error('Error loading user data:', error);
+            if (!appReadyFired) {
+                appReadyFired = true;
+                window.dispatchEvent(new CustomEvent('appReady'));
             }
-            
-            // Set a timer to show auth screen if no user appears
-            splashScreenTimer = setTimeout(() => {
-                showAuthScreen();
-                hideSplashScreen();
-                authResolved = true;
-                splashScreenTimer = null;
-            }, 2000);
+            showToast('Error loading profile. Please refresh.', 'error');
         }
         
-        // Mark auth as resolved after first response
-        if (!authResolved) {
-            authResolved = true;
-        }
-    });
+        // Hide splash screen
+        hideSplashScreen();
+        
+    } else {
+        // No user found - show spinner first
+        showSplashSpinner();
+        
+        // Give a short delay to ensure no user appears (handles edge cases)
+        authScreenTimeout = setTimeout(() => {
+            showAuthScreen();
+            hideSplashScreen();
+            authScreenTimeout = null;
+        }, 1500);
+    }
 }
 
 // ========== PROFILE PICTURE BOTTOM SHEET ==========
