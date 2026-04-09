@@ -74,7 +74,7 @@ let pullToRefreshState = {
         pullDistance: 0,
         isPulling: false,
         isRefreshing: false,
-        threshold: 60,
+        threshold: 80,
         maxPull: 100,
         indicator: null,
         textEl: null,
@@ -89,7 +89,7 @@ let pullToRefreshState = {
         pullDistance: 0,
         isPulling: false,
         isRefreshing: false,
-        threshold: 60,
+        threshold: 80,
         maxPull: 100,
         indicator: null,
         textEl: null,
@@ -524,7 +524,7 @@ function handleTouchMove(e, page) {
     
     const container = state.container;
     
-    // CRITICAL: Only block scroll if we're at the very top AND pulling down
+    // Only activate if at the very top
     const isAtTop = container.scrollTop <= 0;
     const currentY = e.touches[0].clientY;
     const deltaY = currentY - state.startY;
@@ -536,19 +536,19 @@ function handleTouchMove(e, page) {
         return;
     }
     
-    // We're at top and pulling down - this is a pull-to-refresh gesture
-    // Only prevent default when we're actively pulling (deltaY > 5 for early detection)
-    if (deltaY > 5) {
+    // Only prevent default after a significant pull (15px)
+    // This allows casual flicks to scroll normally
+    if (deltaY > 15) {
         e.preventDefault();
     }
     
-    // Only start showing indicator after a small threshold (10px)
-    if (deltaY > 10) {
+    // Only start showing indicator after an even larger threshold (25px)
+    if (deltaY > 25) {
         state.isPulling = true;
         state.currentY = currentY;
         
-        // Apply rubber band effect
-        let pullDistance = deltaY * 0.5; // Resistance
+        // Apply stronger rubber band effect (0.35 = heavier pull)
+        let pullDistance = deltaY * 0.35;
         if (pullDistance > state.maxPull) {
             pullDistance = state.maxPull;
         }
