@@ -294,8 +294,11 @@ async function loadHomeFeed(reset = false) {
         // Check if no more providers
         if (!providers || providers.length === 0) {
             hasMoreHomeFeed = false;
-            if (homeFeed.children.length === 0) {
-                homeFeed.innerHTML = '<div class="empty-state">No providers found nearby</div>';
+            if (homeFeed.children.length === 0 || (homeFeed.children.length === 1 && homeFeed.querySelector('.loading-spinner'))) {
+                // Remove spinner first, then show empty state
+                const spinner = homeFeed.querySelector('.loading-spinner');
+                if (spinner) spinner.remove();
+                homeFeed.insertAdjacentHTML('beforeend', '<div class="empty-state">No providers found nearby</div>');
             }
             isHomeFeedLoading = false;
             return;
@@ -364,8 +367,18 @@ async function loadHomeFeed(reset = false) {
             </div>
         `).join('');
         
-        // Append to feed
-        homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
+        // SMOOTH TRANSITION: Add cards FIRST, then remove spinner
+        // This prevents the empty gap between spinner disappearing and cards appearing
+        
+        // If this is a reset (first load), remove the spinner after adding cards
+        if (reset) {
+            homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
+            const spinner = homeFeed.querySelector('.loading-spinner');
+            if (spinner) spinner.remove();
+        } else {
+            // For infinite scroll (loading more), just append
+            homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
+        }
         
         // Attach click listeners to new cards
         document.querySelectorAll('#home-feed .card:not([data-listener])').forEach(card => {
@@ -378,8 +391,10 @@ async function loadHomeFeed(reset = false) {
         
     } catch (error) {
         console.error('loadHomeFeed error:', error);
-        if (homeFeed.children.length === 0) {
-            homeFeed.innerHTML = '<div class="empty-state">Error loading feed. Pull to refresh.</div>';
+        if (homeFeed.children.length === 0 || (homeFeed.children.length === 1 && homeFeed.querySelector('.loading-spinner'))) {
+            const spinner = homeFeed.querySelector('.loading-spinner');
+            if (spinner) spinner.remove();
+            homeFeed.insertAdjacentHTML('beforeend', '<div class="empty-state">Error loading feed. Pull to refresh.</div>');
         }
     } finally {
         isHomeFeedLoading = false;
