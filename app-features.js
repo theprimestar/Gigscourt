@@ -186,10 +186,21 @@ async function uploadImage(file, folder = 'profiles') {
         formData.append('token', authParams.token);
         formData.append('expire', authParams.expire);
         
+        // Add timeout to prevent hanging
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
         const response = await fetch(`https://upload.imagekit.io/api/v1/files/upload`, {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+            throw new Error(`Upload failed with status ${response.status}`);
+        }
         
         const data = await response.json();
         
@@ -197,11 +208,16 @@ async function uploadImage(file, folder = 'profiles') {
             return data.url;
         } else {
             console.error('Upload error:', data);
-            throw new Error(data.message || 'Upload failed');
+            throw new Error(data.message || 'Upload failed - no URL returned');
         }
     } catch (error) {
         console.error('uploadImage error:', error);
-        throw error;
+        // Don't throw during onboarding - return null instead
+        // This allows account creation to continue without photo
+        if (error.name === 'AbortError') {
+            console.error('Upload timed out after 30 seconds');
+        }
+        return null;
     }
 }
 
