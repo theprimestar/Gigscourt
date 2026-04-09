@@ -47,6 +47,8 @@ let lastScrollY = 0;
 let isNavHidden = false;
 let appReadyFired = false;
 let appReadyTimeout = null;
+let authResolved = false;
+let splashScreenTimer = null;
 
 // ========== PRESET SERVICES (30) ==========
 const PRESET_SERVICES = [
@@ -80,6 +82,24 @@ function showToast(message, type = 'info') {
         toast.style.opacity = '0';
         setTimeout(() => toast.remove(), 300);
     }, 3000);
+}
+
+// ========== SPLASH SCREEN CONTROL ==========
+function showSplashSpinner() {
+    const spinner = document.getElementById('splash-spinner');
+    if (spinner) {
+        spinner.style.display = 'block';
+    }
+}
+
+function hideSplashScreen() {
+    const splashScreen = document.getElementById('splash-screen');
+    if (splashScreen) {
+        splashScreen.style.opacity = '0';
+        setTimeout(() => {
+            splashScreen.style.display = 'none';
+        }, 500);
+    }
 }
 
 // ========== FCM NOTIFICATIONS ==========
@@ -1113,6 +1133,12 @@ function setupAuthListener() {
     onAuthStateChanged(auth, async (user) => {
         window.currentUser = user;
         
+        // Cancel any pending splash timer
+        if (splashScreenTimer) {
+            clearTimeout(splashScreenTimer);
+            splashScreenTimer = null;
+        }
+        
         if (user) {
             // User is logged in
             try {
@@ -1144,20 +1170,20 @@ function setupAuthListener() {
                     }, 2000);
                     
                 } else {
-    // New user - needs email verification first
-    hideAuthScreen();
-    if (!appReadyFired) {
-        appReadyFired = true;
-        window.dispatchEvent(new CustomEvent('appReady'));
-    }
-    
-    // Check if email is verified
-    if (user.emailVerified) {
-        showOnboarding();
-    } else {
-        showVerificationRequiredScreen();
-    }
-}
+                    // New user - needs email verification first
+                    hideAuthScreen();
+                    if (!appReadyFired) {
+                        appReadyFired = true;
+                        window.dispatchEvent(new CustomEvent('appReady'));
+                    }
+                    
+                    // Check if email is verified
+                    if (user.emailVerified) {
+                        showOnboarding();
+                    } else {
+                        showVerificationRequiredScreen();
+                    }
+                }
             } catch (error) {
                 console.error('Error loading user data:', error);
                 if (!appReadyFired) {
@@ -1166,13 +1192,31 @@ function setupAuthListener() {
                 }
                 showToast('Error loading profile. Please refresh.', 'error');
             }
+            
+            // Hide splash screen after auth is resolved
+            hideSplashScreen();
+            
         } else {
-            // No user logged in - show auth screen after splash screen finishes
+            // No user logged in
             window.currentUserData = null;
-            // Wait 1.5 seconds for splash screen to complete
-            setTimeout(() => {
+            
+            // If this is the first time we see no user, show spinner
+            if (!authResolved) {
+                showSplashSpinner();
+            }
+            
+            // Set a timer to show auth screen if no user appears
+            splashScreenTimer = setTimeout(() => {
                 showAuthScreen();
-            }, 1500);
+                hideSplashScreen();
+                authResolved = true;
+                splashScreenTimer = null;
+            }, 2000);
+        }
+        
+        // Mark auth as resolved after first response
+        if (!authResolved) {
+            authResolved = true;
         }
     });
 }
@@ -1223,17 +1267,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupProfilePictureHandler();
     
     // Setup auth listener (this will show auth screen or main app based on login state)
-    setupAuthListener();
-    
-    // Hide splash screen after timeout
-    setTimeout(() => {
-        if (splashScreen) {
-            splashScreen.style.opacity = '0';
-            setTimeout(() => {
-                splashScreen.style.display = 'none';
-            }, 500);
-        }
-    }, 1500);
+    setupAuthListener();  
 });
 
 // Expose functions for features file
