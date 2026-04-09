@@ -1202,8 +1202,6 @@ async function setupAuthListener() {
             window.dispatchEvent(new CustomEvent('appReady'));
         }
     }, 500);
-}
-        }
 
             } else {
                 hideAuthScreen();
