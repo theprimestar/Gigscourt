@@ -2,14 +2,14 @@
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
-// REPLACE THIS WITH YOUR ACTUAL FIREBASE CONFIG FROM firebase-config.js
+// Firebase configuration (synced with firebase-config.js)
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
+    apiKey: "AIzaSyAqvDHUPuGtZGMephb3dN_31eruuBXnbFE",
+    authDomain: "gigscourt2.firebaseapp.com",
     projectId: "gigscourt2",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    storageBucket: "gigscourt2.firebasestorage.app",
+    messagingSenderId: "505136313803",
+    appId: "1:505136313803:web:2b61e6916efdaf8723324e"
 };
 
 firebase.initializeApp(firebaseConfig);
