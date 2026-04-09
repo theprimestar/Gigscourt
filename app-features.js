@@ -1973,28 +1973,32 @@ async function showTransactionHistory() {
 async function loadProfile(userId = null, skipSpinner = false) {
     const targetId = userId || window.auth.currentUser?.uid;
     if (!targetId || !profileContent) return;
-    if (!window.db) {
-        profileContent.innerHTML = '<div class="empty-state">Loading...</div>';
-        return;
-    }
+    
     try {
         if (!skipSpinner) {
             profileContent.innerHTML = '<div class="loading-spinner"></div>';
         }
-        const userRef = doc(window.db, 'users', targetId);
-        const userDoc = await getDoc(userRef);
-        if (!userDoc.exists) {
+        
+        const profile = await getSingleProfileFromSupabase(targetId);
+        
+        if (!profile) {
             profileContent.innerHTML = '<div class="empty-state">User not found</div>';
             return;
         }
-        const user = { id: userDoc.id, ...userDoc.data() };
-        const isOwnProfile = targetId === window.auth.currentUser?.uid;
         
-        // Track currently viewed user for pull-to-refresh
+        const isOwnProfile = targetId === window.auth.currentUser?.uid;
         window.setCurrentViewedUserId(targetId);
-        const activeStatus = getActiveStatus(user);
-
-        // Update profile page header dynamically
+        
+        // Get location data for active status
+        const { data: locationData } = await supabase
+            .from('provider_locations')
+            .select('last_gig_date, monthly_gig_count')
+            .eq('user_id', targetId)
+            .single();
+        
+        const userWithLocation = { ...profile, ...(locationData || {}) };
+        const activeStatus = getActiveStatus(userWithLocation);
+        
         const profileHeaderTitle = document.getElementById('profile-header-title');
         const settingsBtn = document.getElementById('profile-settings-btn');
         
@@ -2003,33 +2007,33 @@ async function loadProfile(userId = null, skipSpinner = false) {
                 profileHeaderTitle.textContent = 'Profile';
                 if (settingsBtn) settingsBtn.style.display = 'flex';
             } else {
-                profileHeaderTitle.textContent = user.displayName || 'User';
+                profileHeaderTitle.textContent = profile.displayName || 'User';
                 if (settingsBtn) settingsBtn.style.display = 'none';
             }
         }
         
         profileContent.innerHTML = `
             <div class="profile-header">
-                <img class="profile-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="" data-user-id="${user.id}">
-                <h2 class="profile-name">${user.displayName || 'Anonymous'}</h2>
-                <p class="profile-bio">${user.bio || 'No bio yet'}</p>
+                <img class="profile-avatar" src="${profile.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(profile.displayName || 'User')}" alt="" data-user-id="${profile.id}">
+                <h2 class="profile-name">${profile.displayName || 'Anonymous'}</h2>
+                <p class="profile-bio">${profile.bio || 'No bio yet'}</p>
                 ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
             </div>
             <div class="profile-stats">
                 <div class="stat" data-stat="gigs">
-                    <div class="stat-number">${user.gigCount || 0}</div>
+                    <div class="stat-number">${profile.gigCount || 0}</div>
                     <div class="stat-label">Gigs</div>
                 </div>
                 <div class="stat" data-stat="rating">
-                    <div class="stat-number">★ ${(user.rating || 0).toFixed(1)}</div>
+                    <div class="stat-number">★ ${(profile.rating || 0).toFixed(1)}</div>
                     <div class="stat-label">Rating</div>
                 </div>
                 <div class="stat" data-stat="credits">
-                    <div class="stat-number">${user.credits || 0}</div>
+                    <div class="stat-number">${profile.credits || 0}</div>
                     <div class="stat-label">Credits</div>
                 </div>
             </div>
-            <div class="profile-address">📍 ${user.addressText || 'No address set'}</div>
+            <div class="profile-address">📍 ${profile.addressText || 'No address set'}</div>
             <div class="profile-actions">
                 ${isOwnProfile ? `
                     <button id="edit-profile-btn" class="btn-secondary">Edit Profile</button>
@@ -2042,17 +2046,18 @@ async function loadProfile(userId = null, skipSpinner = false) {
             </div>
             <div class="services-section">
                 <div class="section-title">Services Offered</div>
-                <div class="card-services" id="profile-services-list">${(user.services || []).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+                <div class="card-services" id="profile-services-list">${(profile.services || []).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
                 ${isOwnProfile ? '<button id="edit-services-btn" class="btn-secondary" style="margin-top: 12px;">Edit Services</button>' : ''}
             </div>
             <div class="portfolio-section">
                 <div class="section-title">Portfolio</div>
                 <div class="portfolio-grid" id="portfolio-grid">
-                    ${(user.portfolio || []).map(img => `<img src="${img}" class="portfolio-item">`).join('')}
+                    ${(profile.portfolio || []).map(img => `<img src="${img}" class="portfolio-item">`).join('')}
                 </div>
                 ${isOwnProfile ? '<button id="add-portfolio-btn" class="btn-secondary" style="margin-top: 12px;">+ Add Portfolio Image (Max 15)</button>' : ''}
             </div>
         `;
+        
         if (isOwnProfile) {
             document.getElementById('edit-profile-btn')?.addEventListener('click', editProfile);
             document.getElementById('register-gig-profile-btn')?.addEventListener('click', showRecentChatsForGig);
@@ -2062,12 +2067,14 @@ async function loadProfile(userId = null, skipSpinner = false) {
             document.getElementById('edit-services-btn')?.addEventListener('click', editServices);
             document.getElementById('add-portfolio-btn')?.addEventListener('click', addPortfolioImage);
         } else {
-            document.getElementById('contact-now-btn')?.addEventListener('click', () => openChat(user.id));
+            document.getElementById('contact-now-btn')?.addEventListener('click', () => openChat(profile.id));
         }
+        
         document.querySelectorAll('.portfolio-item').forEach(img => {
             img.addEventListener('click', () => window.openBottomSheet(`<img src="${img.src}" style="width: 100%; border-radius: 20px;">`));
         });
         document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
+        
     } catch (error) {
         console.error('loadProfile error:', error);
         profileContent.innerHTML = '<div class="empty-state">Error loading profile. Pull to refresh.</div>';
