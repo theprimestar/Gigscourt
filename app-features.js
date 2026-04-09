@@ -215,7 +215,7 @@ async function loadHomeFeed(reset = false) {
         homeFeed.innerHTML = '<div class="loading-spinner"></div>';
         // Wait for user to appear (Firebase restore)
         let attempts = 0;
-        const maxAttempts = 20; // 2 seconds max (20 * 100ms)
+        const maxAttempts = 50; // 2 seconds max (20 * 100ms)
         
         while (!window.auth?.currentUser && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 100));
