@@ -512,7 +512,9 @@ function handleTouchStart(e, page) {
     if (!state.enabled || state.isRefreshing) return;
     
     const container = state.container;
-    if (container.scrollTop > 0) return; // Only activate when at top
+    
+    // Only track if at the very top
+    if (container.scrollTop > 1) return;
     
     state.startY = e.touches[0].clientY;
     state.isPulling = false;
@@ -524,30 +526,33 @@ function handleTouchMove(e, page) {
     
     const container = state.container;
     
-    // Only activate if at the very top
-    const isAtTop = container.scrollTop <= 0;
-    const currentY = e.touches[0].clientY;
-    const deltaY = currentY - state.startY;
-    const isPullingDown = deltaY > 0;
-    
-    // If not at top, or not pulling down, let normal scroll happen
-    if (!isAtTop || !isPullingDown) {
+    // STRICT CHECK: Must be at the very top (allow 1px margin for rounding errors)
+    if (container.scrollTop > 1) {
         state.isPulling = false;
         return;
     }
     
-    // Only prevent default after a significant pull (15px)
-    // This allows casual flicks to scroll normally
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - state.startY;
+    
+    // If pulling UP or not moving, do nothing
+    if (deltaY <= 0) {
+        state.isPulling = false;
+        return;
+    }
+    
+    // We are at top AND pulling down - this is a pull-to-refresh gesture
+    // Only prevent default after a deliberate pull (15px)
     if (deltaY > 15) {
         e.preventDefault();
     }
     
-    // Only start showing indicator after an even larger threshold (25px)
+    // Only show indicator after an even larger threshold (25px)
     if (deltaY > 25) {
         state.isPulling = true;
         state.currentY = currentY;
         
-        // Apply stronger rubber band effect (0.35 = heavier pull)
+        // Apply resistance
         let pullDistance = deltaY * 0.35;
         if (pullDistance > state.maxPull) {
             pullDistance = state.maxPull;
