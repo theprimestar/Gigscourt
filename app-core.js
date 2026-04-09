@@ -396,6 +396,28 @@ function setupNavigation() {
     });
 }
 
+// ========== FORCE REFRESH HOME FEED AFTER LOGIN ==========
+async function forceRefreshHomeFeed() {
+    try {
+        // Force refresh Firebase token
+        if (window.auth?.currentUser) {
+            await window.auth.currentUser.getIdToken(true);
+            console.log('Token refreshed');
+        }
+        
+        // Wait a moment for Supabase to recognize the new token
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Reload home feed if function exists
+        if (typeof loadHomeFeed === 'function') {
+            await loadHomeFeed(true);
+            console.log('Home feed refreshed after login');
+        }
+    } catch (error) {
+        console.error('Force refresh home feed error:', error);
+    }
+}
+
 // ========== SCROLL HANDLER ==========
 function setupScrollHandlers() {
     const homePage = document.getElementById('home-page');
@@ -792,6 +814,11 @@ function showOnboardingStep5() {
         hideOnboardingScreen();
         navigateToPage('home');
         showToast('Welcome to GigsCourt! 🎉');
+        
+        // Force refresh token and reload home feed
+        setTimeout(() => {
+            forceRefreshHomeFeed();
+        }, 500);
     });
     
     // Setup back button
@@ -1151,12 +1178,10 @@ async function setupAuthListener() {
                 }
                 navigateToPage('home');
 
-                // Refresh home feed
-                if (typeof loadHomeFeed === 'function') {
+                    // Force refresh token and reload home feed
                     setTimeout(() => {
-                        loadHomeFeed(true);
+                        forceRefreshHomeFeed();
                     }, 500);
-                }
 
                 loadNotificationsFromFirestore();
                 
