@@ -64,6 +64,40 @@ let isSearchLoading = false;
 let hasMoreSearch = true;
 const SEARCH_LIMIT = 20;
 
+// ========== PULL TO REFRESH STATE ==========
+let pullToRefreshState = {
+    // Home page
+    home: {
+        enabled: false,
+        startY: 0,
+        currentY: 0,
+        pullDistance: 0,
+        isPulling: false,
+        isRefreshing: false,
+        threshold: 60,
+        maxPull: 100,
+        indicator: null,
+        textEl: null,
+        spinnerEl: null,
+        container: null
+    },
+    // Profile page
+    profile: {
+        enabled: false,
+        startY: 0,
+        currentY: 0,
+        pullDistance: 0,
+        isPulling: false,
+        isRefreshing: false,
+        threshold: 60,
+        maxPull: 100,
+        indicator: null,
+        textEl: null,
+        spinnerEl: null,
+        container: null
+    }
+};
+
 // ========== SEND PUSH NOTIFICATION ==========
 async function sendPushNotification(userId, title, body, clickAction = '/') {
     if (!userId) return;
@@ -435,6 +469,192 @@ function setupInfiniteScroll() {
         }
     });
 }
+
+// ========== PULL TO REFRESH ==========
+function setupPullToRefresh() {
+    // Setup for Home page
+    const homePage = document.getElementById('home-page');
+    const homeIndicator = document.getElementById('home-pull-indicator');
+    if (homePage && homeIndicator) {
+        pullToRefreshState.home.indicator = homeIndicator;
+        pullToRefreshState.home.textEl = homeIndicator.querySelector('.pull-text');
+        pullToRefreshState.home.spinnerEl = homeIndicator.querySelector('.pull-spinner');
+        pullToRefreshState.home.container = homePage;
+        pullToRefreshState.home.enabled = true;
+        
+        // Touch events for home page
+        homePage.addEventListener('touchstart', (e) => handleTouchStart(e, 'home'), { passive: false });
+        homePage.addEventListener('touchmove', (e) => handleTouchMove(e, 'home'), { passive: false });
+        homePage.addEventListener('touchend', (e) => handleTouchEnd(e, 'home'));
+    }
+    
+    // Setup for Profile page
+    const profilePage = document.getElementById('profile-page');
+    const profileIndicator = document.getElementById('profile-pull-indicator');
+    if (profilePage && profileIndicator) {
+        pullToRefreshState.profile.indicator = profileIndicator;
+        pullToRefreshState.profile.textEl = profileIndicator.querySelector('.pull-text');
+        pullToRefreshState.profile.spinnerEl = profileIndicator.querySelector('.pull-spinner');
+        pullToRefreshState.profile.container = profilePage;
+        pullToRefreshState.profile.enabled = true;
+        
+        // Touch events for profile page
+        profilePage.addEventListener('touchstart', (e) => handleTouchStart(e, 'profile'), { passive: false });
+        profilePage.addEventListener('touchmove', (e) => handleTouchMove(e, 'profile'), { passive: false });
+        profilePage.addEventListener('touchend', (e) => handleTouchEnd(e, 'profile'));
+    }
+}
+
+function handleTouchStart(e, page) {
+    const state = pullToRefreshState[page];
+    if (!state.enabled || state.isRefreshing) return;
+    
+    const container = state.container;
+    if (container.scrollTop > 0) return; // Only activate when at top
+    
+    state.startY = e.touches[0].clientY;
+    state.isPulling = false;
+}
+
+function handleTouchMove(e, page) {
+    const state = pullToRefreshState[page];
+    if (!state.enabled || state.isRefreshing) return;
+    
+    const container = state.container;
+    if (container.scrollTop > 0) {
+        state.isPulling = false;
+        return;
+    }
+    
+    const currentY = e.touches[0].clientY;
+    const deltaY = currentY - state.startY;
+    
+    // Only activate if pulling down
+    if (deltaY > 10) {
+        e.preventDefault(); // Prevent page scroll
+        state.isPulling = true;
+        state.currentY = currentY;
+        
+        // Apply rubber band effect
+        let pullDistance = deltaY * 0.5; // Resistance
+        if (pullDistance > state.maxPull) {
+            pullDistance = state.maxPull;
+        }
+        state.pullDistance = pullDistance;
+        
+        // Update indicator
+        updatePullIndicator(page, pullDistance, state.threshold);
+    }
+}
+
+function handleTouchEnd(e, page) {
+    const state = pullToRefreshState[page];
+    if (!state.enabled || !state.isPulling || state.isRefreshing) return;
+    
+    if (state.pullDistance >= state.threshold) {
+        // Trigger refresh
+        triggerRefresh(page);
+    } else {
+        // Reset
+        resetPullIndicator(page);
+    }
+    
+    state.isPulling = false;
+    state.pullDistance = 0;
+}
+
+function updatePullIndicator(page, distance, threshold) {
+    const state = pullToRefreshState[page];
+    const indicator = state.indicator;
+    const textEl = state.textEl;
+    
+    if (!indicator || !textEl) return;
+    
+    // Set height and opacity
+    indicator.style.height = distance + 'px';
+    indicator.style.opacity = Math.min(distance / threshold, 1);
+    indicator.classList.add('visible');
+    
+    if (distance >= threshold) {
+        indicator.classList.add('release');
+        textEl.textContent = 'Release to refresh';
+        indicator.setAttribute('data-state', 'release');
+        
+        // Haptic feedback on threshold cross (only once)
+        if (!indicator.dataset.thresholdReached) {
+            window.haptic('light');
+            indicator.dataset.thresholdReached = 'true';
+        }
+    } else {
+        indicator.classList.remove('release');
+        textEl.textContent = 'Pull to refresh';
+        indicator.setAttribute('data-state', 'pulling');
+        delete indicator.dataset.thresholdReached;
+    }
+}
+
+function resetPullIndicator(page) {
+    const state = pullToRefreshState[page];
+    const indicator = state.indicator;
+    
+    if (!indicator) return;
+    
+    indicator.style.height = '0';
+    indicator.style.opacity = '0';
+    indicator.classList.remove('visible', 'release', 'refreshing');
+    indicator.setAttribute('data-state', '');
+    delete indicator.dataset.thresholdReached;
+    
+    if (state.textEl) {
+        state.textEl.textContent = 'Pull to refresh';
+    }
+}
+
+async function triggerRefresh(page) {
+    const state = pullToRefreshState[page];
+    const indicator = state.indicator;
+    const textEl = state.textEl;
+    
+    if (!indicator || state.isRefreshing) return;
+    
+    state.isRefreshing = true;
+    indicator.classList.add('refreshing');
+    indicator.classList.remove('release');
+    indicator.style.height = '60px';
+    indicator.style.opacity = '1';
+    textEl.textContent = 'Refreshing...';
+    
+    try {
+        if (page === 'home') {
+            await window.loadHomeFeed(true);
+        } else if (page === 'profile') {
+            // Get current profile ID if viewing someone else's profile
+            const profileHeader = document.getElementById('profile-header-title');
+            const isOwnProfile = profileHeader && profileHeader.textContent === 'Profile';
+            const viewingUserId = isOwnProfile ? null : (window.currentViewedUserId || null);
+            await window.loadProfile(viewingUserId);
+        }
+        
+        // Haptic feedback on completion
+        window.haptic('light');
+        
+    } catch (error) {
+        console.error('Pull to refresh error:', error);
+        window.showToast('Error refreshing. Try again.', 'error');
+    } finally {
+        // Reset after refresh completes
+        setTimeout(() => {
+            state.isRefreshing = false;
+            resetPullIndicator(page);
+        }, 300);
+    }
+}
+
+// Helper to track currently viewed profile user ID
+let currentViewedUserId = null;
+window.setCurrentViewedUserId = function(userId) {
+    currentViewedUserId = userId;
+};
 
 // ========== UPDATE MESSAGES TAB BADGE ==========
 function updateMessagesTabBadge(count) {
@@ -1673,6 +1893,9 @@ async function loadProfile(userId = null) {
         }
         const user = { id: userDoc.id, ...userDoc.data() };
         const isOwnProfile = targetId === window.auth.currentUser?.uid;
+        
+        // Track currently viewed user for pull-to-refresh
+        window.setCurrentViewedUserId(targetId);
         const activeStatus = getActiveStatus(user);
 
         // Update profile page header dynamically
@@ -2058,6 +2281,17 @@ async function initFeatures() {
         chatsList: !!chatsList,
         profileContent: !!profileContent
     });
+
+    console.log('initFeatures: DOM elements found:', {
+        homeFeed: !!homeFeed,
+        chatsList: !!chatsList,
+        profileContent: !!profileContent
+    });
+    
+    // Setup pull to refresh
+    setupPullToRefresh();
+    
+    // Run initial data loads with error handling
     
     // Run initial data loads with error handling
     
