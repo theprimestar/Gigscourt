@@ -2100,34 +2100,26 @@ async function initFeatures() {
     console.log('initFeatures: All done!');
 }
 
-// ========== WAIT FOR appReady EVENT (IMPROVED) ==========
-// This ensures features only start after Firebase is ready
+// ========== WAIT FOR appReady EVENT ==========
+// IMPORTANT: We ONLY initialize features when appReady fires.
+// app-core.js controls this timing to ensure Firebase auth and token refresh complete first.
+// This prevents the home feed from loading twice and flickering.
 
-// First, check if Firebase is already available
-if (window.db && window.auth && window.firebaseConfig) {
-    console.log('Firebase already available, waiting for DOM');
-    document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => {
-            initFeatures();
-        }, 100);
-    });
-} else {
-    console.log('Waiting for appReady event from core...');
-    window.addEventListener('appReady', () => {
-        console.log('appReady received!');
-        setTimeout(() => {
-            initFeatures();
-        }, 100);
-    });
-}
+window.addEventListener('appReady', () => {
+    console.log('appReady received! Initializing features...');
+    setTimeout(() => {
+        initFeatures();
+    }, 100);
+});
 
-// Also try after a delay as fallback (safety net)
+// Safety net: If appReady never fires for some reason, initialize after 5 seconds
+// This ensures the app doesn't stay broken forever
 setTimeout(() => {
     if (!featuresInitialized && window.db && window.auth) {
-        console.log('Fallback: Initializing features after timeout');
+        console.log('Safety net: Initializing features after timeout');
         initFeatures();
     }
-}, 3000);
+}, 5000);
 
 // Expose functions globally
 window.loadHomeFeed = loadHomeFeed;
