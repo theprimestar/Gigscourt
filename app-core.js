@@ -1127,6 +1127,13 @@ function setupAuthListener() {
                     }
                     navigateToPage('home');
 
+                    // Refresh home feed to ensure it loads correctly
+                    if (typeof loadHomeFeed === 'function') {
+                        setTimeout(() => {
+                            loadHomeFeed(true);
+                        }, 500);
+                    }
+
                     // Load notifications from Firestore
                     loadNotificationsFromFirestore();
                     
@@ -1160,9 +1167,12 @@ function setupAuthListener() {
                 showToast('Error loading profile. Please refresh.', 'error');
             }
         } else {
-            // No user logged in - show auth screen, hide main app
+            // No user logged in - show auth screen after splash screen finishes
             window.currentUserData = null;
-            showAuthScreen();
+            // Wait 1.5 seconds for splash screen to complete
+            setTimeout(() => {
+                showAuthScreen();
+            }, 1500);
         }
     });
 }
