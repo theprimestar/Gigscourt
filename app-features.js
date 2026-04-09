@@ -57,6 +57,7 @@ let isHomeFeedLoading = false;
 let hasMoreHomeFeed = true;
 const HOME_FEED_LIMIT = 20;
 let chatListUnsubscribe = null;
+let globalUnreadListener = null;
 // Supabase search pagination
 let searchOffset = 0;
 let isSearchLoading = false;
@@ -413,6 +414,50 @@ function updateMessagesTabBadge(count) {
         `;
         messagesTab.style.position = 'relative';
         messagesTab.appendChild(badge);
+    }
+}
+
+// ========== GLOBAL UNREAD LISTENER (Updates badge anywhere) ==========
+function startGlobalUnreadListener() {
+    if (!window.auth?.currentUser) {
+        console.log('No user, skipping global unread listener');
+        return;
+    }
+    
+    const userId = window.auth.currentUser.uid;
+    const chatsRef = collection(window.db, 'chats');
+    const q = query(
+        chatsRef,
+        where('participants', 'array-contains', userId)
+    );
+    
+    if (globalUnreadListener) {
+        globalUnreadListener();
+        globalUnreadListener = null;
+    }
+    
+    console.log('Starting global unread listener for user:', userId);
+    
+    globalUnreadListener = onSnapshot(q, (snapshot) => {
+        let totalUnread = 0;
+        snapshot.forEach(doc => {
+            const chat = doc.data();
+            const unreadCount = chat.unreadCount?.[userId] || 0;
+            totalUnread += unreadCount;
+        });
+        
+        console.log('Global unread count updated:', totalUnread);
+        updateMessagesTabBadge(totalUnread);
+    }, (error) => {
+        console.error('Global unread listener error:', error);
+    });
+}
+
+function stopGlobalUnreadListener() {
+    if (globalUnreadListener) {
+        globalUnreadListener();
+        globalUnreadListener = null;
+        console.log('Global unread listener stopped');
     }
 }
 
@@ -1857,6 +1902,8 @@ async function showSettings() {
                 chatListUnsubscribe();
                 chatListUnsubscribe = null;
             }
+            // Clean up global unread listener
+            stopGlobalUnreadListener();   // <-- ADD THIS LINE
             await window.signOut(window.auth);
             window.location.reload();
         });
@@ -1999,6 +2046,7 @@ async function initFeatures() {
     try {
         if (chatsList) {
             await loadChats();
+            startGlobalUnreadListener();   // <-- ADD THIS LINE
             console.log('loadChats completed');
         }
     } catch (e) {
