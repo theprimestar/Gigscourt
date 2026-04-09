@@ -75,8 +75,8 @@ let pullToRefreshState = {
         isPulling: false,
         isRefreshing: false,
         startedAtTop: false,
-        threshold: 80,
-        maxPull: 100,
+        threshold: 60,
+        maxPull: 60,
         indicator: null,
         textEl: null,
         spinnerEl: null,
@@ -91,8 +91,8 @@ let pullToRefreshState = {
         isPulling: false,
         isRefreshing: false,
         startedAtTop: false,
-        threshold: 80,
-        maxPull: 100,
+        threshold: 60,
+        maxPull: 60,
         indicator: null,
         textEl: null,
         spinnerEl: null,
@@ -530,7 +530,6 @@ function handleTouchMove(e, page) {
     if (!state.enabled || state.isRefreshing) return;
     
     // CRITICAL: Only allow pull-to-refresh if we STARTED at the top
-    // This prevents accidental triggers from rubber-band bounce
     if (!state.startedAtTop) {
         state.isPulling = false;
         return;
@@ -554,18 +553,18 @@ function handleTouchMove(e, page) {
         return;
     }
     
-    // Only prevent default after a deliberate pull (15px)
-    if (deltaY > 15) {
+    // Only prevent default after a deliberate pull (20px)
+    if (deltaY > 20) {
         e.preventDefault();
     }
     
-    // Only show indicator after an even larger threshold (25px)
-    if (deltaY > 25) {
+    // Only show indicator after an even larger threshold (35px)
+    if (deltaY > 35) {
         state.isPulling = true;
         state.currentY = currentY;
         
-        // Apply resistance
-        let pullDistance = deltaY * 0.35;
+        // STIFFER: Apply stronger resistance (0.2)
+        let pullDistance = deltaY * 0.2;
         if (pullDistance > state.maxPull) {
             pullDistance = state.maxPull;
         }
