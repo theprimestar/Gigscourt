@@ -1557,26 +1557,42 @@ async function cancelGig(chatId, providerId) {
         
         const currentUser = window.auth.currentUser.uid;
         
-        // Find the pending gig where current user is client
-        const gigsQuery = query(
-            collection(window.db, 'gigs'),
-            where('clientId', '==', currentUser),
-            where('providerId', '==', providerId),
-            where('status', '==', 'pending_review')
-        );
-        const gigSnapshot = await getDocs(gigsQuery);
+        // Find and update the pending gig in Supabase
+        const { data: existingGig, error: findError } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('client_id', currentUser)
+            .eq('provider_id', providerId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
-        if (gigSnapshot.empty) {
+        if (findError) {
+            console.error('Error finding gig:', findError);
+            window.showToast('Error finding gig', 'error');
+            return;
+        }
+        
+        if (!existingGig) {
             window.showToast('No pending gig found to cancel', 'error');
             return;
         }
         
         // Update gig status to cancelled_by_client
-        const gigDoc = gigSnapshot.docs[0];
-        await updateDoc(gigDoc.ref, { 
-            status: 'cancelled_by_client',
-            cancelledAt: new Date().toISOString()
-        });
+        const { error: updateError } = await supabase
+            .from('gigs')
+            .update({
+                status: 'cancelled_by_client',
+                cancelled_at: new Date().toISOString()
+            })
+            .eq('client_id', currentUser)
+            .eq('provider_id', providerId)
+            .eq('status', 'pending_review');
+        
+        if (updateError) {
+            console.error('Error cancelling gig:', updateError);
+            window.showToast('Error cancelling gig', 'error');
+            return;
+        }
         
         // Update chat to remove pending review flag
         const chatRef = doc(window.db, 'chats', chatId);
