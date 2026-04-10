@@ -1587,9 +1587,8 @@ async function cancelGig(chatId, providerId) {
         await updateDoc(chatRef, { pendingReview: false });
         
         // Notify provider
-        const providerRef = doc(window.db, 'users', providerId);
-        const providerDoc = await getDoc(providerRef);
-        const providerName = providerDoc.data()?.displayName || 'Provider';
+        const providerData = await getSingleProfileFromSupabase(providerId);
+        const providerName = providerData?.displayName || 'Provider';
         
         window.addNotification(
             'Gig Cancelled',
