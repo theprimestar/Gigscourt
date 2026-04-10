@@ -1204,13 +1204,13 @@ function updateListView(users) {
     searchListFeed.innerHTML = users.map(user => `
         <div class="card" data-user-id="${user.id}">
             <div class="card-header">
-                <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="${user.displayName}">
+                <img class="card-avatar" src="${getOptimizedImageUrl(user.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" alt="${user.displayName}" loading="lazy">
                 <div class="card-info">
                     <div class="card-name">
                         ${user.displayName || 'Anonymous'}
                         ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
                     </div>
-                    <div class="card-rating">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0})</div>
+                    <div class="card-rating">★ ${(user.rating || 0).toFixed(1)} (${user.reviewCount || 0})</div>
                 </div>
             </div>
             <div class="card-services">${(user.services || []).slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
@@ -2224,6 +2224,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
     const fullSizeUrl = getOptimizedImageUrl(img.src, null, null, true);
     window.openBottomSheet(`<img src="${fullSizeUrl}" style="width: 100%; border-radius: 20px;">`);
 });
+        });
         document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
         
     } catch (error) {
