@@ -16,7 +16,7 @@ import {
     orderBy, 
     onSnapshot, 
     doc, 
-    deleteDoc 
+    deleteDoc, 
     limit,
     startAfter
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
