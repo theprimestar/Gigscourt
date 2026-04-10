@@ -1463,6 +1463,67 @@ function setupMessagesScrollObserver(messagesDiv, chatId) {
     });
 }
 
+async function loadMoreMessages(chatId, messagesDiv) {
+    if (!chatId || !lastVisibleMessage) return;
+    
+    isLoadingMoreMessages = true;
+    
+    try {
+        const messagesRef = collection(window.db, 'chats', chatId, 'messages');
+        const q = query(
+            messagesRef,
+            orderBy('timestamp', 'asc'),
+            startAfter(lastVisibleMessage),
+            limit(MESSAGES_PER_PAGE)
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) {
+            hasMoreMessages = false;
+            isLoadingMoreMessages = false;
+            return;
+        }
+        
+        // Build HTML for older messages
+        let olderMessagesHtml = '';
+        snapshot.forEach(doc => {
+            const msg = doc.data();
+            const isMe = msg.senderId === window.auth.currentUser.uid;
+            olderMessagesHtml = `
+                <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
+                    <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
+                        ${msg.text}
+                        ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
+                        <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            ` + olderMessagesHtml;
+        });
+        
+        // Update lastVisibleMessage to the first doc in this batch
+        lastVisibleMessage = snapshot.docs[0];
+        
+        // Remember current scroll height
+        const oldScrollHeight = messagesDiv.scrollHeight;
+        
+        // Insert older messages at the top
+        messagesDiv.insertAdjacentHTML('afterbegin', olderMessagesHtml);
+        
+        // Maintain scroll position
+        const newScrollHeight = messagesDiv.scrollHeight;
+        messagesDiv.scrollTop = newScrollHeight - oldScrollHeight;
+        
+        // Check if there are more messages
+        hasMoreMessages = snapshot.docs.length === MESSAGES_PER_PAGE;
+        
+    } catch (error) {
+        console.error('loadMoreMessages error:', error);
+    } finally {
+        isLoadingMoreMessages = false;
+    }
+}
+
 async function sendMessage(chatId, text) {
     if (!text.trim()) return;
     try {
