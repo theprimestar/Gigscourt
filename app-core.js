@@ -122,11 +122,17 @@ async function requestNotificationPermission() {
         console.log('FCM Token:', token);
         
         if (window.currentUser && token) {
-            const userRef = doc(db, 'users', window.currentUser.uid);
-            await updateDoc(userRef, {
-                fcmToken: token,
-                fcmTokenUpdated: new Date().toISOString()
-            });
+            const { error } = await supabase
+                .from('provider_profiles')
+                .update({
+                    fcm_token: token,
+                    fcm_token_updated: new Date().toISOString()
+                })
+                .eq('user_id', window.currentUser.uid);
+            
+            if (error) {
+                console.error('Failed to save FCM token to Supabase:', error);
+            }
         }
         
         return token;
