@@ -898,7 +898,7 @@ async function saveUserProfile() {
                 services: servicesList,
                 photo_url: onboardingData.photoURL || null,
                 portfolio: portfolio,
-                credits: 0,
+                credits: 6,
                 gig_count: 0,
                 rating: 0,
                 total_rating_sum: 0,
@@ -961,7 +961,7 @@ async function saveUserProfile() {
         services: onboardingData.services || [],
         photoURL: onboardingData.photoURL || null,
         portfolio: portfolio,
-        credits: 0,
+        credits: 6,
         gigCount: 0,
         rating: 0
     };
