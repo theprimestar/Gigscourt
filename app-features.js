@@ -1475,22 +1475,22 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
         const currentUser = window.auth.currentUser.uid;
         
         // Query for pending gig where current user is provider
-        const providerGigQuery = query(
-            collection(window.db, 'gigs'),
-            where('providerId', '==', currentUser),
-            where('clientId', '==', userId),
-            where('status', '==', 'pending_review')
-        );
-        const providerGig = await getDocs(providerGigQuery);
+        const { data: providerGig } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('provider_id', currentUser)
+            .eq('client_id', userId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
         // Query for pending gig where current user is client
-        const clientGigQuery = query(
-            collection(window.db, 'gigs'),
-            where('clientId', '==', currentUser),
-            where('providerId', '==', userId),
-            where('status', '==', 'pending_review')
-        );
-        const clientGig = await getDocs(clientGigQuery);
+        const { data: clientGig } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('client_id', currentUser)
+            .eq('provider_id', userId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
         const registerBtn = document.getElementById('register-gig-chat');
         const reviewBtn = document.getElementById('submit-review-chat');
@@ -1499,11 +1499,10 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
         const clientToast = document.getElementById('pending-review-toast-client');
         
         // Get other user's name for toasts
-        const otherUserRef = doc(window.db, 'users', userId);
-        const otherUserDoc = await getDoc(otherUserRef);
-        const otherUserName = otherUserDoc.data()?.displayName || 'User';
+        const otherUser = await getSingleProfileFromSupabase(userId);
+        const otherUserName = otherUser?.displayName || 'User';
         
-        if (providerGig.size > 0) {
+        if (providerGig) {
             // Current user is provider with pending gig
             if (registerBtn) {
                 registerBtn.disabled = true;
@@ -1517,7 +1516,7 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             if (reviewBtn) reviewBtn.style.display = 'none';
             if (cancelBtn) cancelBtn.style.display = 'none';
         } 
-        else if (clientGig.size > 0) {
+        else if (clientGig) {
             // Current user is client with pending gig
             if (registerBtn) {
                 registerBtn.disabled = true;
