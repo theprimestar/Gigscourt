@@ -2161,9 +2161,11 @@ async function addPortfolioImage() {
 
 async function editProfile() {
     try {
-        const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-        const userDoc = await getDoc(userRef);
-        const user = userDoc.data();
+        const user = await getSingleProfileFromSupabase(window.auth.currentUser.uid);
+        if (!user) {
+            window.showToast('Error loading profile', 'error');
+            return;
+        }
         window.openBottomSheet(`
             <h3 style="margin-bottom: 16px;">Edit Profile</h3>
             <input type="text" id="edit-name" value="${user.displayName || ''}" placeholder="Name" class="search-input" style="margin-bottom: 12px;">
@@ -2182,7 +2184,24 @@ async function editProfile() {
                 if (file) {
                     window.showToast('Uploading...');
                     const url = await uploadImage(file, 'profiles');
-                    await updateDoc(userRef, { photoURL: url });
+                    if (!url) {
+                        window.showToast('Upload failed', 'error');
+                        return;
+                    }
+                    
+                    // Update Supabase
+                    const { error } = await supabase
+                        .from('provider_profiles')
+                        .update({ photo_url: url })
+                        .eq('user_id', window.auth.currentUser.uid);
+                    
+                    if (error) {
+                        console.error('Photo update error:', error);
+                        window.showToast('Error updating photo', 'error');
+                        return;
+                    }
+                    
+                    // Update Firebase Auth
                     await window.updateProfile(window.auth.currentUser, { photoURL: url });
                     window.showToast('Photo updated!');
                     loadProfile();
@@ -2192,16 +2211,28 @@ async function editProfile() {
         });
         document.getElementById('save-profile')?.addEventListener('click', async () => {
             const updates = {
-                displayName: document.getElementById('edit-name').value,
+                display_name: document.getElementById('edit-name').value,
                 phone: document.getElementById('edit-phone').value,
                 bio: document.getElementById('edit-bio').value,
-                addressText: document.getElementById('edit-address').value
+                address_text: document.getElementById('edit-address').value
             };
-            await updateDoc(userRef, updates);
-            await window.updateProfile(window.auth.currentUser, { displayName: updates.displayName });
-            window.closeBottomSheet();
-            window.showToast('Profile updated!');
-            loadProfile();
+            
+            try {
+                const { error } = await supabase
+                    .from('provider_profiles')
+                    .update(updates)
+                    .eq('user_id', window.auth.currentUser.uid);
+                
+                if (error) throw error;
+                
+                await window.updateProfile(window.auth.currentUser, { displayName: updates.display_name });
+                window.closeBottomSheet();
+                window.showToast('Profile updated!');
+                loadProfile();
+            } catch (error) {
+                console.error('Profile update error:', error);
+                window.showToast('Error updating profile', 'error');
+            }
         });
     } catch (error) {
         console.error('editProfile error:', error);
