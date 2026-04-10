@@ -1622,19 +1622,18 @@ async function cancelGig(chatId, providerId) {
 
 async function checkAndShowReviewButton(chatId, userId) {
     try {
-        const gigsRef = collection(window.db, 'gigs');
-        const q = query(
-            gigsRef,
-            where('clientId', '==', window.auth.currentUser.uid),
-            where('providerId', '==', userId),
-            where('status', '==', 'pending_review')
-        );
-        const pendingGig = await getDocs(q);
+        const { data: pendingGig } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('client_id', window.auth.currentUser.uid)
+            .eq('provider_id', userId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
         const registerBtn = document.getElementById('register-gig-chat');
         const reviewBtn = document.getElementById('submit-review-chat');
         
-        if (!pendingGig.empty) {
+        if (pendingGig) {
             if (registerBtn) registerBtn.style.display = 'none';
             if (reviewBtn) reviewBtn.style.display = 'block';
         } else {
