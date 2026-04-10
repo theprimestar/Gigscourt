@@ -2149,9 +2149,6 @@ async function editServices() {
 async function addPortfolioImage() {
     console.log('addPortfolioImage function called');
     try {
-        const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-        
-        // Create and click input FIRST (synchronously, no await)
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
@@ -2161,16 +2158,49 @@ async function addPortfolioImage() {
             if (file) {
                 window.showToast('Uploading...');
                 const url = await uploadImage(file, 'portfolio');
+                if (!url) {
+                    window.showToast('Upload failed', 'error');
+                    return;
+                }
                 
-                // Now do the Firestore operations after upload
-                const userDoc = await getDoc(userRef);
-                const currentPortfolio = userDoc.data().portfolio || [];
+                // Get current portfolio from Supabase
+                const { data: profile, error: fetchError } = await supabase
+                    .from('provider_profiles')
+                    .select('portfolio')
+                    .eq('user_id', window.auth.currentUser.uid)
+                    .single();
+                
+                if (fetchError) {
+                    console.error('Fetch portfolio error:', fetchError);
+                    window.showToast('Error fetching portfolio', 'error');
+                    return;
+                }
+                
+                const currentPortfolio = profile.portfolio || [];
                 if (currentPortfolio.length >= 15) {
                     window.showToast('Maximum 15 images. Delete some first.', 'error');
                     return;
                 }
+                
                 currentPortfolio.push(url);
-                await updateDoc(userRef, { portfolio: currentPortfolio });
+                
+                // Update Supabase
+                const { error: updateError } = await supabase
+                    .from('provider_profiles')
+                    .update({ portfolio: currentPortfolio })
+                    .eq('user_id', window.auth.currentUser.uid);
+                
+                if (updateError) {
+                    console.error('Portfolio update error:', updateError);
+                    window.showToast('Error updating portfolio', 'error');
+                    return;
+                }
+                
+                // Update in-memory currentUserData
+                if (window.currentUserData) {
+                    window.currentUserData.portfolio = currentPortfolio;
+                }
+                
                 window.showToast('Portfolio updated!');
                 loadProfile();
             }
