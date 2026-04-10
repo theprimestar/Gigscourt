@@ -1334,9 +1334,11 @@ await updateDoc(chatRoomRef, {
 });
     
     try {
-        const userRef = doc(window.db, 'users', userId);
-        const userDoc = await getDoc(userRef);
-        const userData = userDoc.data();
+        const userData = await getSingleProfileFromSupabase(userId);
+        if (!userData) {
+            window.showToast('Error loading user', 'error');
+            return;
+        }
         window.openBottomSheet(`
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <h3>${userData.displayName || 'User'}</h3>
