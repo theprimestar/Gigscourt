@@ -410,7 +410,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             hasMoreHomeFeed = false;
         }
         
-        // Fetch full profiles from Firestore
+        // Fetch full profiles from Supabase
         const userIds = providers.map(p => p.user_id);
         const profiles = await fetchProviderProfilesFromSupabase(userIds);
         
