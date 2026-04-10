@@ -11,7 +11,15 @@ import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query
 // Supabase configuration
 const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
 const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    accessToken: async () => {
+        const user = auth.currentUser;
+        if (user) {
+            return await user.getIdToken(true);
+        }
+        return null;
+    }
+});
 
 // ========== INITIALIZATION ==========
 const app = initializeApp(window.firebaseConfig);
