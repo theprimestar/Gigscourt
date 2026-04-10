@@ -234,26 +234,6 @@ function getZoomLevelFromRadius(radiusKm) {
     return 9;
 }
 
-// Helper: Fetch provider profiles from Firestore by user IDs
-async function fetchProviderProfilesFromFirestore(userIds) {
-    if (!userIds || userIds.length === 0) return {};
-    
-    try {
-        const usersRef = collection(window.db, 'users');
-        const q = query(usersRef, where('__name__', 'in', userIds));
-        const snapshot = await getDocs(q);
-        
-        const profiles = {};
-        snapshot.forEach(doc => {
-            profiles[doc.id] = doc.data();
-        });
-        return profiles;
-    } catch (error) {
-        console.error('fetchProviderProfilesFromFirestore error:', error);
-        return {};
-    }
-}
-
 // ========== IMAGE UPLOAD (ImageKit with Authentication) ==========
 async function getImageKitAuthParams() {
     try {
