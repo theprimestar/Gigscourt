@@ -2398,9 +2398,8 @@ async function showRecentChatsForGig() {
         for (const chatDoc of chatsSnapshot.docs) {
             const chat = chatDoc.data();
             const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-            const userRef = doc(window.db, 'users', otherId);
-            const userDoc = await getDoc(userRef);
-            recentUsers.push({ id: otherId, ...userDoc.data(), chatId: chatDoc.id });
+            const userData = await getSingleProfileFromSupabase(otherId);
+            recentUsers.push({ id: otherId, ...userData, chatId: chatDoc.id });
         }
         if (recentUsers.length === 0) {
             window.showToast('No recent chats found');
