@@ -2110,8 +2110,32 @@ async function editServices() {
     });
     document.getElementById('save-services')?.addEventListener('click', async () => {
         try {
-            const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-            await updateDoc(userRef, { services: selectedServices });
+            const servicesString = selectedServices.join(', ');
+            
+            // 1. Update provider_profiles
+            const { error: profileError } = await supabase
+                .from('provider_profiles')
+                .update({ services: servicesString })
+                .eq('user_id', window.auth.currentUser.uid);
+            
+            if (profileError) throw profileError;
+            
+            // 2. Update provider_locations (for search/filtering)
+            const { error: locationError } = await supabase
+                .from('provider_locations')
+                .update({ services: servicesString })
+                .eq('user_id', window.auth.currentUser.uid);
+            
+            // Don't throw if location doesn't exist yet — just log it
+            if (locationError) {
+                console.warn('Location services sync warning (user may not have location yet):', locationError);
+            }
+            
+            // 3. Update in-memory currentUserData
+            if (window.currentUserData) {
+                window.currentUserData.services = selectedServices;
+            }
+            
             window.closeBottomSheet();
             window.showToast('Services updated!');
             loadProfile();
