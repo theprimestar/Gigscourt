@@ -1409,10 +1409,32 @@ await updateDoc(chatRoomRef, {
         if (currentMessagesUnsubscribe) currentMessagesUnsubscribe();
         
         const messagesRef = collection(window.db, 'chats', chat, 'messages');
-        const q = query(messagesRef, orderBy('timestamp', 'asc'));
+        const q = query(
+            messagesRef,
+            orderBy('timestamp', 'desc'),
+            limit(MESSAGES_PER_PAGE)
+        );
+        
+        // Reset pagination state
+        lastVisibleMessage = null;
+        hasMoreMessages = true;
+        isLoadingMoreMessages = false;
+        
         currentMessagesUnsubscribe = onSnapshot(q, (snapshot) => {
             messagesDiv.innerHTML = '';
-            snapshot.forEach(doc => {
+            
+            if (snapshot.empty) {
+                hasMoreMessages = false;
+                return;
+            }
+            
+            // Store the last visible message for pagination
+            lastVisibleMessage = snapshot.docs[snapshot.docs.length - 1];
+            hasMoreMessages = snapshot.docs.length === MESSAGES_PER_PAGE;
+            
+            // Reverse to display oldest to newest (bottom)
+            const reversedDocs = [...snapshot.docs].reverse();
+            reversedDocs.forEach(doc => {
                 const msg = doc.data();
                 const isMe = msg.senderId === window.auth.currentUser.uid;
                 messagesDiv.innerHTML += `
