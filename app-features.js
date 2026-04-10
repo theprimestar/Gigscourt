@@ -1253,10 +1253,8 @@ async function loadChats() {
             const unreadCount = chat.unreadCount?.[window.auth.currentUser.uid] || 0;
             totalUnread += unreadCount;
             
-            // Fetch other user's profile from Firestore
-            const userRef = doc(window.db, 'users', otherUserId);
-            const userDoc = await getDoc(userRef);
-            const userData = userDoc.data();
+            // Fetch other user's profile from Supabase
+            const userData = await getSingleProfileFromSupabase(otherUserId);
             
             chats.push({ 
                 ...chat, 
