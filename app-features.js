@@ -412,7 +412,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         
         // Fetch full profiles from Firestore
         const userIds = providers.map(p => p.user_id);
-        const profiles = await fetchProviderProfilesFromFirestore(userIds);
+        const profiles = await fetchProviderProfilesFromSupabase(userIds);
         
         // Merge data
         const mergedProviders = providers.map(provider => {
@@ -2701,7 +2701,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const userData = userDoc.data();
                     
                     const servicesString = (userData.services || []).join(', ');
-                    await window.supabase.from('provider_profiles').upsert({
+                    await supabase.from('provider_profiles').upsert({
                         user_id: userId,
                         display_name: userData.displayName || 'User',
                         phone: userData.phone || '',
@@ -2719,7 +2719,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }, { onConflict: 'user_id' });
                     
                     if (userData.location) {
-                        await window.supabase.from('provider_locations').upsert({
+                        await supabase.from('provider_locations').upsert({
                             user_id: userId,
                             lat: userData.location.lat,
                             lng: userData.location.lng,
@@ -2735,7 +2735,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const gigsSnapshot = await getDocs(collection(window.db, 'gigs'));
                 for (const gigDoc of gigsSnapshot.docs) {
                     const gig = gigDoc.data();
-                    await window.supabase.from('gigs').upsert({
+                    await supabase.from('gigs').upsert({
                         id: gigDoc.id,
                         provider_id: gig.providerId,
                         client_id: gig.clientId,
@@ -2752,7 +2752,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const reviewsSnapshot = await getDocs(collection(window.db, 'reviews'));
                 for (const reviewDoc of reviewsSnapshot.docs) {
                     const review = reviewDoc.data();
-                    await window.supabase.from('reviews').upsert({
+                    await supabase.from('reviews').upsert({
                         id: reviewDoc.id,
                         provider_id: review.providerId,
                         client_id: review.clientId,
@@ -2767,7 +2767,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const txSnapshot = await getDocs(collection(window.db, 'transactions'));
                 for (const txDoc of txSnapshot.docs) {
                     const tx = txDoc.data();
-                    await window.supabase.from('transactions').upsert({
+                    await supabase.from('transactions').upsert({
                         id: txDoc.id,
                         user_id: tx.userId,
                         type: tx.type,
