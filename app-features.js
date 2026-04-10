@@ -383,7 +383,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         // Query Supabase with offset pagination
         const { data: providers, error } = await supabase
             .from('provider_locations')
-            .select('user_id, lat, lng, rating, last_gig_date, monthly_gig_count')
+            .select('user_id, lat, lng, rating, last_gig_date')
             .order('rating', { ascending: false })
             .range(homeFeedOffset, homeFeedOffset + HOME_FEED_LIMIT - 1);
         
@@ -426,7 +426,6 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
                 services: profile.services || [],
                 distance: calculateDistance(currentLat, currentLng, provider.lat, provider.lng),
                 last_gig_date: provider.last_gig_date,
-                monthly_gig_count: provider.monthly_gig_count
             };
         });
         
@@ -836,7 +835,7 @@ async function showUserBottomSheet(userId) {
         // Get location data for active status
         const { data: locationData } = await supabase
             .from('provider_locations')
-            .select('last_gig_date, monthly_gig_count')
+            .select('last_gig_date')
             .eq('user_id', userId)
             .single();
         
@@ -959,7 +958,7 @@ async function performSearch(reset = false) {
         // Build Supabase query
         let query = supabase
             .from('provider_locations')
-            .select('user_id, lat, lng, rating, last_gig_date, monthly_gig_count')
+            .select('user_id, lat, lng, rating, last_gig_date')
             .limit(SEARCH_LIMIT);
         
         // Add service filter if selected
@@ -1022,7 +1021,6 @@ async function performSearch(reset = false) {
                 services: profile.services || [],
                 distance: provider.distance,
                 last_gig_date: provider.last_gig_date,
-                monthly_gig_count: provider.monthly_gig_count
             };
         });
         
@@ -2102,7 +2100,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
         // Get location data for active status
         const { data: locationData } = await supabase
             .from('provider_locations')
-            .select('last_gig_date, monthly_gig_count')
+            .select('last_gig_date')
             .eq('user_id', targetId)
             .single();
         
