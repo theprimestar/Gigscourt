@@ -501,7 +501,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             return `
             <div class="card" data-user-id="${user.id}">
                 <div class="card-header">
-                    <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}">
+                    <img class="card-avatar" src="${getOptimizedImageUrl(user.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}" loading="lazy">
                     <div class="card-info">
                         <div class="card-name">
                             ${user.displayName}
@@ -908,7 +908,7 @@ async function showUserBottomSheet(userId) {
         const activeStatus = getActiveStatus(userWithLocation);
         window.openBottomSheet(`
             <div style="text-align: center; padding: 8px 0;">
-                <img src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
+                <img src="${getOptimizedImageUrl(user.photoURL, 160, 160) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
                 <h3>${user.displayName || 'Anonymous'}</h3>
                 ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
                 <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${reviewCount})</div>
@@ -1112,7 +1112,7 @@ async function performSearch(reset = false) {
             return `
             <div class="card" data-user-id="${user.id}">
                 <div class="card-header">
-                    <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}">
+                    <img class="card-avatar" src="${getOptimizedImageUrl(user.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}" loading="lazy">
                     <div class="card-info">
                         <div class="card-name">
                             ${user.displayName}
@@ -1329,7 +1329,7 @@ async function loadChats() {
         // Render chat list
         chatsList.innerHTML = chats.map(chat => `
             <div class="chat-item" data-chat-id="${chat.id}" data-user-id="${chat.otherUser.id}">
-                <img class="chat-avatar" src="${chat.otherUser.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(chat.otherUser.displayName || 'User')}" alt="">
+                <img class="chat-avatar" src="${getOptimizedImageUrl(chat.otherUser.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(chat.otherUser.displayName || 'User')}" alt="" loading="lazy">
                 <div class="chat-details">
                     <div class="chat-name">
                         ${chat.otherUser.displayName || 'User'}
@@ -2160,7 +2160,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
         
         profileContent.innerHTML = `
             <div class="profile-header">
-                <img class="profile-avatar" src="${profile.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(profile.displayName || 'User')}" alt="" data-user-id="${profile.id}">
+                <img class="profile-avatar" src="${getOptimizedImageUrl(profile.photoURL, 200, 200) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(profile.displayName || 'User')}" alt="" data-user-id="${profile.id}">
                 <h2 class="profile-name">${profile.displayName || 'Anonymous'}</h2>
                 <p class="profile-bio">${profile.bio || 'No bio yet'}</p>
                 ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
@@ -2201,7 +2201,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
             <div class="portfolio-section">
                 <div class="section-title">Portfolio</div>
                 <div class="portfolio-grid" id="portfolio-grid">
-                    ${(profile.portfolio || []).map(img => `<img src="${img}" class="portfolio-item">`).join('')}
+                    ${(profile.portfolio || []).map(img => `<img src="${getOptimizedImageUrl(img, 200, 200)}" class="portfolio-item" loading="lazy">`).join('')}
                 </div>
                 ${isOwnProfile ? '<button id="add-portfolio-btn" class="btn-secondary" style="margin-top: 12px;">+ Add Portfolio Image (Max 15)</button>' : ''}
             </div>
@@ -2220,8 +2220,10 @@ async function loadProfile(userId = null, skipSpinner = false) {
         }
         
         document.querySelectorAll('.portfolio-item').forEach(img => {
-            img.addEventListener('click', () => window.openBottomSheet(`<img src="${img.src}" style="width: 100%; border-radius: 20px;">`));
-        });
+            img.addEventListener('click', () => {
+    const fullSizeUrl = getOptimizedImageUrl(img.src, null, null, true);
+    window.openBottomSheet(`<img src="${fullSizeUrl}" style="width: 100%; border-radius: 20px;">`);
+});
         document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
         
     } catch (error) {
