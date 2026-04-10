@@ -2729,10 +2729,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             gig_count: userData.gigCount || 0
                         }, { onConflict: 'user_id' });
                     }
+                    
+                    console.log(`✅ Migrated user: ${userId}`);
                 }
                 
                 // Migrate gigs
                 const gigsSnapshot = await getDocs(collection(window.db, 'gigs'));
+                console.log(`Found ${gigsSnapshot.size} gigs`);
                 for (const gigDoc of gigsSnapshot.docs) {
                     const gig = gigDoc.data();
                     await supabase.from('gigs').upsert({
@@ -2747,9 +2750,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         cancelled_at: gig.cancelledAt
                     }, { onConflict: 'id' });
                 }
+                console.log(`✅ Migrated ${gigsSnapshot.size} gigs`);
                 
                 // Migrate reviews
                 const reviewsSnapshot = await getDocs(collection(window.db, 'reviews'));
+                console.log(`Found ${reviewsSnapshot.size} reviews`);
                 for (const reviewDoc of reviewsSnapshot.docs) {
                     const review = reviewDoc.data();
                     await supabase.from('reviews').upsert({
@@ -2762,9 +2767,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         updated_at: review.updatedAt || review.createdAt
                     }, { onConflict: 'id' });
                 }
+                console.log(`✅ Migrated ${reviewsSnapshot.size} reviews`);
                 
                 // Migrate transactions
                 const txSnapshot = await getDocs(collection(window.db, 'transactions'));
+                console.log(`Found ${txSnapshot.size} transactions`);
                 for (const txDoc of txSnapshot.docs) {
                     const tx = txDoc.data();
                     await supabase.from('transactions').upsert({
@@ -2777,6 +2784,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         created_at: tx.createdAt
                     }, { onConflict: 'id' });
                 }
+                console.log(`✅ Migrated ${txSnapshot.size} transactions`);
                 
                 migrateBtn.textContent = '✅ Done!';
                 alert('Migration complete! Check Supabase.');
