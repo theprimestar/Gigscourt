@@ -60,7 +60,8 @@ async function fetchProviderProfilesFromSupabase(userIds) {
                 portfolio: profile.portfolio || [],
                 credits: profile.credits || 0,
                 gigCount: profile.gig_count || 0,
-                rating: profile.rating || 0
+                rating: profile.rating || 0,
+                reviewCount: profile.review_count || 0
             };
         });
         return profilesMap;
@@ -92,11 +93,39 @@ async function getSingleProfileFromSupabase(userId) {
             credits: profile.credits || 0,
             gigCount: profile.gig_count || 0,
             rating: profile.rating || 0,
-            totalRatingSum: profile.total_rating_sum || 0
+            totalRatingSum: profile.total_rating_sum || 0,
+            reviewCount: profile.review_count || 0
         };
     } catch (error) {
         console.error('getSingleProfileFromSupabase error:', error);
         return null;
+    }
+}
+
+// ========== ROLLING 30-DAY GIG COUNT ==========
+async function getRolling30DayGigCount(userId) {
+    if (!userId) return 0;
+    
+    try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const { count, error } = await supabase
+            .from('gigs')
+            .select('*', { count: 'exact', head: true })
+            .eq('provider_id', userId)
+            .eq('status', 'completed')
+            .gte('completed_at', thirtyDaysAgo.toISOString());
+        
+        if (error) {
+            console.error('getRolling30DayGigCount error:', error);
+            return 0;
+        }
+        
+        return count || 0;
+    } catch (error) {
+        console.error('getRolling30DayGigCount error:', error);
+        return 0;
     }
 }
 
@@ -110,6 +139,10 @@ let currentListViewData = [];
 let currentChatUser = null;
 let currentChatId = null;
 let currentMessagesUnsubscribe = null;
+let lastVisibleMessage = null;
+let isLoadingMoreMessages = false;
+let hasMoreMessages = true;
+const MESSAGES_PER_PAGE = 30;
 let currentUserLocation = null;
 let currentRadius = 1;
 let currentSearchService = '';
@@ -204,10 +237,9 @@ function formatDistance(meters) {
 
 function getActiveStatus(userData) {
     const lastGigDate = userData.lastGigDate ? new Date(userData.lastGigDate) : null;
-    const monthlyGigs = userData.monthlyGigCount || 0;
     const now = new Date();
     const sevenDaysAgo = new Date(now.setDate(now.getDate() - 7));
-    if ((lastGigDate && lastGigDate > sevenDaysAgo) || monthlyGigs >= 3) {
+    if (lastGigDate && lastGigDate > sevenDaysAgo) {
         return { active: true, text: 'Active this week' };
     }
     return { active: false, text: 'Inactive' };
@@ -383,7 +415,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         // Query Supabase with offset pagination
         const { data: providers, error } = await supabase
             .from('provider_locations')
-            .select('user_id, lat, lng, rating, last_gig_date, monthly_gig_count')
+            .select('user_id, lat, lng, rating, last_gig_date')
             .order('rating', { ascending: false })
             .range(homeFeedOffset, homeFeedOffset + HOME_FEED_LIMIT - 1);
         
@@ -410,7 +442,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             hasMoreHomeFeed = false;
         }
         
-        // Fetch full profiles from Firestore
+        // Fetch full profiles from Supabase
         const userIds = providers.map(p => p.user_id);
         const profiles = await fetchProviderProfilesFromSupabase(userIds);
         
@@ -423,10 +455,10 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
                 photoURL: profile.photoURL || null,
                 rating: profile.rating || provider.rating || 0,
                 gigCount: profile.gigCount || 0,
+                reviewCount: profile.reviewCount || 0,
                 services: profile.services || [],
                 distance: calculateDistance(currentLat, currentLng, provider.lat, provider.lng),
                 last_gig_date: provider.last_gig_date,
-                monthly_gig_count: provider.monthly_gig_count
             };
         });
         
@@ -443,8 +475,12 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         // Filter out the current user so they don't see themselves
         const filteredProviders = mergedProviders.filter(provider => provider.id !== window.auth.currentUser.uid);
         
-        // Create HTML for new cards
-        const cardsHtml = filteredProviders.map(user => `
+        // Create HTML for new cards (with async monthly gig count)
+        const cardsHtmlArray = await Promise.all(filteredProviders.map(async (user) => {
+            const monthlyGigs = await getRolling30DayGigCount(user.id);
+            const reviewCount = user.reviewCount || 0;
+            
+            return `
             <div class="card" data-user-id="${user.id}">
                 <div class="card-header">
                     <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}">
@@ -454,16 +490,23 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
                             ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
                         </div>
                         <div class="card-rating">
-                            <span class="star">★</span> ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0} gigs)
+                            <span class="star">★</span> ${(user.rating || 0).toFixed(1)} (${reviewCount})
                         </div>
                     </div>
                 </div>
                 <div class="card-services">
                     ${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}
                 </div>
+                <div class="card-stats">
+                    <div class="stat-item">📊 ${user.gigCount || 0} gigs total</div>
+                    <div class="stat-item">🔥 ${monthlyGigs} gigs this month</div>
+                </div>
                 <div class="card-distance">📍 ${formatDistance(user.distance)}</div>
             </div>
-        `).join('');
+        `;
+        }));
+        
+        const cardsHtml = cardsHtmlArray.join('');
         
         // SMOOTH TRANSITION: Add cards FIRST, then remove spinner
         // This prevents the empty gap between spinner disappearing and cards appearing
@@ -836,9 +879,12 @@ async function showUserBottomSheet(userId) {
         // Get location data for active status
         const { data: locationData } = await supabase
             .from('provider_locations')
-            .select('last_gig_date, monthly_gig_count')
+            .select('last_gig_date')
             .eq('user_id', userId)
             .single();
+        
+        const monthlyGigs = await getRolling30DayGigCount(userId);
+        const reviewCount = user.reviewCount || 0;
         
         const userWithLocation = { ...user, ...(locationData || {}) };
         const activeStatus = getActiveStatus(userWithLocation);
@@ -847,7 +893,8 @@ async function showUserBottomSheet(userId) {
                 <img src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
                 <h3>${user.displayName || 'Anonymous'}</h3>
                 ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
-                <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0} gigs)</div>
+                <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${reviewCount})</div>
+                <div style="font-size: 13px; color: var(--text-secondary); margin: 4px 0;">📊 ${user.gigCount || 0} gigs total • 🔥 ${monthlyGigs} this month</div>
                 <p style="color: var(--text-secondary); margin: 8px 0;">${user.bio || 'No bio yet'}</p>
                 <div class="card-services" style="justify-content: center;">${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
                 <div style="display: flex; gap: 12px; margin-top: 20px;">
@@ -959,7 +1006,7 @@ async function performSearch(reset = false) {
         // Build Supabase query
         let query = supabase
             .from('provider_locations')
-            .select('user_id, lat, lng, rating, last_gig_date, monthly_gig_count')
+            .select('user_id, lat, lng, rating, last_gig_date')
             .limit(SEARCH_LIMIT);
         
         // Add service filter if selected
@@ -1019,10 +1066,10 @@ async function performSearch(reset = false) {
                 photoURL: profile.photoURL || null,
                 rating: profile.rating || provider.rating || 0,
                 gigCount: profile.gigCount || 0,
+                reviewCount: profile.reviewCount || 0,
                 services: profile.services || [],
                 distance: provider.distance,
                 last_gig_date: provider.last_gig_date,
-                monthly_gig_count: provider.monthly_gig_count
             };
         });
         
@@ -1039,8 +1086,12 @@ async function performSearch(reset = false) {
         // Filter out current user
         const filteredResults = mergedProviders.filter(p => p.id !== window.auth.currentUser?.uid);
         
-        // Create HTML for cards
-        const cardsHtml = filteredResults.map(user => `
+        // Create HTML for cards (with async monthly gig count)
+        const cardsHtmlArray = await Promise.all(filteredResults.map(async (user) => {
+            const monthlyGigs = await getRolling30DayGigCount(user.id);
+            const reviewCount = user.reviewCount || 0;
+            
+            return `
             <div class="card" data-user-id="${user.id}">
                 <div class="card-header">
                     <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}">
@@ -1049,13 +1100,24 @@ async function performSearch(reset = false) {
                             ${user.displayName}
                             ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
                         </div>
-                        <div class="card-rating">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0})</div>
+                        <div class="card-rating">
+                            <span class="star">★</span> ${(user.rating || 0).toFixed(1)} (${reviewCount})
+                        </div>
                     </div>
                 </div>
-                <div class="card-services">${(user.services || []).slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+                <div class="card-services">
+                    ${(user.services || []).slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}
+                </div>
+                <div class="card-stats">
+                    <div class="stat-item">📊 ${user.gigCount || 0} gigs total</div>
+                    <div class="stat-item">🔥 ${monthlyGigs} gigs this month</div>
+                </div>
                 <div class="card-distance">📍 ${formatDistance(user.distance)}</div>
             </div>
-        `).join('');
+        `;
+        }));
+        
+        const cardsHtml = cardsHtmlArray.join('');
         
         // Append to feed
         if (reset) {
@@ -1348,10 +1410,32 @@ await updateDoc(chatRoomRef, {
         if (currentMessagesUnsubscribe) currentMessagesUnsubscribe();
         
         const messagesRef = collection(window.db, 'chats', chat, 'messages');
-        const q = query(messagesRef, orderBy('timestamp', 'asc'));
+        const q = query(
+            messagesRef,
+            orderBy('timestamp', 'desc'),
+            limit(MESSAGES_PER_PAGE)
+        );
+        
+        // Reset pagination state
+        lastVisibleMessage = null;
+        hasMoreMessages = true;
+        isLoadingMoreMessages = false;
+        
         currentMessagesUnsubscribe = onSnapshot(q, (snapshot) => {
             messagesDiv.innerHTML = '';
-            snapshot.forEach(doc => {
+            
+            if (snapshot.empty) {
+                hasMoreMessages = false;
+                return;
+            }
+            
+            // Store the last visible message for pagination
+            lastVisibleMessage = snapshot.docs[snapshot.docs.length - 1];
+            hasMoreMessages = snapshot.docs.length === MESSAGES_PER_PAGE;
+            
+            // Reverse to display oldest to newest (bottom)
+            const reversedDocs = [...snapshot.docs].reverse();
+            reversedDocs.forEach(doc => {
                 const msg = doc.data();
                 const isMe = msg.senderId === window.auth.currentUser.uid;
                 messagesDiv.innerHTML += `
@@ -1364,7 +1448,16 @@ await updateDoc(chatRoomRef, {
                     </div>
                 `;
             });
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            // Check if user was already at bottom before adding new messages
+            const wasAtBottom = messagesDiv.scrollTop + messagesDiv.clientHeight >= messagesDiv.scrollHeight - 50;
+            
+            if (wasAtBottom) {
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+            
+            // Setup scroll observer for loading more messages
+            setupMessagesScrollObserver(messagesDiv, chat);
+            
             document.querySelectorAll('.message-wrapper').forEach(wrapper => {
                 let pressTimer;
                 wrapper.addEventListener('touchstart', () => {
@@ -1388,6 +1481,78 @@ await updateDoc(chatRoomRef, {
     } catch (error) {
         console.error('openChat error:', error);
         window.showToast('Error opening chat', 'error');
+    }
+}
+
+function setupMessagesScrollObserver(messagesDiv, chatId) {
+    messagesDiv.addEventListener('scroll', async () => {
+        const scrollTop = messagesDiv.scrollTop;
+        
+        // If scrolled near the top (within 100px) and not already loading and has more messages
+        if (scrollTop < 100 && !isLoadingMoreMessages && hasMoreMessages) {
+            await loadMoreMessages(chatId, messagesDiv);
+        }
+    });
+}
+
+async function loadMoreMessages(chatId, messagesDiv) {
+    if (!chatId || !lastVisibleMessage) return;
+    
+    isLoadingMoreMessages = true;
+    
+    try {
+        const messagesRef = collection(window.db, 'chats', chatId, 'messages');
+        const q = query(
+            messagesRef,
+            orderBy('timestamp', 'asc'),
+            startAfter(lastVisibleMessage),
+            limit(MESSAGES_PER_PAGE)
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) {
+            hasMoreMessages = false;
+            isLoadingMoreMessages = false;
+            return;
+        }
+        
+        // Build HTML for older messages
+        let olderMessagesHtml = '';
+        snapshot.forEach(doc => {
+            const msg = doc.data();
+            const isMe = msg.senderId === window.auth.currentUser.uid;
+            olderMessagesHtml = `
+                <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
+                    <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
+                        ${msg.text}
+                        ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
+                        <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
+                    </div>
+                </div>
+            ` + olderMessagesHtml;
+        });
+        
+        // Update lastVisibleMessage to the first doc in this batch
+        lastVisibleMessage = snapshot.docs[0];
+        
+        // Remember current scroll height
+        const oldScrollHeight = messagesDiv.scrollHeight;
+        
+        // Insert older messages at the top
+        messagesDiv.insertAdjacentHTML('afterbegin', olderMessagesHtml);
+        
+        // Maintain scroll position
+        const newScrollHeight = messagesDiv.scrollHeight;
+        messagesDiv.scrollTop = newScrollHeight - oldScrollHeight;
+        
+        // Check if there are more messages
+        hasMoreMessages = snapshot.docs.length === MESSAGES_PER_PAGE;
+        
+    } catch (error) {
+        console.error('loadMoreMessages error:', error);
+    } finally {
+        isLoadingMoreMessages = false;
     }
 }
 
@@ -1416,8 +1581,6 @@ async function sendMessage(chatId, text) {
         });
         
         // Notify the other user
-        const otherUserRef = doc(window.db, 'users', otherUserId);
-        const otherUserDoc = await getDoc(otherUserRef);
         const senderName = window.currentUserData?.displayName || 'Someone';
         
         window.addNotification(
@@ -1444,16 +1607,16 @@ async function sendMessage(chatId, text) {
 
 async function checkPendingReview(chatId, userId) {
     try {
-        const gigsRef = collection(window.db, 'gigs');
-        const q = query(
-            gigsRef,
-            where('providerId', '==', window.auth.currentUser.uid),
-            where('clientId', '==', userId),
-            where('status', '==', 'pending_review')
-        );
-        const pendingGig = await getDocs(q);
+        const { data: pendingGig } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('provider_id', window.auth.currentUser.uid)
+            .eq('client_id', userId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
+        
         const toast = document.getElementById('pending-review-toast-provider');
-        if (!pendingGig.empty && toast) {
+        if (pendingGig && toast) {
             toast.style.display = 'block';
         }
     } catch (error) {
@@ -1589,9 +1752,8 @@ async function cancelGig(chatId, providerId) {
         await updateDoc(chatRef, { pendingReview: false });
         
         // Notify provider
-        const providerRef = doc(window.db, 'users', providerId);
-        const providerDoc = await getDoc(providerRef);
-        const providerName = providerDoc.data()?.displayName || 'Provider';
+        const providerData = await getSingleProfileFromSupabase(providerId);
+        const providerName = providerData?.displayName || 'Provider';
         
         window.addNotification(
             'Gig Cancelled',
@@ -1622,19 +1784,18 @@ async function cancelGig(chatId, providerId) {
 
 async function checkAndShowReviewButton(chatId, userId) {
     try {
-        const gigsRef = collection(window.db, 'gigs');
-        const q = query(
-            gigsRef,
-            where('clientId', '==', window.auth.currentUser.uid),
-            where('providerId', '==', userId),
-            where('status', '==', 'pending_review')
-        );
-        const pendingGig = await getDocs(q);
+        const { data: pendingGig } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('client_id', window.auth.currentUser.uid)
+            .eq('provider_id', userId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
         const registerBtn = document.getElementById('register-gig-chat');
         const reviewBtn = document.getElementById('submit-review-chat');
         
-        if (!pendingGig.empty) {
+        if (pendingGig) {
             if (registerBtn) registerBtn.style.display = 'none';
             if (reviewBtn) reviewBtn.style.display = 'block';
         } else {
@@ -1648,9 +1809,11 @@ async function checkAndShowReviewButton(chatId, userId) {
 
 async function showReviewBottomSheet(providerId, chatId) {
     try {
-        const providerRef = doc(window.db, 'users', providerId);
-        const providerDoc = await getDoc(providerRef);
-        const provider = providerDoc.data();
+        const provider = await getSingleProfileFromSupabase(providerId);
+        if (!provider) {
+            window.showToast('Error loading provider', 'error');
+            return;
+        }
         
         let selectedRating = 0;
         
@@ -1829,15 +1992,37 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         const newCredits = Math.max(0, (profile.credits || 0) - 1);
         const newGigCount = (profile.gig_count || 0) + 1;
         
-        // 4. Update provider profile
+        // 4. Check if this is a NEW review or an UPDATE
+        const { data: existingReview } = await supabase
+            .from('reviews')
+            .select('id')
+            .eq('id', reviewId)
+            .maybeSingle();
+        
+        const isNewReview = !existingReview;
+        
+        // 5. Update provider profile
+        const updateData = {
+            rating: avgRating,
+            total_rating_sum: sum,
+            credits: newCredits,
+            gig_count: newGigCount
+        };
+        
+        // Only increment review_count for NEW reviews
+        if (isNewReview) {
+            const { data: profile } = await supabase
+                .from('provider_profiles')
+                .select('review_count')
+                .eq('user_id', providerId)
+                .single();
+            
+            updateData.review_count = (profile?.review_count || 0) + 1;
+        }
+        
         const { error: updateError } = await supabase
             .from('provider_profiles')
-            .update({
-                rating: avgRating,
-                total_rating_sum: sum,
-                credits: newCredits,
-                gig_count: newGigCount
-            })
+            .update(updateData)
             .eq('user_id', providerId);
         
         if (updateError) throw updateError;
@@ -2079,10 +2264,13 @@ async function loadProfile(userId = null, skipSpinner = false) {
         const isOwnProfile = targetId === window.auth.currentUser?.uid;
         window.setCurrentViewedUserId(targetId);
         
+        // Fetch rolling 30-day gig count
+        const monthlyGigs = await getRolling30DayGigCount(targetId);
+        
         // Get location data for active status
         const { data: locationData } = await supabase
             .from('provider_locations')
-            .select('last_gig_date, monthly_gig_count')
+            .select('last_gig_date')
             .eq('user_id', targetId)
             .single();
         
@@ -2122,6 +2310,9 @@ async function loadProfile(userId = null, skipSpinner = false) {
                     <div class="stat-number">${profile.credits || 0}</div>
                     <div class="stat-label">Credits</div>
                 </div>
+            </div>
+            <div class="profile-monthly-gigs" style="text-align: center; padding: 8px 0; color: var(--accent-orange); font-weight: 500;">
+                🔥 ${monthlyGigs} gigs this month
             </div>
             <div class="profile-address">📍 ${profile.addressText || 'No address set'}</div>
             <div class="profile-actions">
@@ -2397,9 +2588,8 @@ async function showRecentChatsForGig() {
         for (const chatDoc of chatsSnapshot.docs) {
             const chat = chatDoc.data();
             const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-            const userRef = doc(window.db, 'users', otherId);
-            const userDoc = await getDoc(userRef);
-            recentUsers.push({ id: otherId, ...userDoc.data(), chatId: chatDoc.id });
+            const userData = await getSingleProfileFromSupabase(otherId);
+            recentUsers.push({ id: otherId, ...userData, chatId: chatDoc.id });
         }
         if (recentUsers.length === 0) {
             window.showToast('No recent chats found');
@@ -2466,11 +2656,17 @@ async function showSettings() {
         newDeactivateBtn.addEventListener('click', async () => {
             if (confirm('Are you sure? Your account will be deactivated and deleted after 14 days.')) {
                 try {
-                    const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-                    await updateDoc(userRef, {
-                        deactivatedAt: new Date().toISOString(),
-                        deactivateExpires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-                    });
+                    // Update Supabase
+                    const { error } = await supabase
+                        .from('provider_profiles')
+                        .update({
+                            deactivated_at: new Date().toISOString(),
+                            deactivate_expires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+                        })
+                        .eq('user_id', window.auth.currentUser.uid);
+                    
+                    if (error) throw error;
+                    
                     window.showToast('Account deactivated. Will be deleted after 14 days.');
                     await window.signOut(window.auth);
                     window.location.reload();
@@ -2560,12 +2756,6 @@ async function initFeatures() {
         profileContent: !!profileContent
     });
 
-    console.log('initFeatures: DOM elements found:', {
-        homeFeed: !!homeFeed,
-        chatsList: !!chatsList,
-        profileContent: !!profileContent
-    });
-    
     // Setup pull to refresh
     setupPullToRefresh();
     
@@ -2675,136 +2865,3 @@ window.registerGig = registerGig;
 window.uploadImage = uploadImage;
 window.showSettings = showSettings;
 window.addPortfolioImage = addPortfolioImage;
-
-
-// ========== TEMPORARY MIGRATION SCRIPT - REMOVE AFTER USE ==========
-document.addEventListener('DOMContentLoaded', () => {
-    const migrateBtn = document.getElementById('run-migration-btn');
-    if (migrateBtn) {
-        migrateBtn.addEventListener('click', async () => {
-            if (!confirm('Run migration? This will copy all Firestore data to Supabase.')) {
-                return;
-            }
-            
-            migrateBtn.textContent = '⏳ Migrating...';
-            migrateBtn.disabled = true;
-            
-            console.log('🚀 Starting migration...');
-            
-            try {
-                // Get all users from Firestore
-                const usersSnapshot = await getDocs(collection(window.db, 'users'));
-                console.log(`Found ${usersSnapshot.size} users`);
-                
-                for (const userDoc of usersSnapshot.docs) {
-                    const userId = userDoc.id;
-                    const userData = userDoc.data();
-                    
-                    const servicesString = (userData.services || []).join(', ');
-                    await supabase.from('provider_profiles').upsert({
-                        user_id: userId,
-                        display_name: userData.displayName || 'User',
-                        phone: userData.phone || '',
-                        bio: userData.bio || '',
-                        address_text: userData.addressText || '',
-                        services: servicesString,
-                        photo_url: userData.photoURL || null,
-                        portfolio: userData.portfolio || [],
-                        credits: userData.credits || 0,
-                        gig_count: userData.gigCount || 0,
-                        rating: userData.rating || 0,
-                        total_rating_sum: userData.totalRatingSum || 0,
-                        created_at: userData.createdAt || new Date().toISOString(),
-                        last_active: userData.lastActive || new Date().toISOString()
-                    }, { onConflict: 'user_id' });
-                    
-                    if (userData.location) {
-                        await supabase.from('provider_locations').upsert({
-                            user_id: userId,
-                            lat: userData.location.lat,
-                            lng: userData.location.lng,
-                            location: `POINT(${userData.location.lng} ${userData.location.lat})`,
-                            services: servicesString,
-                            rating: userData.rating || 0,
-                            gig_count: userData.gigCount || 0
-                        }, { onConflict: 'user_id' });
-                    }
-                    
-                    console.log(`✅ Migrated user: ${userId}`);
-                }
-                
-                // Migrate gigs
-                const gigsSnapshot = await getDocs(collection(window.db, 'gigs'));
-                console.log(`Found ${gigsSnapshot.size} gigs`);
-                for (const gigDoc of gigsSnapshot.docs) {
-                    const gig = gigDoc.data();
-                    await supabase.from('gigs').upsert({
-                        id: gigDoc.id,
-                        provider_id: gig.providerId,
-                        client_id: gig.clientId,
-                        chat_id: gig.chatId,
-                        status: gig.status || 'pending_review',
-                        created_at: gig.createdAt,
-                        expires_at: gig.expiresAt,
-                        completed_at: gig.completedAt,
-                        cancelled_at: gig.cancelledAt
-                    }, { onConflict: 'id' });
-                }
-                console.log(`✅ Migrated ${gigsSnapshot.size} gigs`);
-                
-                // Migrate reviews
-                const reviewsSnapshot = await getDocs(collection(window.db, 'reviews'));
-                console.log(`Found ${reviewsSnapshot.size} reviews`);
-                for (const reviewDoc of reviewsSnapshot.docs) {
-                    const review = reviewDoc.data();
-                    await supabase.from('reviews').upsert({
-                        id: reviewDoc.id,
-                        provider_id: review.providerId,
-                        client_id: review.clientId,
-                        rating: review.rating,
-                        review: review.review,
-                        created_at: review.createdAt || review.updatedAt,
-                        updated_at: review.updatedAt || review.createdAt
-                    }, { onConflict: 'id' });
-                }
-                console.log(`✅ Migrated ${reviewsSnapshot.size} reviews`);
-                
-                // Migrate transactions
-                const txSnapshot = await getDocs(collection(window.db, 'transactions'));
-                console.log(`Found ${txSnapshot.size} transactions`);
-                for (const txDoc of txSnapshot.docs) {
-                    const tx = txDoc.data();
-                    await supabase.from('transactions').upsert({
-                        id: txDoc.id,
-                        user_id: tx.userId,
-                        type: tx.type,
-                        credits: tx.credits,
-                        amount: tx.amount,
-                        reference: tx.reference,
-                        created_at: tx.createdAt
-                    }, { onConflict: 'id' });
-                }
-                console.log(`✅ Migrated ${txSnapshot.size} transactions`);
-                
-                migrateBtn.textContent = '✅ Done!';
-                alert('Migration complete! Check Supabase.');
-                
-            } catch (error) {
-                console.error('Migration error:', error);
-                migrateBtn.textContent = '❌ Failed';
-                alert('Migration failed: ' + error.message);
-            }
-        });
-    }
-});
-
-document.addEventListener('DOMContentLoaded', () => {
-    const testBtn = document.getElementById('test-supabase');
-    if (testBtn) {
-        testBtn.addEventListener('click', () => {
-            console.log('supabase is:', supabase);
-            console.log('window.supabase is:', window.supabase);
-            alert('Check console');
-        });
-    }
-});

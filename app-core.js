@@ -122,11 +122,17 @@ async function requestNotificationPermission() {
         console.log('FCM Token:', token);
         
         if (window.currentUser && token) {
-            const userRef = doc(db, 'users', window.currentUser.uid);
-            await updateDoc(userRef, {
-                fcmToken: token,
-                fcmTokenUpdated: new Date().toISOString()
-            });
+            const { error } = await supabase
+                .from('provider_profiles')
+                .update({
+                    fcm_token: token,
+                    fcm_token_updated: new Date().toISOString()
+                })
+                .eq('user_id', window.currentUser.uid);
+            
+            if (error) {
+                console.error('Failed to save FCM token to Supabase:', error);
+            }
         }
         
         return token;
@@ -892,7 +898,7 @@ async function saveUserProfile() {
                 services: servicesList,
                 photo_url: onboardingData.photoURL || null,
                 portfolio: portfolio,
-                credits: 0,
+                credits: 5,
                 gig_count: 0,
                 rating: 0,
                 total_rating_sum: 0,
@@ -924,7 +930,6 @@ async function saveUserProfile() {
                     rating: 0,
                     gig_count: 0,
                     last_gig_date: null,
-                    monthly_gig_count: 0
                 }, { onConflict: 'user_id' });
             
             if (locationError) {
@@ -955,7 +960,7 @@ async function saveUserProfile() {
         services: onboardingData.services || [],
         photoURL: onboardingData.photoURL || null,
         portfolio: portfolio,
-        credits: 0,
+        credits: 5,
         gigCount: 0,
         rating: 0
     };
@@ -1240,41 +1245,63 @@ async function setupAuthListener() {
         hideAuthScreen();
         
         try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-    window.currentUserData = userDoc.data();
-    
-    // IMPORTANT: Do NOT fire 'appReady' yet.
-    // We will wait for the token refresh so Supabase has the correct auth.
-    // This prevents the home feed from loading twice and causing flicker.
-    
-    navigateToPage('home');
-    
-    // Show a loading spinner immediately so user isn't staring at blank screen
-    const homeFeed = document.getElementById('home-feed');
-    if (homeFeed) {
-        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
-    }
+            // Fetch user profile from Supabase instead of Firestore
+            const { data: profile, error } = await supabase
+                .from('provider_profiles')
+                .select('*')
+                .eq('user_id', user.uid)
+                .single();
+            
+            if (profile && !error) {
+                // Convert Supabase profile to the format expected by the app
+                window.currentUserData = {
+                    displayName: profile.display_name || 'User',
+                    phone: profile.phone || '',
+                    bio: profile.bio || '',
+                    addressText: profile.address_text || '',
+                    services: profile.services ? profile.services.split(',').map(s => s.trim()) : [],
+                    photoURL: profile.photo_url || null,
+                    portfolio: profile.portfolio || [],
+                    credits: profile.credits || 0,
+                    gigCount: profile.gig_count || 0,
+                    rating: profile.rating || 0,
+                    totalRatingSum: profile.total_rating_sum || 0,
+                    reviewCount: profile.review_count || 0,
+                    fcmToken: profile.fcm_token || null
+                };
+                
+                // IMPORTANT: Do NOT fire 'appReady' yet.
+                // We will wait for the token refresh so Supabase has the correct auth.
+                // This prevents the home feed from loading twice and causing flicker.
+                
+                navigateToPage('home');
+                
+                // Show a loading spinner immediately so user isn't staring at blank screen
+                const homeFeed = document.getElementById('home-feed');
+                if (homeFeed) {
+                    homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+                }
 
-    loadNotificationsFromFirestore();
-    
-    setTimeout(() => {
-        requestNotificationPermission();
-        setupFCMForegroundListener();
-    }, 2000);
-    
-    // Wait for token refresh, THEN fire appReady so features load once with proper auth
-    setTimeout(async () => {
-        await forceRefreshHomeFeed();
-        
-        // Now fire appReady so other features can initialize
-        if (!appReadyFired) {
-            appReadyFired = true;
-            window.dispatchEvent(new CustomEvent('appReady'));
-        }
-    }, 500);
+                loadNotificationsFromFirestore();
+                
+                setTimeout(() => {
+                    requestNotificationPermission();
+                    setupFCMForegroundListener();
+                }, 2000);
+                
+                // Wait for token refresh, THEN fire appReady so features load once with proper auth
+                setTimeout(async () => {
+                    await forceRefreshHomeFeed();
+                    
+                    // Now fire appReady so other features can initialize
+                    if (!appReadyFired) {
+                        appReadyFired = true;
+                        window.dispatchEvent(new CustomEvent('appReady'));
+                    }
+                }, 500);
 
             } else {
+                // No profile found - user needs to complete onboarding
                 hideAuthScreen();
                 if (!appReadyFired) {
                     appReadyFired = true;
