@@ -1704,40 +1704,50 @@ async function showReviewBottomSheet(providerId, chatId) {
 // ========== REGISTER GIG ==========
 async function registerGig(chatId, clientId) {
     try {
-        // Check if there's already a pending gig between these users
-        const existingGigQuery = query(
-            collection(window.db, 'gigs'),
-            where('providerId', '==', window.auth.currentUser.uid),
-            where('clientId', '==', clientId),
-            where('status', '==', 'pending_review')
-        );
-        const existingGig = await getDocs(existingGigQuery);
+        // Check for existing pending gig
+        const { data: existingGig, error: checkError } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('provider_id', window.auth.currentUser.uid)
+            .eq('client_id', clientId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
-        if (!existingGig.empty) {
-            // Get client name for toast
-            const clientRef = doc(window.db, 'users', clientId);
-            const clientDoc = await getDoc(clientRef);
-            const clientName = clientDoc.data()?.displayName || 'Client';
-            window.showToast(`⚠️ You already have a pending gig with ${clientName}. Wait for review.`, 'error');
+        if (existingGig) {
+            window.showToast('⚠️ You already have a pending gig with this client. Wait for review.', 'error');
             return;
         }
         
-        const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-        const userDoc = await getDoc(userRef);
-        if ((userDoc.data().credits || 0) < 1) {
+        // Check credits from Supabase
+        const { data: profile, error: profileError } = await supabase
+            .from('provider_profiles')
+            .select('credits')
+            .eq('user_id', window.auth.currentUser.uid)
+            .single();
+        
+        if (profileError) throw profileError;
+        
+        if ((profile.credits || 0) < 1) {
             window.showToast('You need credits to register a gig. Buy credits first.', 'error');
             buyCredits();
             return;
         }
-        const gigsRef = collection(window.db, 'gigs');
-        await addDoc(gigsRef, {
-            providerId: window.auth.currentUser.uid,
-            clientId: clientId,
-            chatId: chatId,
-            status: 'pending_review',
-            createdAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-        });
+        
+        // Create gig in Supabase
+        const { error: gigError } = await supabase
+            .from('gigs')
+            .insert({
+                provider_id: window.auth.currentUser.uid,
+                client_id: clientId,
+                chat_id: chatId,
+                status: 'pending_review',
+                created_at: new Date().toISOString(),
+                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+            });
+        
+        if (gigError) throw gigError;
+        
+        // Update chat (still in Firestore)
         const chatRef = doc(window.db, 'chats', chatId);
         await updateDoc(chatRef, { pendingReview: true });
         
@@ -1745,9 +1755,6 @@ async function registerGig(chatId, clientId) {
         window.addNotification('Gig Registered', 'Client has been notified to review you');
         
         // Notify client
-        const clientRef = doc(window.db, 'users', clientId);
-        const clientDoc = await getDoc(clientRef);
-        const clientName = clientDoc.data()?.displayName || 'Client';
         const providerName = window.currentUserData?.displayName || 'Provider';
         window.addNotification(
             'New Gig Registration',
@@ -1755,7 +1762,6 @@ async function registerGig(chatId, clientId) {
             `/chat/${chatId}`
         );
         
-        // Send push notification to the client
         await sendPushNotification(
             clientId,
             'New Gig Request',
@@ -1766,11 +1772,8 @@ async function registerGig(chatId, clientId) {
         window.showToast('Gig registered! Client will review within 7 days.');
         window.haptic('heavy');
         
-        // Close and reopen chat to refresh UI
         window.closeBottomSheet();
-        setTimeout(() => {
-            openChat(clientId, chatId);
-        }, 500);
+        setTimeout(() => openChat(clientId, chatId), 500);
         
     } catch (error) {
         console.error('registerGig error:', error);
