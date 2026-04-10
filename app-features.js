@@ -2034,25 +2034,26 @@ function buyCredits() {
 
 async function showTransactionHistory() {
     try {
-        const transactionsRef = collection(window.db, 'transactions');
-        const q = query(
-            transactionsRef,
-            where('userId', '==', window.auth.currentUser.uid),
-            orderBy('createdAt', 'desc')
-        );
-        const transactions = await getDocs(q);
-        if (transactions.empty) {
+        const { data: transactions, error } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('user_id', window.auth.currentUser.uid)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!transactions || transactions.length === 0) {
             window.showToast('No transactions yet');
             return;
         }
+        
         let html = '<h3 style="margin-bottom: 16px;">Transaction History</h3>';
-        transactions.forEach(doc => {
-            const t = doc.data();
+        transactions.forEach(t => {
             html += `
                 <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
                     <div><strong>${t.type === 'credit_purchase' ? '💰 Purchased' : '📋 Gig Used'}</strong></div>
                     <div>${t.credits} credits • ₦${t.amount?.toLocaleString() || '0'}</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(t.createdAt).toLocaleDateString()}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(t.created_at).toLocaleDateString()}</div>
                 </div>
             `;
         });
