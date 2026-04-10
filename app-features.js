@@ -232,10 +232,9 @@ function formatDistance(meters) {
 
 function getActiveStatus(userData) {
     const lastGigDate = userData.lastGigDate ? new Date(userData.lastGigDate) : null;
-    const monthlyGigs = userData.monthlyGigCount || 0;
     const now = new Date();
     const sevenDaysAgo = new Date(now.setDate(now.getDate() - 7));
-    if ((lastGigDate && lastGigDate > sevenDaysAgo) || monthlyGigs >= 3) {
+    if (lastGigDate && lastGigDate > sevenDaysAgo) {
         return { active: true, text: 'Active this week' };
     }
     return { active: false, text: 'Inactive' };
