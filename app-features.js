@@ -1974,19 +1974,46 @@ function buyCredits() {
                     currency: 'NGN',
                     callback: async (response) => {
                         try {
-                            const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-                            await updateDoc(userRef, {
-                                credits: increment(credits)
-                            });
-                            const transactionsRef = collection(window.db, 'transactions');
-                            await addDoc(transactionsRef, {
-                                userId: window.auth.currentUser.uid,
-                                type: 'credit_purchase',
-                                credits: credits,
-                                amount: price,
-                                reference: response.reference,
-                                createdAt: new Date().toISOString()
-                            });
+                            // 1. Get current credits from Supabase
+                            const { data: profile, error: fetchError } = await supabase
+                                .from('provider_profiles')
+                                .select('credits')
+                                .eq('user_id', window.auth.currentUser.uid)
+                                .single();
+                            
+                            if (fetchError) throw fetchError;
+                            
+                            const newCredits = (profile.credits || 0) + credits;
+                            
+                            // 2. Update credits in Supabase
+                            const { error: updateError } = await supabase
+                                .from('provider_profiles')
+                                .update({ credits: newCredits })
+                                .eq('user_id', window.auth.currentUser.uid);
+                            
+                            if (updateError) throw updateError;
+                            
+                            // 3. Update in-memory currentUserData
+                            if (window.currentUserData) {
+                                window.currentUserData.credits = newCredits;
+                            }
+                            
+                            // 4. Record transaction in Supabase
+                            const { error: txError } = await supabase
+                                .from('transactions')
+                                .insert({
+                                    user_id: window.auth.currentUser.uid,
+                                    type: 'credit_purchase',
+                                    credits: credits,
+                                    amount: price,
+                                    reference: response.reference,
+                                    created_at: new Date().toISOString()
+                                });
+                            
+                            if (txError) {
+                                console.warn('Transaction record warning:', txError);
+                            }
+                            
                             window.showToast(`Added ${credits} credits!`);
                             window.haptic('heavy');
                             loadProfile();
