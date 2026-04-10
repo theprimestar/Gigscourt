@@ -2031,52 +2031,32 @@ function buyCredits() {
                     currency: 'NGN',
                     callback: async (response) => {
                         try {
-                            // 1. Get current credits from Supabase
-                            const { data: profile, error: fetchError } = await supabase
-                                .from('provider_profiles')
-                                .select('credits')
-                                .eq('user_id', window.auth.currentUser.uid)
-                                .single();
+                            // Call the database function
+                            const { data, error } = await supabase.rpc('add_credits', {
+                                p_user_id: window.auth.currentUser.uid,
+                                p_credits: credits,
+                                p_amount: price,
+                                p_reference: response.reference
+                            });
                             
-                            if (fetchError) throw fetchError;
+                            if (error) throw error;
                             
-                            const newCredits = (profile.credits || 0) + credits;
-                            
-                            // 2. Update credits in Supabase
-                            const { error: updateError } = await supabase
-                                .from('provider_profiles')
-                                .update({ credits: newCredits })
-                                .eq('user_id', window.auth.currentUser.uid);
-                            
-                            if (updateError) throw updateError;
-                            
-                            // 3. Update in-memory currentUserData
-                            if (window.currentUserData) {
-                                window.currentUserData.credits = newCredits;
+                            if (!data.success) {
+                                throw new Error(data.message);
                             }
                             
-                            // 4. Record transaction in Supabase
-                            const { error: txError } = await supabase
-                                .from('transactions')
-                                .insert({
-                                    user_id: window.auth.currentUser.uid,
-                                    type: 'credit_purchase',
-                                    credits: credits,
-                                    amount: price,
-                                    reference: response.reference,
-                                    created_at: new Date().toISOString()
-                                });
-                            
-                            if (txError) {
-                                console.warn('Transaction record warning:', txError);
+                            // Update in-memory currentUserData
+                            if (window.currentUserData) {
+                                window.currentUserData.credits = data.new_credits;
                             }
                             
                             window.showToast(`Added ${credits} credits!`);
                             window.haptic('heavy');
                             loadProfile();
+                            
                         } catch (error) {
                             console.error('Credit purchase error:', error);
-                            window.showToast('Error processing purchase', 'error');
+                            window.showToast(error.message || 'Error processing purchase', 'error');
                         }
                     }
                 });
