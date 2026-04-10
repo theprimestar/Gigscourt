@@ -93,7 +93,8 @@ async function getSingleProfileFromSupabase(userId) {
             credits: profile.credits || 0,
             gigCount: profile.gig_count || 0,
             rating: profile.rating || 0,
-            totalRatingSum: profile.total_rating_sum || 0
+            totalRatingSum: profile.total_rating_sum || 0,
+            reviewCount: profile.review_count || 0
         };
     } catch (error) {
         console.error('getSingleProfileFromSupabase error:', error);
