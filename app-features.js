@@ -247,6 +247,22 @@ function getActiveStatus(userData) {
     return { active: false, text: 'Inactive' };
 }
 
+// ========== IMAGE OPTIMIZATION HELPER ==========
+function getOptimizedImageUrl(url, width = 100, height = 100, fullSize = false) {
+    if (!url) return url;
+    
+    // If it's a UI Avatar (placeholder), return as-is
+    if (url.includes('ui-avatars.com')) return url;
+    
+    // If full size requested, only convert to WebP
+    if (fullSize) {
+        return `${url}?tr=f-webp`;
+    }
+    
+    // Otherwise, resize and convert to WebP
+    return `${url}?tr=f-webp,w-${width},h-${height},c-at_max`;
+}
+
 function calculateDistance(lat1, lon1, lat2, lon2) {
     const R = 6371e3;
     const φ1 = lat1 * Math.PI/180;
