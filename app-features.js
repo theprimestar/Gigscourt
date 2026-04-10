@@ -1647,9 +1647,11 @@ async function checkAndShowReviewButton(chatId, userId) {
 
 async function showReviewBottomSheet(providerId, chatId) {
     try {
-        const providerRef = doc(window.db, 'users', providerId);
-        const providerDoc = await getDoc(providerRef);
-        const provider = providerDoc.data();
+        const provider = await getSingleProfileFromSupabase(providerId);
+        if (!provider) {
+            window.showToast('Error loading provider', 'error');
+            return;
+        }
         
         let selectedRating = 0;
         
