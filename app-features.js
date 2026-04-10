@@ -2153,6 +2153,9 @@ async function loadProfile(userId = null, skipSpinner = false) {
         const isOwnProfile = targetId === window.auth.currentUser?.uid;
         window.setCurrentViewedUserId(targetId);
         
+        // Fetch rolling 30-day gig count
+        const monthlyGigs = await getRolling30DayGigCount(targetId);
+        
         // Get location data for active status
         const { data: locationData } = await supabase
             .from('provider_locations')
@@ -2196,6 +2199,9 @@ async function loadProfile(userId = null, skipSpinner = false) {
                     <div class="stat-number">${profile.credits || 0}</div>
                     <div class="stat-label">Credits</div>
                 </div>
+            </div>
+            <div class="profile-monthly-gigs" style="text-align: center; padding: 8px 0; color: var(--accent-orange); font-weight: 500;">
+                🔥 ${monthlyGigs} gigs this month
             </div>
             <div class="profile-address">📍 ${profile.addressText || 'No address set'}</div>
             <div class="profile-actions">
