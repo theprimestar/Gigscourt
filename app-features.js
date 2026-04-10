@@ -1416,8 +1416,6 @@ async function sendMessage(chatId, text) {
         });
         
         // Notify the other user
-        const otherUserRef = doc(window.db, 'users', otherUserId);
-        const otherUserDoc = await getDoc(otherUserRef);
         const senderName = window.currentUserData?.displayName || 'Someone';
         
         window.addNotification(
