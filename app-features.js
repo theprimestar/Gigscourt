@@ -1444,16 +1444,16 @@ async function sendMessage(chatId, text) {
 
 async function checkPendingReview(chatId, userId) {
     try {
-        const gigsRef = collection(window.db, 'gigs');
-        const q = query(
-            gigsRef,
-            where('providerId', '==', window.auth.currentUser.uid),
-            where('clientId', '==', userId),
-            where('status', '==', 'pending_review')
-        );
-        const pendingGig = await getDocs(q);
+        const { data: pendingGig } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('provider_id', window.auth.currentUser.uid)
+            .eq('client_id', userId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
+        
         const toast = document.getElementById('pending-review-toast-provider');
-        if (!pendingGig.empty && toast) {
+        if (pendingGig && toast) {
             toast.style.display = 'block';
         }
     } catch (error) {
