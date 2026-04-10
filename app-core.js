@@ -1266,6 +1266,7 @@ async function setupAuthListener() {
                     gigCount: profile.gig_count || 0,
                     rating: profile.rating || 0,
                     totalRatingSum: profile.total_rating_sum || 0,
+                    reviewCount: profile.review_count || 0,
                     fcmToken: profile.fcm_token || null
                 };
                 
