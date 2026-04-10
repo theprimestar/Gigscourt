@@ -1920,21 +1920,26 @@ async function submitReview(providerId, clientId, rating, reviewText) {
 
 async function showReviews(providerId) {
     try {
-        const reviewsRef = collection(window.db, 'reviews');
-        const q = query(reviewsRef, where('providerId', '==', providerId));
-        const reviews = await getDocs(q);
-        if (reviews.empty) {
+        const { data: reviews, error } = await supabase
+            .from('reviews')
+            .select('*')
+            .eq('provider_id', providerId)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!reviews || reviews.length === 0) {
             window.showToast('No reviews yet');
             return;
         }
+        
         let reviewsHtml = '<h3 style="margin-bottom: 16px;">Reviews</h3>';
-        reviews.forEach(doc => {
-            const review = doc.data();
+        reviews.forEach(review => {
             reviewsHtml += `
                 <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
                     <div style="font-weight: 600;">★ ${review.rating}</div>
-                    <p style="color: var(--text-secondary);">${review.review}</p>
-                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(review.updatedAt).toLocaleDateString()}</div>
+                    <p style="color: var(--text-secondary);">${review.review || ''}</p>
+                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(review.created_at).toLocaleDateString()}</div>
                 </div>
             `;
         });
