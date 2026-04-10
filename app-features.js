@@ -1058,6 +1058,7 @@ async function performSearch(reset = false) {
                 photoURL: profile.photoURL || null,
                 rating: profile.rating || provider.rating || 0,
                 gigCount: profile.gigCount || 0,
+                reviewCount: profile.reviewCount || 0,
                 services: profile.services || [],
                 distance: provider.distance,
                 last_gig_date: provider.last_gig_date,
@@ -1077,8 +1078,12 @@ async function performSearch(reset = false) {
         // Filter out current user
         const filteredResults = mergedProviders.filter(p => p.id !== window.auth.currentUser?.uid);
         
-        // Create HTML for cards
-        const cardsHtml = filteredResults.map(user => `
+        // Create HTML for cards (with async monthly gig count)
+        const cardsHtmlArray = await Promise.all(filteredResults.map(async (user) => {
+            const monthlyGigs = await getRolling30DayGigCount(user.id);
+            const reviewCount = user.reviewCount || 0;
+            
+            return `
             <div class="card" data-user-id="${user.id}">
                 <div class="card-header">
                     <img class="card-avatar" src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}">
@@ -1087,13 +1092,24 @@ async function performSearch(reset = false) {
                             ${user.displayName}
                             ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
                         </div>
-                        <div class="card-rating">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0})</div>
+                        <div class="card-rating">
+                            <span class="star">★</span> ${(user.rating || 0).toFixed(1)} (${reviewCount})
+                        </div>
                     </div>
                 </div>
-                <div class="card-services">${(user.services || []).slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+                <div class="card-services">
+                    ${(user.services || []).slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}
+                </div>
+                <div class="card-stats">
+                    <div class="stat-item">📊 ${user.gigCount || 0} gigs total</div>
+                    <div class="stat-item">🔥 ${monthlyGigs} gigs this month</div>
+                </div>
                 <div class="card-distance">📍 ${formatDistance(user.distance)}</div>
             </div>
-        `).join('');
+        `;
+        }));
+        
+        const cardsHtml = cardsHtmlArray.join('');
         
         // Append to feed
         if (reset) {
