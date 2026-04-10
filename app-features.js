@@ -1785,60 +1785,107 @@ async function registerGig(chatId, clientId) {
 async function submitReview(providerId, clientId, rating, reviewText) {
     try {
         const reviewId = `${clientId}_${providerId}`;
-        const reviewRef = doc(window.db, 'reviews', reviewId);
-        await setDoc(reviewRef, {
-            providerId: providerId,
-            clientId: clientId,
-            rating: rating,
-            review: reviewText,
-            updatedAt: new Date().toISOString()
-        });
         
-        const reviewsRef = collection(window.db, 'reviews');
-        const q = query(reviewsRef, where('providerId', '==', providerId));
-        const allReviews = await getDocs(q);
-        let sum = 0, count = 0;
-        allReviews.forEach(doc => {
-            sum += doc.data().rating;
-            count++;
-        });
-        const avgRating = sum / count;
+        // 1. Insert or update review in Supabase
+        const { error: reviewError } = await supabase
+            .from('reviews')
+            .upsert({
+                id: reviewId,
+                provider_id: providerId,
+                client_id: clientId,
+                rating: rating,
+                review: reviewText,
+                updated_at: new Date().toISOString()
+            });
         
-        const userRef = doc(window.db, 'users', providerId);
-        await updateDoc(userRef, {
-            rating: avgRating,
-            gigCount: increment(1),
-            credits: increment(-1),
-            lastGigDate: new Date().toISOString(),
-            monthlyGigCount: increment(1)
-        });
+        if (reviewError) throw reviewError;
         
-        const gigsRef = collection(window.db, 'gigs');
-        const gigsQuery = query(
-            gigsRef,
-            where('providerId', '==', providerId),
-            where('clientId', '==', clientId),
-            where('status', '==', 'pending_review')
-        );
-        const gigs = await getDocs(gigsQuery);
-        for (const gigDoc of gigs.docs) {
-            await updateDoc(gigDoc.ref, { status: 'completed', completedAt: new Date().toISOString() });
+        // 2. Get all reviews for this provider to calculate new average
+        const { data: allReviews, error: reviewsError } = await supabase
+            .from('reviews')
+            .select('rating')
+            .eq('provider_id', providerId);
+        
+        if (reviewsError) throw reviewsError;
+        
+        const sum = allReviews.reduce((acc, r) => acc + r.rating, 0);
+        const avgRating = sum / allReviews.length;
+        
+        // 3. Get current provider profile
+        const { data: profile, error: profileError } = await supabase
+            .from('provider_profiles')
+            .select('credits, gig_count')
+            .eq('user_id', providerId)
+            .single();
+        
+        if (profileError) throw profileError;
+        
+        const newCredits = Math.max(0, (profile.credits || 0) - 1);
+        const newGigCount = (profile.gig_count || 0) + 1;
+        
+        // 4. Update provider profile
+        const { error: updateError } = await supabase
+            .from('provider_profiles')
+            .update({
+                rating: avgRating,
+                total_rating_sum: sum,
+                credits: newCredits,
+                gig_count: newGigCount
+            })
+            .eq('user_id', providerId);
+        
+        if (updateError) throw updateError;
+        
+        // 5. Update provider_locations
+        const { error: locationError } = await supabase
+            .from('provider_locations')
+            .update({
+                rating: avgRating,
+                gig_count: newGigCount,
+                last_gig_date: new Date().toISOString()
+            })
+            .eq('user_id', providerId);
+        
+        if (locationError) {
+            console.warn('Location update warning:', locationError);
         }
         
+        // 6. Update gig status to completed
+        const { error: gigError } = await supabase
+            .from('gigs')
+            .update({
+                status: 'completed',
+                completed_at: new Date().toISOString()
+            })
+            .eq('provider_id', providerId)
+            .eq('client_id', clientId)
+            .eq('status', 'pending_review');
+        
+        if (gigError) console.warn('Gig status update warning:', gigError);
+        
+        // 7. Update chat (still in Firestore)
         const chatRef = doc(window.db, 'chats', currentChatId);
         await updateDoc(chatRef, { pendingReview: false });
         
-        // Notify provider about review
-        const providerRef = doc(window.db, 'users', providerId);
-        const providerDoc = await getDoc(providerRef);
-        const providerName = providerDoc.data()?.displayName || 'Provider';
+        // 8. Create transaction record
+        const { error: txError } = await supabase
+            .from('transactions')
+            .insert({
+                user_id: providerId,
+                type: 'gig_used',
+                credits: -1,
+                created_at: new Date().toISOString()
+            });
+        
+        if (txError) console.warn('Transaction record warning:', txError);
+        
+        // 9. Notify provider
         const clientName = window.currentUserData?.displayName || 'Client';
         window.addNotification(
             'New Review',
             `⭐ ${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`
         );
         
-        // Send push notification to the provider
         await sendPushNotification(
             providerId,
             'New Review',
@@ -1848,6 +1895,7 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         
         window.showToast(`Review submitted! ${rating} stars. Thank you!`);
         window.haptic('heavy');
+        
     } catch (error) {
         console.error('submitReview error:', error);
         window.showToast('Error submitting review', 'error');
