@@ -2250,26 +2250,19 @@ async function editServices() {
         try {
             const servicesString = selectedServices.join(', ');
             
-            // 1. Update provider_profiles
-            const { error: profileError } = await supabase
-                .from('provider_profiles')
-                .update({ services: servicesString })
-                .eq('user_id', window.auth.currentUser.uid);
+            // Call the database function
+            const { data, error } = await supabase.rpc('update_provider_services', {
+                p_user_id: window.auth.currentUser.uid,
+                p_services: servicesString
+            });
             
-            if (profileError) throw profileError;
+            if (error) throw error;
             
-            // 2. Update provider_locations (for search/filtering)
-            const { error: locationError } = await supabase
-                .from('provider_locations')
-                .update({ services: servicesString })
-                .eq('user_id', window.auth.currentUser.uid);
-            
-            // Don't throw if location doesn't exist yet — just log it
-            if (locationError) {
-                console.warn('Location services sync warning (user may not have location yet):', locationError);
+            if (!data.success) {
+                throw new Error(data.message);
             }
             
-            // 3. Update in-memory currentUserData
+            // Update in-memory currentUserData
             if (window.currentUserData) {
                 window.currentUserData.services = selectedServices;
             }
@@ -2277,9 +2270,10 @@ async function editServices() {
             window.closeBottomSheet();
             window.showToast('Services updated!');
             loadProfile();
+            
         } catch (error) {
             console.error('editServices error:', error);
-            window.showToast('Error updating services', 'error');
+            window.showToast(error.message || 'Error updating services', 'error');
         }
     });
 }
