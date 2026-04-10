@@ -1827,15 +1827,37 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         const newCredits = Math.max(0, (profile.credits || 0) - 1);
         const newGigCount = (profile.gig_count || 0) + 1;
         
-        // 4. Update provider profile
+        // 4. Check if this is a NEW review or an UPDATE
+        const { data: existingReview } = await supabase
+            .from('reviews')
+            .select('id')
+            .eq('id', reviewId)
+            .maybeSingle();
+        
+        const isNewReview = !existingReview;
+        
+        // 5. Update provider profile
+        const updateData = {
+            rating: avgRating,
+            total_rating_sum: sum,
+            credits: newCredits,
+            gig_count: newGigCount
+        };
+        
+        // Only increment review_count for NEW reviews
+        if (isNewReview) {
+            const { data: profile } = await supabase
+                .from('provider_profiles')
+                .select('review_count')
+                .eq('user_id', providerId)
+                .single();
+            
+            updateData.review_count = (profile?.review_count || 0) + 1;
+        }
+        
         const { error: updateError } = await supabase
             .from('provider_profiles')
-            .update({
-                rating: avgRating,
-                total_rating_sum: sum,
-                credits: newCredits,
-                gig_count: newGigCount
-            })
+            .update(updateData)
             .eq('user_id', providerId);
         
         if (updateError) throw updateError;
