@@ -234,26 +234,6 @@ function getZoomLevelFromRadius(radiusKm) {
     return 9;
 }
 
-// Helper: Fetch provider profiles from Firestore by user IDs
-async function fetchProviderProfilesFromFirestore(userIds) {
-    if (!userIds || userIds.length === 0) return {};
-    
-    try {
-        const usersRef = collection(window.db, 'users');
-        const q = query(usersRef, where('__name__', 'in', userIds));
-        const snapshot = await getDocs(q);
-        
-        const profiles = {};
-        snapshot.forEach(doc => {
-            profiles[doc.id] = doc.data();
-        });
-        return profiles;
-    } catch (error) {
-        console.error('fetchProviderProfilesFromFirestore error:', error);
-        return {};
-    }
-}
-
 // ========== IMAGE UPLOAD (ImageKit with Authentication) ==========
 async function getImageKitAuthParams() {
     try {
@@ -847,10 +827,21 @@ function setupSearchInfiniteScroll() {
 // ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
 async function showUserBottomSheet(userId) {
     try {
-        const userRef = doc(window.db, 'users', userId);
-        const userDoc = await getDoc(userRef);
-        const user = userDoc.data();
-        const activeStatus = getActiveStatus(user);
+        const user = await getSingleProfileFromSupabase(userId);
+        if (!user) {
+            window.showToast('Error loading profile', 'error');
+            return;
+        }
+        
+        // Get location data for active status
+        const { data: locationData } = await supabase
+            .from('provider_locations')
+            .select('last_gig_date, monthly_gig_count')
+            .eq('user_id', userId)
+            .single();
+        
+        const userWithLocation = { ...user, ...(locationData || {}) };
+        const activeStatus = getActiveStatus(userWithLocation);
         window.openBottomSheet(`
             <div style="text-align: center; padding: 8px 0;">
                 <img src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
@@ -1015,9 +1006,9 @@ async function performSearch(reset = false) {
             return;
         }
         
-        // Fetch full profiles from Firestore
+        // Fetch full profiles from Supabase
         const userIds = filteredProviders.map(p => p.user_id);
-        const profiles = await fetchProviderProfilesFromFirestore(userIds);
+        const profiles = await fetchProviderProfilesFromSupabase(userIds);
         
         // Merge data
         const mergedProviders = filteredProviders.map(provider => {
@@ -1242,10 +1233,8 @@ async function loadChats() {
             const unreadCount = chat.unreadCount?.[window.auth.currentUser.uid] || 0;
             totalUnread += unreadCount;
             
-            // Fetch other user's profile from Firestore
-            const userRef = doc(window.db, 'users', otherUserId);
-            const userDoc = await getDoc(userRef);
-            const userData = userDoc.data();
+            // Fetch other user's profile from Supabase
+            const userData = await getSingleProfileFromSupabase(otherUserId);
             
             chats.push({ 
                 ...chat, 
@@ -1325,9 +1314,11 @@ await updateDoc(chatRoomRef, {
 });
     
     try {
-        const userRef = doc(window.db, 'users', userId);
-        const userDoc = await getDoc(userRef);
-        const userData = userDoc.data();
+        const userData = await getSingleProfileFromSupabase(userId);
+        if (!userData) {
+            window.showToast('Error loading user', 'error');
+            return;
+        }
         window.openBottomSheet(`
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
                 <h3>${userData.displayName || 'User'}</h3>
@@ -1475,22 +1466,22 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
         const currentUser = window.auth.currentUser.uid;
         
         // Query for pending gig where current user is provider
-        const providerGigQuery = query(
-            collection(window.db, 'gigs'),
-            where('providerId', '==', currentUser),
-            where('clientId', '==', userId),
-            where('status', '==', 'pending_review')
-        );
-        const providerGig = await getDocs(providerGigQuery);
+        const { data: providerGig } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('provider_id', currentUser)
+            .eq('client_id', userId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
         // Query for pending gig where current user is client
-        const clientGigQuery = query(
-            collection(window.db, 'gigs'),
-            where('clientId', '==', currentUser),
-            where('providerId', '==', userId),
-            where('status', '==', 'pending_review')
-        );
-        const clientGig = await getDocs(clientGigQuery);
+        const { data: clientGig } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('client_id', currentUser)
+            .eq('provider_id', userId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
         const registerBtn = document.getElementById('register-gig-chat');
         const reviewBtn = document.getElementById('submit-review-chat');
@@ -1499,11 +1490,10 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
         const clientToast = document.getElementById('pending-review-toast-client');
         
         // Get other user's name for toasts
-        const otherUserRef = doc(window.db, 'users', userId);
-        const otherUserDoc = await getDoc(otherUserRef);
-        const otherUserName = otherUserDoc.data()?.displayName || 'User';
+        const otherUser = await getSingleProfileFromSupabase(userId);
+        const otherUserName = otherUser?.displayName || 'User';
         
-        if (providerGig.size > 0) {
+        if (providerGig) {
             // Current user is provider with pending gig
             if (registerBtn) {
                 registerBtn.disabled = true;
@@ -1517,7 +1507,7 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             if (reviewBtn) reviewBtn.style.display = 'none';
             if (cancelBtn) cancelBtn.style.display = 'none';
         } 
-        else if (clientGig.size > 0) {
+        else if (clientGig) {
             // Current user is client with pending gig
             if (registerBtn) {
                 registerBtn.disabled = true;
@@ -1557,26 +1547,42 @@ async function cancelGig(chatId, providerId) {
         
         const currentUser = window.auth.currentUser.uid;
         
-        // Find the pending gig where current user is client
-        const gigsQuery = query(
-            collection(window.db, 'gigs'),
-            where('clientId', '==', currentUser),
-            where('providerId', '==', providerId),
-            where('status', '==', 'pending_review')
-        );
-        const gigSnapshot = await getDocs(gigsQuery);
+        // Find and update the pending gig in Supabase
+        const { data: existingGig, error: findError } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('client_id', currentUser)
+            .eq('provider_id', providerId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
-        if (gigSnapshot.empty) {
+        if (findError) {
+            console.error('Error finding gig:', findError);
+            window.showToast('Error finding gig', 'error');
+            return;
+        }
+        
+        if (!existingGig) {
             window.showToast('No pending gig found to cancel', 'error');
             return;
         }
         
         // Update gig status to cancelled_by_client
-        const gigDoc = gigSnapshot.docs[0];
-        await updateDoc(gigDoc.ref, { 
-            status: 'cancelled_by_client',
-            cancelledAt: new Date().toISOString()
-        });
+        const { error: updateError } = await supabase
+            .from('gigs')
+            .update({
+                status: 'cancelled_by_client',
+                cancelled_at: new Date().toISOString()
+            })
+            .eq('client_id', currentUser)
+            .eq('provider_id', providerId)
+            .eq('status', 'pending_review');
+        
+        if (updateError) {
+            console.error('Error cancelling gig:', updateError);
+            window.showToast('Error cancelling gig', 'error');
+            return;
+        }
         
         // Update chat to remove pending review flag
         const chatRef = doc(window.db, 'chats', chatId);
@@ -1704,40 +1710,50 @@ async function showReviewBottomSheet(providerId, chatId) {
 // ========== REGISTER GIG ==========
 async function registerGig(chatId, clientId) {
     try {
-        // Check if there's already a pending gig between these users
-        const existingGigQuery = query(
-            collection(window.db, 'gigs'),
-            where('providerId', '==', window.auth.currentUser.uid),
-            where('clientId', '==', clientId),
-            where('status', '==', 'pending_review')
-        );
-        const existingGig = await getDocs(existingGigQuery);
+        // Check for existing pending gig
+        const { data: existingGig, error: checkError } = await supabase
+            .from('gigs')
+            .select('id')
+            .eq('provider_id', window.auth.currentUser.uid)
+            .eq('client_id', clientId)
+            .eq('status', 'pending_review')
+            .maybeSingle();
         
-        if (!existingGig.empty) {
-            // Get client name for toast
-            const clientRef = doc(window.db, 'users', clientId);
-            const clientDoc = await getDoc(clientRef);
-            const clientName = clientDoc.data()?.displayName || 'Client';
-            window.showToast(`⚠️ You already have a pending gig with ${clientName}. Wait for review.`, 'error');
+        if (existingGig) {
+            window.showToast('⚠️ You already have a pending gig with this client. Wait for review.', 'error');
             return;
         }
         
-        const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-        const userDoc = await getDoc(userRef);
-        if ((userDoc.data().credits || 0) < 1) {
+        // Check credits from Supabase
+        const { data: profile, error: profileError } = await supabase
+            .from('provider_profiles')
+            .select('credits')
+            .eq('user_id', window.auth.currentUser.uid)
+            .single();
+        
+        if (profileError) throw profileError;
+        
+        if ((profile.credits || 0) < 1) {
             window.showToast('You need credits to register a gig. Buy credits first.', 'error');
             buyCredits();
             return;
         }
-        const gigsRef = collection(window.db, 'gigs');
-        await addDoc(gigsRef, {
-            providerId: window.auth.currentUser.uid,
-            clientId: clientId,
-            chatId: chatId,
-            status: 'pending_review',
-            createdAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-        });
+        
+        // Create gig in Supabase
+        const { error: gigError } = await supabase
+            .from('gigs')
+            .insert({
+                provider_id: window.auth.currentUser.uid,
+                client_id: clientId,
+                chat_id: chatId,
+                status: 'pending_review',
+                created_at: new Date().toISOString(),
+                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+            });
+        
+        if (gigError) throw gigError;
+        
+        // Update chat (still in Firestore)
         const chatRef = doc(window.db, 'chats', chatId);
         await updateDoc(chatRef, { pendingReview: true });
         
@@ -1745,9 +1761,6 @@ async function registerGig(chatId, clientId) {
         window.addNotification('Gig Registered', 'Client has been notified to review you');
         
         // Notify client
-        const clientRef = doc(window.db, 'users', clientId);
-        const clientDoc = await getDoc(clientRef);
-        const clientName = clientDoc.data()?.displayName || 'Client';
         const providerName = window.currentUserData?.displayName || 'Provider';
         window.addNotification(
             'New Gig Registration',
@@ -1755,7 +1768,6 @@ async function registerGig(chatId, clientId) {
             `/chat/${chatId}`
         );
         
-        // Send push notification to the client
         await sendPushNotification(
             clientId,
             'New Gig Request',
@@ -1766,11 +1778,8 @@ async function registerGig(chatId, clientId) {
         window.showToast('Gig registered! Client will review within 7 days.');
         window.haptic('heavy');
         
-        // Close and reopen chat to refresh UI
         window.closeBottomSheet();
-        setTimeout(() => {
-            openChat(clientId, chatId);
-        }, 500);
+        setTimeout(() => openChat(clientId, chatId), 500);
         
     } catch (error) {
         console.error('registerGig error:', error);
@@ -1782,60 +1791,107 @@ async function registerGig(chatId, clientId) {
 async function submitReview(providerId, clientId, rating, reviewText) {
     try {
         const reviewId = `${clientId}_${providerId}`;
-        const reviewRef = doc(window.db, 'reviews', reviewId);
-        await setDoc(reviewRef, {
-            providerId: providerId,
-            clientId: clientId,
-            rating: rating,
-            review: reviewText,
-            updatedAt: new Date().toISOString()
-        });
         
-        const reviewsRef = collection(window.db, 'reviews');
-        const q = query(reviewsRef, where('providerId', '==', providerId));
-        const allReviews = await getDocs(q);
-        let sum = 0, count = 0;
-        allReviews.forEach(doc => {
-            sum += doc.data().rating;
-            count++;
-        });
-        const avgRating = sum / count;
+        // 1. Insert or update review in Supabase
+        const { error: reviewError } = await supabase
+            .from('reviews')
+            .upsert({
+                id: reviewId,
+                provider_id: providerId,
+                client_id: clientId,
+                rating: rating,
+                review: reviewText,
+                updated_at: new Date().toISOString()
+            });
         
-        const userRef = doc(window.db, 'users', providerId);
-        await updateDoc(userRef, {
-            rating: avgRating,
-            gigCount: increment(1),
-            credits: increment(-1),
-            lastGigDate: new Date().toISOString(),
-            monthlyGigCount: increment(1)
-        });
+        if (reviewError) throw reviewError;
         
-        const gigsRef = collection(window.db, 'gigs');
-        const gigsQuery = query(
-            gigsRef,
-            where('providerId', '==', providerId),
-            where('clientId', '==', clientId),
-            where('status', '==', 'pending_review')
-        );
-        const gigs = await getDocs(gigsQuery);
-        for (const gigDoc of gigs.docs) {
-            await updateDoc(gigDoc.ref, { status: 'completed', completedAt: new Date().toISOString() });
+        // 2. Get all reviews for this provider to calculate new average
+        const { data: allReviews, error: reviewsError } = await supabase
+            .from('reviews')
+            .select('rating')
+            .eq('provider_id', providerId);
+        
+        if (reviewsError) throw reviewsError;
+        
+        const sum = allReviews.reduce((acc, r) => acc + r.rating, 0);
+        const avgRating = sum / allReviews.length;
+        
+        // 3. Get current provider profile
+        const { data: profile, error: profileError } = await supabase
+            .from('provider_profiles')
+            .select('credits, gig_count')
+            .eq('user_id', providerId)
+            .single();
+        
+        if (profileError) throw profileError;
+        
+        const newCredits = Math.max(0, (profile.credits || 0) - 1);
+        const newGigCount = (profile.gig_count || 0) + 1;
+        
+        // 4. Update provider profile
+        const { error: updateError } = await supabase
+            .from('provider_profiles')
+            .update({
+                rating: avgRating,
+                total_rating_sum: sum,
+                credits: newCredits,
+                gig_count: newGigCount
+            })
+            .eq('user_id', providerId);
+        
+        if (updateError) throw updateError;
+        
+        // 5. Update provider_locations
+        const { error: locationError } = await supabase
+            .from('provider_locations')
+            .update({
+                rating: avgRating,
+                gig_count: newGigCount,
+                last_gig_date: new Date().toISOString()
+            })
+            .eq('user_id', providerId);
+        
+        if (locationError) {
+            console.warn('Location update warning:', locationError);
         }
         
+        // 6. Update gig status to completed
+        const { error: gigError } = await supabase
+            .from('gigs')
+            .update({
+                status: 'completed',
+                completed_at: new Date().toISOString()
+            })
+            .eq('provider_id', providerId)
+            .eq('client_id', clientId)
+            .eq('status', 'pending_review');
+        
+        if (gigError) console.warn('Gig status update warning:', gigError);
+        
+        // 7. Update chat (still in Firestore)
         const chatRef = doc(window.db, 'chats', currentChatId);
         await updateDoc(chatRef, { pendingReview: false });
         
-        // Notify provider about review
-        const providerRef = doc(window.db, 'users', providerId);
-        const providerDoc = await getDoc(providerRef);
-        const providerName = providerDoc.data()?.displayName || 'Provider';
+        // 8. Create transaction record
+        const { error: txError } = await supabase
+            .from('transactions')
+            .insert({
+                user_id: providerId,
+                type: 'gig_used',
+                credits: -1,
+                created_at: new Date().toISOString()
+            });
+        
+        if (txError) console.warn('Transaction record warning:', txError);
+        
+        // 9. Notify provider
         const clientName = window.currentUserData?.displayName || 'Client';
         window.addNotification(
             'New Review',
             `⭐ ${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`
         );
         
-        // Send push notification to the provider
         await sendPushNotification(
             providerId,
             'New Review',
@@ -1845,6 +1901,7 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         
         window.showToast(`Review submitted! ${rating} stars. Thank you!`);
         window.haptic('heavy');
+        
     } catch (error) {
         console.error('submitReview error:', error);
         window.showToast('Error submitting review', 'error');
@@ -1853,21 +1910,26 @@ async function submitReview(providerId, clientId, rating, reviewText) {
 
 async function showReviews(providerId) {
     try {
-        const reviewsRef = collection(window.db, 'reviews');
-        const q = query(reviewsRef, where('providerId', '==', providerId));
-        const reviews = await getDocs(q);
-        if (reviews.empty) {
+        const { data: reviews, error } = await supabase
+            .from('reviews')
+            .select('*')
+            .eq('provider_id', providerId)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!reviews || reviews.length === 0) {
             window.showToast('No reviews yet');
             return;
         }
+        
         let reviewsHtml = '<h3 style="margin-bottom: 16px;">Reviews</h3>';
-        reviews.forEach(doc => {
-            const review = doc.data();
+        reviews.forEach(review => {
             reviewsHtml += `
                 <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
                     <div style="font-weight: 600;">★ ${review.rating}</div>
-                    <p style="color: var(--text-secondary);">${review.review}</p>
-                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(review.updatedAt).toLocaleDateString()}</div>
+                    <p style="color: var(--text-secondary);">${review.review || ''}</p>
+                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(review.created_at).toLocaleDateString()}</div>
                 </div>
             `;
         });
@@ -1907,19 +1969,46 @@ function buyCredits() {
                     currency: 'NGN',
                     callback: async (response) => {
                         try {
-                            const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-                            await updateDoc(userRef, {
-                                credits: increment(credits)
-                            });
-                            const transactionsRef = collection(window.db, 'transactions');
-                            await addDoc(transactionsRef, {
-                                userId: window.auth.currentUser.uid,
-                                type: 'credit_purchase',
-                                credits: credits,
-                                amount: price,
-                                reference: response.reference,
-                                createdAt: new Date().toISOString()
-                            });
+                            // 1. Get current credits from Supabase
+                            const { data: profile, error: fetchError } = await supabase
+                                .from('provider_profiles')
+                                .select('credits')
+                                .eq('user_id', window.auth.currentUser.uid)
+                                .single();
+                            
+                            if (fetchError) throw fetchError;
+                            
+                            const newCredits = (profile.credits || 0) + credits;
+                            
+                            // 2. Update credits in Supabase
+                            const { error: updateError } = await supabase
+                                .from('provider_profiles')
+                                .update({ credits: newCredits })
+                                .eq('user_id', window.auth.currentUser.uid);
+                            
+                            if (updateError) throw updateError;
+                            
+                            // 3. Update in-memory currentUserData
+                            if (window.currentUserData) {
+                                window.currentUserData.credits = newCredits;
+                            }
+                            
+                            // 4. Record transaction in Supabase
+                            const { error: txError } = await supabase
+                                .from('transactions')
+                                .insert({
+                                    user_id: window.auth.currentUser.uid,
+                                    type: 'credit_purchase',
+                                    credits: credits,
+                                    amount: price,
+                                    reference: response.reference,
+                                    created_at: new Date().toISOString()
+                                });
+                            
+                            if (txError) {
+                                console.warn('Transaction record warning:', txError);
+                            }
+                            
                             window.showToast(`Added ${credits} credits!`);
                             window.haptic('heavy');
                             loadProfile();
@@ -1940,25 +2029,26 @@ function buyCredits() {
 
 async function showTransactionHistory() {
     try {
-        const transactionsRef = collection(window.db, 'transactions');
-        const q = query(
-            transactionsRef,
-            where('userId', '==', window.auth.currentUser.uid),
-            orderBy('createdAt', 'desc')
-        );
-        const transactions = await getDocs(q);
-        if (transactions.empty) {
+        const { data: transactions, error } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('user_id', window.auth.currentUser.uid)
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!transactions || transactions.length === 0) {
             window.showToast('No transactions yet');
             return;
         }
+        
         let html = '<h3 style="margin-bottom: 16px;">Transaction History</h3>';
-        transactions.forEach(doc => {
-            const t = doc.data();
+        transactions.forEach(t => {
             html += `
                 <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
                     <div><strong>${t.type === 'credit_purchase' ? '💰 Purchased' : '📋 Gig Used'}</strong></div>
                     <div>${t.credits} credits • ₦${t.amount?.toLocaleString() || '0'}</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(t.createdAt).toLocaleDateString()}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(t.created_at).toLocaleDateString()}</div>
                 </div>
             `;
         });
