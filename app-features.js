@@ -1015,9 +1015,9 @@ async function performSearch(reset = false) {
             return;
         }
         
-        // Fetch full profiles from Firestore
+        // Fetch full profiles from Supabase
         const userIds = filteredProviders.map(p => p.user_id);
-        const profiles = await fetchProviderProfilesFromFirestore(userIds);
+        const profiles = await fetchProviderProfilesFromSupabase(userIds);
         
         // Merge data
         const mergedProviders = filteredProviders.map(provider => {
