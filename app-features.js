@@ -879,6 +879,9 @@ async function showUserBottomSheet(userId) {
             .eq('user_id', userId)
             .single();
         
+        const monthlyGigs = await getRolling30DayGigCount(userId);
+        const reviewCount = user.reviewCount || 0;
+        
         const userWithLocation = { ...user, ...(locationData || {}) };
         const activeStatus = getActiveStatus(userWithLocation);
         window.openBottomSheet(`
@@ -886,7 +889,8 @@ async function showUserBottomSheet(userId) {
                 <img src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
                 <h3>${user.displayName || 'Anonymous'}</h3>
                 ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
-                <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${user.gigCount || 0} gigs)</div>
+                <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${reviewCount})</div>
+                <div style="font-size: 13px; color: var(--text-secondary); margin: 4px 0;">📊 ${user.gigCount || 0} gigs total • 🔥 ${monthlyGigs} this month</div>
                 <p style="color: var(--text-secondary); margin: 8px 0;">${user.bio || 'No bio yet'}</p>
                 <div class="card-services" style="justify-content: center;">${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
                 <div style="display: flex; gap: 12px; margin-top: 20px;">
