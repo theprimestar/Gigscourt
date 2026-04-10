@@ -1448,6 +1448,10 @@ await updateDoc(chatRoomRef, {
                 `;
             });
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            // Setup scroll observer for loading more messages
+            setupMessagesScrollObserver(messagesDiv, chat);
+            
             document.querySelectorAll('.message-wrapper').forEach(wrapper => {
                 let pressTimer;
                 wrapper.addEventListener('touchstart', () => {
