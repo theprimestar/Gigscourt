@@ -930,7 +930,6 @@ async function saveUserProfile() {
                     rating: 0,
                     gig_count: 0,
                     last_gig_date: null,
-                    monthly_gig_count: 0
                 }, { onConflict: 'user_id' });
             
             if (locationError) {
