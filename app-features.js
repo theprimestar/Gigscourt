@@ -1712,7 +1712,7 @@ async function cancelGig(chatId, providerId) {
         
         const currentUser = window.auth.currentUser.uid;
         
-        // Find and update the pending gig in Supabase
+        // Find the pending gig in Supabase
         const { data: existingGig, error: findError } = await supabase
             .from('gigs')
             .select('id')
@@ -1732,21 +1732,16 @@ async function cancelGig(chatId, providerId) {
             return;
         }
         
-        // Update gig status to cancelled_by_client
-        const { error: updateError } = await supabase
-            .from('gigs')
-            .update({
-                status: 'cancelled_by_client',
-                cancelled_at: new Date().toISOString()
-            })
-            .eq('client_id', currentUser)
-            .eq('provider_id', providerId)
-            .eq('status', 'pending_review');
+        // Call the database function
+        const { data, error } = await supabase.rpc('cancel_gig', {
+            p_gig_id: existingGig.id,
+            p_cancelled_by: currentUser
+        });
         
-        if (updateError) {
-            console.error('Error cancelling gig:', updateError);
-            window.showToast('Error cancelling gig', 'error');
-            return;
+        if (error) throw error;
+        
+        if (!data.success) {
+            throw new Error(data.message);
         }
         
         // Update chat to remove pending review flag
