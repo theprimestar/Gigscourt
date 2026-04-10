@@ -2463,11 +2463,17 @@ async function showSettings() {
         newDeactivateBtn.addEventListener('click', async () => {
             if (confirm('Are you sure? Your account will be deactivated and deleted after 14 days.')) {
                 try {
-                    const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
-                    await updateDoc(userRef, {
-                        deactivatedAt: new Date().toISOString(),
-                        deactivateExpires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
-                    });
+                    // Update Supabase
+                    const { error } = await supabase
+                        .from('provider_profiles')
+                        .update({
+                            deactivated_at: new Date().toISOString(),
+                            deactivate_expires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+                        })
+                        .eq('user_id', window.auth.currentUser.uid);
+                    
+                    if (error) throw error;
+                    
                     window.showToast('Account deactivated. Will be deleted after 14 days.');
                     await window.signOut(window.auth);
                     window.location.reload();
