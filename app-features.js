@@ -1452,6 +1452,17 @@ await updateDoc(chatRoomRef, {
     }
 }
 
+function setupMessagesScrollObserver(messagesDiv, chatId) {
+    messagesDiv.addEventListener('scroll', async () => {
+        const scrollTop = messagesDiv.scrollTop;
+        
+        // If scrolled near the top (within 100px) and not already loading and has more messages
+        if (scrollTop < 100 && !isLoadingMoreMessages && hasMoreMessages) {
+            await loadMoreMessages(chatId, messagesDiv);
+        }
+    });
+}
+
 async function sendMessage(chatId, text) {
     if (!text.trim()) return;
     try {
