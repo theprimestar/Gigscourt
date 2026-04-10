@@ -17,6 +17,8 @@ import {
     onSnapshot, 
     doc, 
     deleteDoc 
+    limit,
+    startAfter
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
