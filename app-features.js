@@ -1447,7 +1447,12 @@ await updateDoc(chatRoomRef, {
                     </div>
                 `;
             });
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            // Check if user was already at bottom before adding new messages
+            const wasAtBottom = messagesDiv.scrollTop + messagesDiv.clientHeight >= messagesDiv.scrollHeight - 50;
+            
+            if (wasAtBottom) {
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
             
             // Setup scroll observer for loading more messages
             setupMessagesScrollObserver(messagesDiv, chat);
