@@ -1875,48 +1875,19 @@ async function showReviewBottomSheet(providerId, chatId) {
 // ========== REGISTER GIG ==========
 async function registerGig(chatId, clientId) {
     try {
-        // Check for existing pending gig
-        const { data: existingGig, error: checkError } = await supabase
-            .from('gigs')
-            .select('id')
-            .eq('provider_id', window.auth.currentUser.uid)
-            .eq('client_id', clientId)
-            .eq('status', 'pending_review')
-            .maybeSingle();
+        // Call the database function
+        const { data, error } = await supabase.rpc('register_gig', {
+            p_provider_id: window.auth.currentUser.uid,
+            p_client_id: clientId,
+            p_chat_id: chatId
+        });
         
-        if (existingGig) {
-            window.showToast('⚠️ You already have a pending gig with this client. Wait for review.', 'error');
+        if (error) throw error;
+        
+        if (!data.success) {
+            window.showToast(data.message, 'error');
             return;
         }
-        
-        // Check credits from Supabase
-        const { data: profile, error: profileError } = await supabase
-            .from('provider_profiles')
-            .select('credits')
-            .eq('user_id', window.auth.currentUser.uid)
-            .single();
-        
-        if (profileError) throw profileError;
-        
-        if ((profile.credits || 0) < 1) {
-            window.showToast('You need credits to register a gig. Buy credits first.', 'error');
-            buyCredits();
-            return;
-        }
-        
-        // Create gig in Supabase
-        const { error: gigError } = await supabase
-            .from('gigs')
-            .insert({
-                provider_id: window.auth.currentUser.uid,
-                client_id: clientId,
-                chat_id: chatId,
-                status: 'pending_review',
-                created_at: new Date().toISOString(),
-                expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
-            });
-        
-        if (gigError) throw gigError;
         
         // Update chat (still in Firestore)
         const chatRef = doc(window.db, 'chats', chatId);
@@ -1948,7 +1919,7 @@ async function registerGig(chatId, clientId) {
         
     } catch (error) {
         console.error('registerGig error:', error);
-        window.showToast('Error registering gig', 'error');
+        window.showToast(error.message || 'Error registering gig', 'error');
     }
 }
 
