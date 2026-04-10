@@ -1246,41 +1246,62 @@ async function setupAuthListener() {
         hideAuthScreen();
         
         try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            if (userDoc.exists()) {
-    window.currentUserData = userDoc.data();
-    
-    // IMPORTANT: Do NOT fire 'appReady' yet.
-    // We will wait for the token refresh so Supabase has the correct auth.
-    // This prevents the home feed from loading twice and causing flicker.
-    
-    navigateToPage('home');
-    
-    // Show a loading spinner immediately so user isn't staring at blank screen
-    const homeFeed = document.getElementById('home-feed');
-    if (homeFeed) {
-        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
-    }
+            // Fetch user profile from Supabase instead of Firestore
+            const { data: profile, error } = await supabase
+                .from('provider_profiles')
+                .select('*')
+                .eq('user_id', user.uid)
+                .single();
+            
+            if (profile && !error) {
+                // Convert Supabase profile to the format expected by the app
+                window.currentUserData = {
+                    displayName: profile.display_name || 'User',
+                    phone: profile.phone || '',
+                    bio: profile.bio || '',
+                    addressText: profile.address_text || '',
+                    services: profile.services ? profile.services.split(',').map(s => s.trim()) : [],
+                    photoURL: profile.photo_url || null,
+                    portfolio: profile.portfolio || [],
+                    credits: profile.credits || 0,
+                    gigCount: profile.gig_count || 0,
+                    rating: profile.rating || 0,
+                    totalRatingSum: profile.total_rating_sum || 0,
+                    fcmToken: profile.fcm_token || null
+                };
+                
+                // IMPORTANT: Do NOT fire 'appReady' yet.
+                // We will wait for the token refresh so Supabase has the correct auth.
+                // This prevents the home feed from loading twice and causing flicker.
+                
+                navigateToPage('home');
+                
+                // Show a loading spinner immediately so user isn't staring at blank screen
+                const homeFeed = document.getElementById('home-feed');
+                if (homeFeed) {
+                    homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+                }
 
-    loadNotificationsFromFirestore();
-    
-    setTimeout(() => {
-        requestNotificationPermission();
-        setupFCMForegroundListener();
-    }, 2000);
-    
-    // Wait for token refresh, THEN fire appReady so features load once with proper auth
-    setTimeout(async () => {
-        await forceRefreshHomeFeed();
-        
-        // Now fire appReady so other features can initialize
-        if (!appReadyFired) {
-            appReadyFired = true;
-            window.dispatchEvent(new CustomEvent('appReady'));
-        }
-    }, 500);
+                loadNotificationsFromFirestore();
+                
+                setTimeout(() => {
+                    requestNotificationPermission();
+                    setupFCMForegroundListener();
+                }, 2000);
+                
+                // Wait for token refresh, THEN fire appReady so features load once with proper auth
+                setTimeout(async () => {
+                    await forceRefreshHomeFeed();
+                    
+                    // Now fire appReady so other features can initialize
+                    if (!appReadyFired) {
+                        appReadyFired = true;
+                        window.dispatchEvent(new CustomEvent('appReady'));
+                    }
+                }, 500);
 
             } else {
+                // No profile found - user needs to complete onboarding
                 hideAuthScreen();
                 if (!appReadyFired) {
                     appReadyFired = true;
