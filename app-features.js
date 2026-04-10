@@ -2797,3 +2797,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+document.addEventListener('DOMContentLoaded', () => {
+    const testBtn = document.getElementById('test-supabase');
+    if (testBtn) {
+        testBtn.addEventListener('click', () => {
+            console.log('supabase is:', supabase);
+            console.log('window.supabase is:', window.supabase);
+            alert('Check console');
+        });
+    }
+});
