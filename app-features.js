@@ -847,10 +847,21 @@ function setupSearchInfiniteScroll() {
 // ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
 async function showUserBottomSheet(userId) {
     try {
-        const userRef = doc(window.db, 'users', userId);
-        const userDoc = await getDoc(userRef);
-        const user = userDoc.data();
-        const activeStatus = getActiveStatus(user);
+        const user = await getSingleProfileFromSupabase(userId);
+        if (!user) {
+            window.showToast('Error loading profile', 'error');
+            return;
+        }
+        
+        // Get location data for active status
+        const { data: locationData } = await supabase
+            .from('provider_locations')
+            .select('last_gig_date, monthly_gig_count')
+            .eq('user_id', userId)
+            .single();
+        
+        const userWithLocation = { ...user, ...(locationData || {}) };
+        const activeStatus = getActiveStatus(userWithLocation);
         window.openBottomSheet(`
             <div style="text-align: center; padding: 8px 0;">
                 <img src="${user.photoURL || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
