@@ -100,6 +100,33 @@ async function getSingleProfileFromSupabase(userId) {
     }
 }
 
+// ========== ROLLING 30-DAY GIG COUNT ==========
+async function getRolling30DayGigCount(userId) {
+    if (!userId) return 0;
+    
+    try {
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const { count, error } = await supabase
+            .from('gigs')
+            .select('*', { count: 'exact', head: true })
+            .eq('provider_id', userId)
+            .eq('status', 'completed')
+            .gte('completed_at', thirtyDaysAgo.toISOString());
+        
+        if (error) {
+            console.error('getRolling30DayGigCount error:', error);
+            return 0;
+        }
+        
+        return count || 0;
+    } catch (error) {
+        console.error('getRolling30DayGigCount error:', error);
+        return 0;
+    }
+}
+
 // ========== DOM ELEMENTS ==========
 let homeFeed, searchServiceInput, radiusSlider, radiusValue, mapViewBtn, listViewBtn, mapContainer, searchListView, searchListFeed, chatsList, profileContent;
 
