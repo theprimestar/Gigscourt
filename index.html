@@ -331,13 +331,13 @@ if ('serviceWorker' in navigator) {
 (function() {
     var check = setInterval(function() {
         var splash = document.getElementById('splash-screen');
-        var main = document.getElementById('main-app');
         var user = window.auth && window.auth.currentUser;
         
         if (user && splash) {
+            // Only hide splash, don't touch main app
             splash.style.display = 'none';
-            if (main) main.style.display = 'block';
             clearInterval(check);
+            console.log('Splash hidden, app initialization continues normally');
         }
     }, 100);
     
