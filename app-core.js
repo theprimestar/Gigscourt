@@ -1428,7 +1428,16 @@ async function setupAuthListener() {
                     reviewCount: profile.review_count || 0,
                     fcmToken: profile.fcm_token || null
                 };
-                
+
+                // Backfill email for existing users who don't have it yet
+                if (!profile.email && user.email) {
+                    supabase
+                        .from('provider_profiles')
+                        .update({ email: user.email })
+                        .eq('user_id', user.uid)
+                        .then(() => console.log('Email backfilled for user:', user.email))
+                        .catch(err => console.error('Email backfill error:', err));
+                }
                 // IMPORTANT: Do NOT fire 'appReady' yet.
                 // We will wait for the token refresh so Supabase has the correct auth.
                 // This prevents the home feed from loading twice and causing flicker.
