@@ -1955,7 +1955,7 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         const chatRef = doc(window.db, 'chats', currentChatId);
         await updateDoc(chatRef, { pendingReview: false });
         
-        // Notify provider
+        // Notify provider about the review
         const clientName = window.currentUserData?.displayName || 'Client';
         window.addNotification(
             'New Review',
@@ -1968,6 +1968,44 @@ async function submitReview(providerId, clientId, rating, reviewText) {
             `${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`,
             `/profile/${providerId}`
         );
+        
+        // ========== CREDIT BALANCE ALERTS ==========
+        if (data.credit_alert) {
+            let creditMessage = '';
+            if (data.credit_alert === 'two') {
+                creditMessage = '⚠️ You have 2 credits left. Buy more to keep registering gigs.';
+            } else if (data.credit_alert === 'one') {
+                creditMessage = '⚠️ Only 1 credit left! Register one more gig then you\'ll need more credits.';
+            } else if (data.credit_alert === 'zero') {
+                creditMessage = '❌ You\'re out of credits. Buy credits to register new gigs.';
+            }
+            
+            if (creditMessage) {
+                window.addNotification('Low Credits', creditMessage);
+                await sendPushNotification(providerId, 'Low Credits Alert', creditMessage, '/profile');
+            }
+        }
+        
+        // ========== GIG MILESTONE ALERTS ==========
+        if (data.milestone) {
+            let milestoneMessage = '';
+            if (data.milestone === 1) {
+                milestoneMessage = '🎉 Congrats on your first gig! Keep going!';
+            } else if (data.milestone === 5) {
+                milestoneMessage = '🌟 5 gigs completed! You\'re on fire!';
+            } else if (data.milestone === 10) {
+                milestoneMessage = '🏆 10 gigs! You\'re a GigsCourt pro!';
+            } else if (data.milestone === 25) {
+                milestoneMessage = '👑 25 gigs! You\'re one of our top providers!';
+            } else if (data.milestone === 50) {
+                milestoneMessage = '💎 50 gigs! Legendary status!';
+            }
+            
+            if (milestoneMessage) {
+                window.addNotification('🎉 Milestone Achieved!', milestoneMessage);
+                await sendPushNotification(providerId, 'Milestone Achieved! 🎉', milestoneMessage, '/profile');
+            }
+        }
         
         window.showToast(`Review submitted! ${rating} stars. Thank you!`);
         window.haptic('heavy');
