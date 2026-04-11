@@ -109,13 +109,11 @@ function hideSplashScreen() {
     
     if (splashScreen) {
         splashScreen.style.opacity = '0';
-        setTimeout(() => {
-            splashScreen.style.display = 'none';
-        }, 500);
+        splashScreen.style.setProperty('display', 'none', 'important');
     }
     
     if (mainApp) {
-        mainApp.style.display = 'block';
+        mainApp.style.setProperty('display', 'block', 'important');
         setTimeout(() => {
             mainApp.style.opacity = '1';
         }, 50);
