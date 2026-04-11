@@ -10,8 +10,8 @@ import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/fireb
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy, writeBatch, limit } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // Supabase configuration
-const supabaseUrl = 'https://aws-0-eu-west-1.pooler.supabase.com:6543';
 const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
+const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
 
 // ========== INITIALIZATION ==========
 const app = initializeApp(window.firebaseConfig);
