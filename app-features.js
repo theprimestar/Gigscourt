@@ -2426,16 +2426,245 @@ function showGiftCreditsUI() {
     });
 }
 
-function showServiceRequestsUI() {
+async function showServiceRequestsUI() {
     const panel = document.getElementById('admin-action-panel');
     panel.innerHTML = '<div class="loading-spinner"></div>';
-    window.showToast('Service requests UI coming in next step', 'info');
+    
+    try {
+        // Fetch pending requests
+        const { data: requests, error } = await supabase
+            .from('service_requests')
+            .select('*')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        if (!requests || requests.length === 0) {
+            panel.innerHTML = '<div class="empty-state">No pending service requests</div>';
+            return;
+        }
+        
+        let html = `<h4>📋 Pending Service Requests (${requests.length})</h4><div style="max-height: 400px; overflow-y: auto;">`;
+        
+        requests.forEach(req => {
+            html += `
+                <div style="padding: 16px; margin-bottom: 12px; background: var(--bg-tertiary); border-radius: 12px;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">${req.requested_service}</div>
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 12px;">Requested by: ${req.user_email || req.user_id}</div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="approve-request-btn" data-id="${req.id}" data-service="${req.requested_service}" style="flex: 1; padding: 10px; background: var(--success-green); color: white; border: none; border-radius: 8px;">✅ Approve</button>
+                        <button class="edit-request-btn" data-id="${req.id}" data-service="${req.requested_service}" style="flex: 1; padding: 10px; background: var(--accent-orange); color: white; border: none; border-radius: 8px;">✏️ Edit</button>
+                        <button class="reject-request-btn" data-id="${req.id}" style="flex: 1; padding: 10px; background: var(--error-red); color: white; border: none; border-radius: 8px;">❌ Reject</button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        panel.innerHTML = html;
+        
+        // Add button listeners
+        document.querySelectorAll('.approve-request-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                await processServiceRequest(btn.dataset.id, 'approve', btn.dataset.service);
+            });
+        });
+        
+        document.querySelectorAll('.reject-request-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                await processServiceRequest(btn.dataset.id, 'reject');
+            });
+        });
+        
+        document.querySelectorAll('.edit-request-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                showEditRequestUI(btn.dataset.id, btn.dataset.service);
+            });
+        });
+        
+    } catch (error) {
+        console.error('showServiceRequestsUI error:', error);
+        panel.innerHTML = '<div class="empty-state">Error loading requests</div>';
+    }
 }
 
-function showUsersListUI() {
+function showEditRequestUI(requestId, currentName) {
+    const panel = document.getElementById('admin-action-panel');
+    panel.innerHTML = `
+        <h4>✏️ Edit Service Request</h4>
+        <p style="margin-bottom: 12px; color: var(--text-secondary);">Original: "${currentName}"</p>
+        <input type="text" id="edit-service-name" value="${currentName}" class="search-input" style="margin-bottom: 16px;">
+        <div style="display: flex; gap: 8px;">
+            <button id="save-edit-btn" class="admin-btn-primary" style="flex: 1;">Save Changes</button>
+            <button id="cancel-edit-btn" class="admin-btn-secondary" style="flex: 1;">Cancel</button>
+        </div>
+    `;
+    
+    document.getElementById('save-edit-btn')?.addEventListener('click', async () => {
+        const newName = document.getElementById('edit-service-name').value.trim();
+        if (!newName) {
+            window.showToast('Service name cannot be empty', 'error');
+            return;
+        }
+        await processServiceRequest(requestId, 'edit', newName);
+    });
+    
+    document.getElementById('cancel-edit-btn')?.addEventListener('click', () => {
+        showServiceRequestsUI();
+    });
+}
+
+async function processServiceRequest(requestId, action, editedName = null) {
+    try {
+        const { data, error } = await supabase.rpc('admin_process_service_request', {
+            p_request_id: requestId,
+            p_action: action,
+            p_edited_name: editedName
+        });
+        
+        if (error) throw error;
+        
+        if (data.success) {
+            window.showToast(`Request ${action}ed successfully!`, 'success');
+            
+            // Send push notification to user
+            if (data.user_id) {
+                let message = '';
+                if (action === 'approve') message = `✅ Your service "${editedName || 'request'}" was approved!`;
+                else if (action === 'reject') message = `❌ Your service request was not approved.`;
+                else if (action === 'edit') message = `✏️ Your service request was updated to "${editedName}".`;
+                
+                await sendPushNotification(
+                    data.user_id,
+                    'Service Request Update',
+                    message,
+                    '/profile'
+                );
+            }
+            
+            // Refresh the list
+            showServiceRequestsUI();
+        } else {
+            window.showToast(data.message, 'error');
+        }
+    } catch (error) {
+        console.error('processServiceRequest error:', error);
+        window.showToast('Error processing request', 'error');
+    }
+}
+
+async function showUsersListUI() {
     const panel = document.getElementById('admin-action-panel');
     panel.innerHTML = '<div class="loading-spinner"></div>';
-    window.showToast('Users list coming in next step', 'info');
+    
+    try {
+        const { data, error } = await supabase.rpc('admin_get_users', {
+            p_limit: 50,
+            p_offset: 0
+        });
+        
+        if (error) throw error;
+        
+        if (!data.success) {
+            throw new Error(data.message);
+        }
+        
+        const users = data.users || [];
+        
+        if (users.length === 0) {
+            panel.innerHTML = '<div class="empty-state">No users found</div>';
+            return;
+        }
+        
+        let html = `<h4>👥 Users (${users.length})</h4><div style="max-height: 400px; overflow-y: auto;">`;
+        
+        users.forEach(user => {
+            const joinDate = user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
+            const lastActive = user.last_active ? new Date(user.last_active).toLocaleDateString() : 'N/A';
+            
+            html += `
+                <div style="padding: 16px; margin-bottom: 12px; background: var(--bg-tertiary); border-radius: 12px;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">${user.display_name || 'Anonymous'}</div>
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">📞 ${user.phone || 'No phone'}</div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 13px; margin-bottom: 8px;">
+                        <div>💰 Credits: ${user.credits || 0}</div>
+                        <div>📊 Gigs: ${user.gig_count || 0}</div>
+                        <div>⭐ Rating: ${(user.rating || 0).toFixed(1)} (${user.review_count || 0})</div>
+                        <div>📅 Joined: ${joinDate}</div>
+                    </div>
+                    <button class="quick-gift-btn" data-user-id="${user.user_id}" data-user-name="${user.display_name || 'User'}" style="width: 100%; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 8px;">🎁 Quick Gift Credits</button>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        panel.innerHTML = html;
+        
+        // Add quick gift listeners
+        document.querySelectorAll('.quick-gift-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const userId = btn.dataset.userId;
+                const userName = btn.dataset.userName;
+                showQuickGiftUI(userId, userName);
+            });
+        });
+        
+    } catch (error) {
+        console.error('showUsersListUI error:', error);
+        panel.innerHTML = '<div class="empty-state">Error loading users</div>';
+    }
+}
+
+function showQuickGiftUI(userId, userName) {
+    const panel = document.getElementById('admin-action-panel');
+    panel.innerHTML = `
+        <h4>🎁 Gift Credits to ${userName}</h4>
+        <input type="number" id="quick-credits-amount" placeholder="Credits Amount" class="search-input" style="margin-bottom: 16px;" min="1" value="5">
+        <div style="display: flex; gap: 8px;">
+            <button id="quick-send-btn" class="admin-btn-primary" style="flex: 1;">Send Credits</button>
+            <button id="quick-back-btn" class="admin-btn-secondary" style="flex: 1;">Back to Users</button>
+        </div>
+    `;
+    
+    document.getElementById('quick-send-btn')?.addEventListener('click', async () => {
+        const credits = parseInt(document.getElementById('quick-credits-amount').value);
+        if (credits < 1) {
+            window.showToast('Please enter valid credits', 'error');
+            return;
+        }
+        
+        const sendBtn = document.getElementById('quick-send-btn');
+        sendBtn.textContent = '⏳ Sending...';
+        sendBtn.disabled = true;
+        
+        try {
+            const { data, error } = await supabase.rpc('admin_add_credits', {
+                p_target_user_id: userId,
+                p_credits: credits,
+                p_notes: 'Admin quick gift'
+            });
+            
+            if (error) throw error;
+            
+            if (data.success) {
+                window.showToast(`✅ Sent ${credits} credits to ${userName}!`, 'success');
+                showUsersListUI();
+            } else {
+                window.showToast(data.message, 'error');
+            }
+        } catch (error) {
+            console.error('Quick gift error:', error);
+            window.showToast('Error sending credits', 'error');
+        } finally {
+            sendBtn.textContent = 'Send Credits';
+            sendBtn.disabled = false;
+        }
+    });
+    
+    document.getElementById('quick-back-btn')?.addEventListener('click', () => {
+        showUsersListUI();
+    });
 }
 
 // Expose to window
