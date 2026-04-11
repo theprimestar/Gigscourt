@@ -11,7 +11,7 @@ import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query
 
 // Supabase configuration
 const supabaseUrl = 'https://aws-0-eu-west-1.pooler.supabase.com:6543';
-const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
+const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
 
 // ========== INITIALIZATION ==========
 const app = initializeApp(window.firebaseConfig);
