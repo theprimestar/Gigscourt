@@ -1470,6 +1470,21 @@ async function setupAuthListener() {
                         .then(() => console.log('Email backfilled for user:', user.email))
                         .catch(err => console.error('Email backfill error:', err));
                 }
+
+                // ========== REAL-TIME NOTIFICATION BADGE LISTENER ==========
+                const metaRef = doc(db, 'user_notification_meta', user.uid);
+                onSnapshot(metaRef, (doc) => {
+                    const count = doc.exists() ? (doc.data().unreadCount || 0) : 0;
+                    if (count > 0) {
+                        notificationBadge.textContent = count > 99 ? '99+' : count;
+                        notificationBadge.classList.remove('hidden');
+                    } else {
+                        notificationBadge.classList.add('hidden');
+                    }
+                }, (error) => {
+                    console.error('Badge listener error:', error);
+                });
+                
                 // IMPORTANT: Do NOT fire 'appReady' yet.
                 // We will wait for the token refresh so Supabase has the correct auth.
                 // This prevents the home feed from loading twice and causing flicker.
