@@ -2719,6 +2719,30 @@ setTimeout(() => {
     }
 }, 5000);
 
+// ========== ADMIN TAB VISIBILITY ==========
+function checkAdminAccess() {
+    const adminTab = document.getElementById('admin-tab');
+    if (!adminTab) return;
+    
+    const currentUser = window.auth?.currentUser;
+    const adminEmail = 'theprimestarventures@gmail.com';
+    
+    if (currentUser && currentUser.email === adminEmail) {
+        adminTab.classList.remove('hidden');
+        console.log('Admin access granted');
+    } else {
+        adminTab.classList.add('hidden');
+    }
+}
+
+// Check admin access after auth is ready
+setTimeout(() => {
+    checkAdminAccess();
+}, 1000);
+
+// Expose functions globally
+window.loadHomeFeed = loadHomeFeed;
+
 // Expose functions globally
 window.loadHomeFeed = loadHomeFeed;
 window.loadProfile = loadProfile;
