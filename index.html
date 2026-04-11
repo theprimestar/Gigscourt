@@ -327,5 +327,23 @@ if ('serviceWorker' in navigator) {
 }
 </script> 
     -->
+    <script>
+(function() {
+    var check = setInterval(function() {
+        var splash = document.getElementById('splash-screen');
+        var main = document.getElementById('main-app');
+        var user = window.auth && window.auth.currentUser;
+        
+        if (user && splash) {
+            splash.style.display = 'none';
+            if (main) main.style.display = 'block';
+            clearInterval(check);
+        }
+    }, 100);
+    
+    setTimeout(function() { clearInterval(check); }, 5000);
+})();
+</script>
+    
 </body>
 </html>
