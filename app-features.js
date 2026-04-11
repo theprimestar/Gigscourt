@@ -2826,6 +2826,22 @@ async function initFeatures() {
             loadProfile().catch(err => console.error('Navigate loadProfile error:', err));
         }
     });
+
+    window.addEventListener('navigate', (e) => {
+        console.log('Navigate event:', e.detail.page);
+        if (e.detail.page === 'home' && homeFeed) {
+            loadHomeFeed().catch(err => console.error('Navigate loadHomeFeed error:', err));
+        }
+        if (e.detail.page === 'chats' && chatsList) {
+            loadChats().catch(err => console.error('Navigate loadChats error:', err));
+        }
+        if (e.detail.page === 'profile' && profileContent) {
+            loadProfile().catch(err => console.error('Navigate loadProfile error:', err));
+        }
+        if (e.detail.page === 'admin') {
+            loadAdminPage().catch(err => console.error('Navigate loadAdminPage error:', err));
+        }
+    });
     
     console.log('initFeatures: All done!');
 }
