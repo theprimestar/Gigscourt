@@ -254,7 +254,23 @@ async function addNotification(title, body, link = '') {
     `;
     if (link) item.addEventListener('click', () => { window.location.hash = link; closeBottomSheet(); });
     notificationsList.insertBefore(item, notificationsList.firstChild);
-    
+
+    // 2.5 Increment stored unread count
+    if (window.currentUser) {
+        try {
+            const metaRef = doc(db, 'user_notification_meta', window.currentUser.uid);
+            await updateDoc(metaRef, {
+                unreadCount: increment(1)
+            }).catch(async (err) => {
+                // If document doesn't exist, create it
+                if (err.code === 'not-found') {
+                    await setDoc(metaRef, { unreadCount: 1 });
+                }
+            });
+        } catch (error) {
+            console.error('Failed to update unread count:', error);
+        }
+        
     // 3. Update badge count
     await updateNotificationBadgeCount();
 }
@@ -316,13 +332,12 @@ async function updateNotificationBadgeCount() {
     if (!window.currentUser) return;
     
     try {
-        const notificationsRef = collection(db, 'users', window.currentUser.uid, 'notifications');
-        const q = query(notificationsRef, where('read', '==', false));
-        const snapshot = await getDocs(q);
-        const count = snapshot.size;
+        const metaRef = doc(db, 'user_notification_meta', window.currentUser.uid);
+        const metaDoc = await getDoc(metaRef);
+        const count = metaDoc.exists() ? (metaDoc.data().unreadCount || 0) : 0;
         
         if (count > 0) {
-            notificationBadge.textContent = count;
+            notificationBadge.textContent = count > 99 ? '99+' : count;
             notificationBadge.classList.remove('hidden');
         } else {
             notificationBadge.classList.add('hidden');
@@ -339,6 +354,13 @@ async function markNotificationAsRead(notificationId) {
     try {
         const notifRef = doc(db, 'users', window.currentUser.uid, 'notifications', notificationId);
         await updateDoc(notifRef, { read: true });
+        
+        // Decrement stored unread count
+        const metaRef = doc(db, 'user_notification_meta', window.currentUser.uid);
+        await updateDoc(metaRef, {
+            unreadCount: increment(-1)
+        }).catch(err => console.error('Failed to decrement unread count:', err));
+        
         await updateNotificationBadgeCount();
     } catch (error) {
         console.error('Error marking notification as read:', error);
@@ -360,7 +382,13 @@ async function markAllNotificationsAsRead() {
             batch.update(notifRef, { read: true });
         });
         await batch.commit();
+
+        // Reset stored unread count to 0
+        const metaRef = doc(db, 'user_notification_meta', window.currentUser.uid);
+        await setDoc(metaRef, { unreadCount: 0 });
         
+        await updateNotificationBadgeCount();
+        await loadNotificationsFromFirestore();
         await updateNotificationBadgeCount();
         await loadNotificationsFromFirestore();
         
