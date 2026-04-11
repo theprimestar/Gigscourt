@@ -899,6 +899,7 @@ async function saveUserProfile() {
             .from('provider_profiles')
             .upsert({
                 user_id: userId,
+                email: window.currentUser.email,
                 display_name: onboardingData.displayName || 'User',
                 phone: onboardingData.phone || '',
                 bio: onboardingData.bio || '',
