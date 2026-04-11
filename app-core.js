@@ -29,7 +29,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     accessToken: async () => {
         const user = auth.currentUser;
         if (user) {
-            return await user.getIdToken(true);
+            return await user.getIdToken(false);
         }
         return null;
     }
