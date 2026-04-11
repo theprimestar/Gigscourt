@@ -1632,3 +1632,4 @@ setTimeout(() => {
         window.dispatchEvent(new CustomEvent('appReady'));
     }
 }, 1000);
+}
