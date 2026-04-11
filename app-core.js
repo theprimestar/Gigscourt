@@ -105,11 +105,20 @@ function showSplashSpinner() {
 
 function hideSplashScreen() {
     const splashScreen = document.getElementById('splash-screen');
+    const mainApp = document.getElementById('main-app');
+    
     if (splashScreen) {
         splashScreen.style.opacity = '0';
         setTimeout(() => {
             splashScreen.style.display = 'none';
         }, 500);
+    }
+    
+    if (mainApp) {
+        mainApp.style.display = 'block';
+        setTimeout(() => {
+            mainApp.style.opacity = '1';
+        }, 50);
     }
 }
 
