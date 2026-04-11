@@ -1953,28 +1953,40 @@ async function loadProfile(userId = null, skipSpinner = false) {
             profileContent.innerHTML = '<div class="loading-spinner"></div>';
         }
         
-        const profile = await getSingleProfileFromSupabase(targetId);
+        // SINGLE QUERY - Gets everything at once!
+        const { data: profileData, error } = await supabase.rpc('get_profile_data', {
+            p_user_id: targetId
+        });
         
-        if (!profile) {
+        if (error) throw error;
+        
+        if (!profileData) {
             profileContent.innerHTML = '<div class="empty-state">User not found</div>';
             return;
         }
         
+        const profile = {
+            id: profileData.user_id,
+            displayName: profileData.display_name || 'Anonymous',
+            photoURL: profileData.photo_url,
+            bio: profileData.bio,
+            phone: profileData.phone,
+            addressText: profileData.address_text,
+            services: profileData.services ? profileData.services.split(',').map(s => s.trim()) : [],
+            portfolio: profileData.portfolio || [],
+            credits: profileData.credits || 0,
+            gigCount: profileData.gig_count || 0,
+            rating: profileData.rating || 0,
+            totalRatingSum: profileData.total_rating_sum || 0,
+            reviewCount: profileData.review_count || 0,
+            monthlyGigs: profileData.monthly_gigs || 0,
+            lastGigDate: profileData.last_gig_date
+        };
+        
         const isOwnProfile = targetId === window.auth.currentUser?.uid;
         window.setCurrentViewedUserId(targetId);
         
-        // Fetch rolling 30-day gig count
-        const monthlyGigs = await getRolling30DayGigCount(targetId);
-        
-        // Get location data for active status
-        const { data: locationData } = await supabase
-            .from('provider_locations')
-            .select('last_gig_date')
-            .eq('user_id', targetId)
-            .single();
-        
-        const userWithLocation = { ...profile, ...(locationData || {}) };
-        const activeStatus = getActiveStatus(userWithLocation);
+        const activeStatus = profile.lastGigDate && new Date(profile.lastGigDate) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
         
         const profileHeaderTitle = document.getElementById('profile-header-title');
         const settingsBtn = document.getElementById('profile-settings-btn');
@@ -1994,7 +2006,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
                 <img class="profile-avatar" src="${getOptimizedImageUrl(profile.photoURL, 200, 200) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(profile.displayName || 'User')}" alt="" data-user-id="${profile.id}">
                 <h2 class="profile-name">${profile.displayName || 'Anonymous'}</h2>
                 <p class="profile-bio">${profile.bio || 'No bio yet'}</p>
-                ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
+                ${activeStatus ? '<span class="active-badge">Active this week</span>' : ''}
             </div>
             <div class="profile-stats">
                 <div class="stat" data-stat="gigs">
@@ -2011,7 +2023,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
                 </div>
             </div>
             <div class="profile-monthly-gigs" style="text-align: center; padding: 8px 0; color: var(--accent-orange); font-weight: 500;">
-                🔥 ${monthlyGigs} gigs this month
+                🔥 ${profile.monthlyGigs} gigs this month
             </div>
             <div class="profile-address">📍 ${profile.addressText || 'No address set'}</div>
             <div class="profile-actions">
@@ -2052,9 +2064,9 @@ async function loadProfile(userId = null, skipSpinner = false) {
         
         document.querySelectorAll('.portfolio-item').forEach(img => {
             img.addEventListener('click', () => {
-    const fullSizeUrl = getOptimizedImageUrl(img.src, null, null, true);
-    window.openBottomSheet(`<img src="${fullSizeUrl}" style="width: 100%; border-radius: 20px;">`);
-});
+                const fullSizeUrl = getOptimizedImageUrl(img.src, null, null, true);
+                window.openBottomSheet(`<img src="${fullSizeUrl}" style="width: 100%; border-radius: 20px;">`);
+            });
         });
         document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
         
