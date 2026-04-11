@@ -45,7 +45,7 @@ async function fetchProviderProfilesFromSupabase(userIds) {
     try {
         const { data: profiles, error } = await supabase
             .from('provider_profiles')
-            .select('*')
+            .select('user_id, display_name, photo_url, bio, phone, address_text, services, portfolio, credits, gig_count, rating, review_count')
             .in('user_id', userIds);
         
         if (error) throw error;
@@ -77,7 +77,7 @@ async function getSingleProfileFromSupabase(userId) {
     try {
         const { data: profile, error } = await supabase
             .from('provider_profiles')
-            .select('*')
+            .select('user_id, display_name, photo_url, bio, phone, address_text, services, portfolio, credits, gig_count, rating, total_rating_sum, review_count')
             .eq('user_id', userId)
             .single();
         
