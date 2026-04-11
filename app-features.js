@@ -2233,6 +2233,138 @@ async function loadProfile(userId = null, skipSpinner = false) {
     }
 }
 
+// ========== ADMIN PAGE ==========
+async function loadAdminPage() {
+    const adminContent = document.getElementById('admin-content');
+    if (!adminContent) return;
+    
+    // Check admin access
+    const currentUser = window.auth?.currentUser;
+    const adminEmail = 'theprimestarventures@gmail.com';
+    
+    if (!currentUser || currentUser.email !== adminEmail) {
+        adminContent.innerHTML = '<div class="empty-state">Access Denied</div>';
+        return;
+    }
+    
+    adminContent.innerHTML = '<div class="loading-spinner"></div>';
+    
+    try {
+        // Fetch admin stats
+        const { data: statsData, error: statsError } = await supabase.rpc('admin_get_stats');
+        
+        if (statsError) throw statsError;
+        
+        const stats = statsData.stats;
+        
+        adminContent.innerHTML = `
+            <div class="admin-dashboard">
+                <h3>📊 Dashboard Overview</h3>
+                
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.total_users || 0}</div>
+                        <div class="stat-label">Total Users</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.total_gigs || 0}</div>
+                        <div class="stat-label">Total Gigs</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.total_credits_purchased || 0}</div>
+                        <div class="stat-label">Credits Sold</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">₦${(stats.total_revenue || 0).toLocaleString()}</div>
+                        <div class="stat-label">Revenue</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 24px;">📈 User Growth</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.joined_today || 0}</div>
+                        <div class="stat-label">Joined Today</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.joined_week || 0}</div>
+                        <div class="stat-label">Joined This Week</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.joined_month || 0}</div>
+                        <div class="stat-label">Joined This Month</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${stats.joined_year || 0}</div>
+                        <div class="stat-label">Joined This Year</div>
+                    </div>
+                </div>
+                
+                <h3 style="margin-top: 24px;">⚡ Quick Actions</h3>
+                <div class="admin-actions">
+                    <button id="admin-gift-credits-btn" class="admin-btn-primary">🎁 Gift Credits</button>
+                    <button id="admin-service-requests-btn" class="admin-btn-secondary">📋 Service Requests (${stats.pending_requests || 0})</button>
+                    <button id="admin-view-users-btn" class="admin-btn-secondary">👥 View Users</button>
+                </div>
+                
+                <div id="admin-action-panel" style="margin-top: 20px;"></div>
+            </div>
+        `;
+        
+        // Add button listeners
+        document.getElementById('admin-gift-credits-btn')?.addEventListener('click', () => showGiftCreditsUI());
+        document.getElementById('admin-service-requests-btn')?.addEventListener('click', () => showServiceRequestsUI());
+        document.getElementById('admin-view-users-btn')?.addEventListener('click', () => showUsersListUI());
+        
+        // Refresh button
+        document.getElementById('admin-refresh-btn')?.addEventListener('click', () => loadAdminPage());
+        
+    } catch (error) {
+        console.error('loadAdminPage error:', error);
+        adminContent.innerHTML = '<div class="empty-state">Error loading admin page</div>';
+    }
+}
+
+// Helper UI functions (we'll fill these in next steps)
+function showGiftCreditsUI() {
+    const panel = document.getElementById('admin-action-panel');
+    panel.innerHTML = `
+        <h4>Gift Credits to User</h4>
+        <input type="text" id="admin-target-email" placeholder="User Email" class="search-input" style="margin-bottom: 12px;">
+        <input type="number" id="admin-credits-amount" placeholder="Credits Amount" class="search-input" style="margin-bottom: 12px;" min="1" value="5">
+        <button id="admin-send-credits-btn" class="admin-btn-primary">Send Credits</button>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">User must have completed onboarding.</p>
+    `;
+    
+    document.getElementById('admin-send-credits-btn')?.addEventListener('click', async () => {
+        const email = document.getElementById('admin-target-email').value.trim();
+        const credits = parseInt(document.getElementById('admin-credits-amount').value);
+        
+        if (!email || credits < 1) {
+            window.showToast('Please enter valid email and credits', 'error');
+            return;
+        }
+        
+        // Find user by email (we'll need to add this lookup)
+        window.showToast('User lookup coming in next step', 'info');
+    });
+}
+
+function showServiceRequestsUI() {
+    const panel = document.getElementById('admin-action-panel');
+    panel.innerHTML = '<div class="loading-spinner"></div>';
+    window.showToast('Service requests UI coming in next step', 'info');
+}
+
+function showUsersListUI() {
+    const panel = document.getElementById('admin-action-panel');
+    panel.innerHTML = '<div class="loading-spinner"></div>';
+    window.showToast('Users list coming in next step', 'info');
+}
+
+// Expose to window
+window.loadAdminPage = loadAdminPage;
+
 async function editServices() {
     let selectedServices = [...(window.currentUserData?.services || [])];
     const servicesHtml = window.PRESET_SERVICES.map(service => `
