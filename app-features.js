@@ -24,7 +24,7 @@ import {
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { getAuth } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
-const supabaseUrl = 'https://aws-0-eu-west-1.pooler.supabase.com:6543';
+const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
 const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
