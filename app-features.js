@@ -251,16 +251,16 @@ function getActiveStatus(userData) {
 function getOptimizedImageUrl(url, width = 100, height = 100, fullSize = false) {
     if (!url) return url;
     
-    // If it's a UI Avatar (placeholder), return as-is
     if (url.includes('ui-avatars.com')) return url;
     
-    // If full size requested, only convert to WebP
+    // Add cache-control for 1 year (31536000 seconds)
+    const cacheParam = 'cache-control=public,max-age=31536000';
+    
     if (fullSize) {
-        return `${url}?tr=f-webp`;
+        return `${url}?tr=f-webp,${cacheParam}`;
     }
     
-    // Otherwise, resize and convert to WebP
-    return `${url}?tr=f-webp,w-${width},h-${height},c-at_max`;
+    return `${url}?tr=f-webp,w-${width},h-${height},c-at_max,${cacheParam}`;
 }
 
 function calculateDistance(lat1, lon1, lat2, lon2) {
