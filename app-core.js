@@ -1405,6 +1405,7 @@ async function setupAuthListener() {
     if (user) {
         // User is logged in - hide auth screen immediately
         hideAuthScreen();
+        hideSplashScreen();
         
         try {
             // Fetch user profile from Supabase instead of Firestore
