@@ -329,19 +329,38 @@ if ('serviceWorker' in navigator) {
     -->
     <script>
 (function() {
+    console.log('Splash hide script started');
+    
+    // Method 1: Check interval
     var check = setInterval(function() {
         var splash = document.getElementById('splash-screen');
         var user = window.auth && window.auth.currentUser;
         
         if (user && splash) {
-            // Only hide splash, don't touch main app
             splash.style.display = 'none';
             clearInterval(check);
-            console.log('Splash hidden, app initialization continues normally');
+            console.log('✅ Splash hidden via interval');
         }
-    }, 100);
+    }, 200);
     
-    setTimeout(function() { clearInterval(check); }, 5000);
+    // Method 2: Listen for auth state change
+    if (window.auth) {
+        window.auth.onAuthStateChanged(function(user) {
+            if (user) {
+                var splash = document.getElementById('splash-screen');
+                if (splash) {
+                    splash.style.display = 'none';
+                    clearInterval(check);
+                    console.log('✅ Splash hidden via onAuthStateChanged');
+                }
+            }
+        });
+    }
+    
+    // Stop interval after 30 seconds
+    setTimeout(function() { 
+        clearInterval(check); 
+    }, 30000);
 })();
 </script>
     
