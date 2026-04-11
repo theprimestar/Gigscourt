@@ -469,7 +469,21 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             card.setAttribute('data-listener', 'true');
             card.addEventListener('click', () => {
                 window.haptic('light');
-                showUserBottomSheet(card.dataset.userId);
+                
+                // Pass cached card data to avoid refetching
+                const userId = card.dataset.userId;
+                const cardData = {
+                    displayName: card.querySelector('.card-name')?.childNodes[0]?.textContent?.trim() || 'Anonymous',
+                    photoURL: card.querySelector('.card-avatar')?.src || null,
+                    rating: parseFloat(card.querySelector('.card-rating')?.textContent?.match(/★\s*([\d.]+)/)?.[1]) || 0,
+                    reviewCount: parseInt(card.querySelector('.card-rating')?.textContent?.match(/\((\d+)\)/)?.[1]) || 0,
+                    gigCount: parseInt(card.querySelector('.stat-item')?.textContent?.match(/📊\s*(\d+)/)?.[1]) || 0,
+                    monthlyGigs: parseInt(card.querySelectorAll('.stat-item')[1]?.textContent?.match(/🔥\s*(\d+)/)?.[1]) || 0,
+                    services: Array.from(card.querySelectorAll('.service-tag')).map(tag => tag.textContent.trim()),
+                    distance: card.querySelector('.card-distance')?.textContent?.replace('📍', '').trim() || ''
+                };
+                
+                showUserBottomSheet(userId, cardData);
             });
         });
         
@@ -811,31 +825,70 @@ function setupSearchInfiniteScroll() {
 }
 
 // ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
-async function showUserBottomSheet(userId) {
+async function showUserBottomSheet(userId, cachedData = null) {
     try {
-        const user = await getSingleProfileFromSupabase(userId);
-        if (!user) {
-            window.showToast('Error loading profile', 'error');
-            return;
+        let user, monthlyGigs, reviewCount, activeStatus;
+        
+        if (cachedData) {
+            // Use cached data from card - NO QUERIES!
+            user = {
+                displayName: cachedData.displayName,
+                photoURL: cachedData.photoURL,
+                rating: cachedData.rating,
+                gigCount: cachedData.gigCount,
+                services: cachedData.services,
+                bio: null // Bio not on card, will fetch only if needed
+            };
+            monthlyGigs = cachedData.monthlyGigs;
+            reviewCount = cachedData.reviewCount;
+            
+            // We still need active status and bio - do a minimal query
+            const { data: minimalData } = await supabase
+                .from('provider_profiles')
+                .select('bio')
+                .eq('user_id', userId)
+                .single();
+            
+            if (minimalData) {
+                user.bio = minimalData.bio;
+            }
+            
+            // Get location for active status (1 query instead of 3)
+            const { data: locationData } = await supabase
+                .from('provider_locations')
+                .select('last_gig_date')
+                .eq('user_id', userId)
+                .single();
+            
+            const userWithLocation = { ...user, ...(locationData || {}) };
+            activeStatus = getActiveStatus(userWithLocation);
+            
+        } else {
+            // Fallback: Full fetch if no cached data (e.g., opened from chat)
+            user = await getSingleProfileFromSupabase(userId);
+            if (!user) {
+                window.showToast('Error loading profile', 'error');
+                return;
+            }
+            
+            const { data: locationData } = await supabase
+                .from('provider_locations')
+                .select('last_gig_date')
+                .eq('user_id', userId)
+                .single();
+            
+            monthlyGigs = await getRolling30DayGigCount(userId);
+            reviewCount = user.reviewCount || 0;
+            
+            const userWithLocation = { ...user, ...(locationData || {}) };
+            activeStatus = getActiveStatus(userWithLocation);
         }
         
-        // Get location data for active status
-        const { data: locationData } = await supabase
-            .from('provider_locations')
-            .select('last_gig_date')
-            .eq('user_id', userId)
-            .single();
-        
-        const monthlyGigs = await getRolling30DayGigCount(userId);
-        const reviewCount = user.reviewCount || 0;
-        
-        const userWithLocation = { ...user, ...(locationData || {}) };
-        const activeStatus = getActiveStatus(userWithLocation);
         window.openBottomSheet(`
             <div style="text-align: center; padding: 8px 0;">
                 <img src="${getOptimizedImageUrl(user.photoURL, 160, 160) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
                 <h3>${user.displayName || 'Anonymous'}</h3>
-                ${activeStatus.active ? '<span class="active-badge">Active this week</span>' : ''}
+                ${activeStatus?.active ? '<span class="active-badge">Active this week</span>' : ''}
                 <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${reviewCount})</div>
                 <div style="font-size: 13px; color: var(--text-secondary); margin: 4px 0;">📊 ${user.gigCount || 0} gigs total • 🔥 ${monthlyGigs} this month</div>
                 <p style="color: var(--text-secondary); margin: 8px 0;">${user.bio || 'No bio yet'}</p>
@@ -846,6 +899,7 @@ async function showUserBottomSheet(userId) {
                 </div>
             </div>
         `);
+        
         document.getElementById('view-full-profile')?.addEventListener('click', () => {
             window.closeBottomSheet();
             loadProfile(userId);
@@ -855,6 +909,7 @@ async function showUserBottomSheet(userId) {
             window.closeBottomSheet();
             openChat(userId);
         });
+        
     } catch (error) {
         console.error('showUserBottomSheet error:', error);
         window.showToast('Error loading profile', 'error');
@@ -989,7 +1044,20 @@ async function performSearch(reset = false) {
             card.setAttribute('data-listener', 'true');
             card.addEventListener('click', () => {
                 window.haptic('light');
-                showUserBottomSheet(card.dataset.userId);
+                
+                const userId = card.dataset.userId;
+                const cardData = {
+                    displayName: card.querySelector('.card-name')?.childNodes[0]?.textContent?.trim() || 'Anonymous',
+                    photoURL: card.querySelector('.card-avatar')?.src || null,
+                    rating: parseFloat(card.querySelector('.card-rating')?.textContent?.match(/★\s*([\d.]+)/)?.[1]) || 0,
+                    reviewCount: parseInt(card.querySelector('.card-rating')?.textContent?.match(/\((\d+)\)/)?.[1]) || 0,
+                    gigCount: parseInt(card.querySelector('.stat-item')?.textContent?.match(/📊\s*(\d+)/)?.[1]) || 0,
+                    monthlyGigs: parseInt(card.querySelectorAll('.stat-item')[1]?.textContent?.match(/🔥\s*(\d+)/)?.[1]) || 0,
+                    services: Array.from(card.querySelectorAll('.service-tag')).map(tag => tag.textContent.trim()),
+                    distance: card.querySelector('.card-distance')?.textContent?.replace('📍', '').trim() || ''
+                };
+                
+                showUserBottomSheet(userId, cardData);
             });
         });
         
