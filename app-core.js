@@ -582,7 +582,7 @@ function showOnboardingStep1() {
     }
 }
 
-function showOnboardingStep2() {
+async function showOnboardingStep2() {
     currentOnboardingStep = 2;
     updateOnboardingStepIndicator(2, 5);
     showOnboardingBackButton(true);
@@ -590,17 +590,12 @@ function showOnboardingStep2() {
     
     let selectedServices = [...(onboardingData.services || [])];
     
-    const servicesHtml = PRESET_SERVICES.map(service => `
-        <div class="onboarding-service-option ${selectedServices.includes(service) ? 'selected' : ''}" data-service="${service}">
-            ${service}
-        </div>
-    `).join('');
-    
+    // Show loading state
     const content = `
         <h2 class="onboarding-title">What services do you offer?</h2>
         <p class="onboarding-subtitle">Select all that apply</p>
-        <div class="onboarding-services-list" id="onboarding-services-list">
-            ${servicesHtml}
+        <div id="onboarding-services-container" style="max-height: 350px; overflow-y: auto;">
+            <div class="loading-spinner"></div>
         </div>
         <div class="service-request-section" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-light);">
             <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">Can't find your service?</p>
@@ -613,11 +608,123 @@ function showOnboardingStep2() {
     `;
     
     document.getElementById('onboarding-content').innerHTML = content;
-
-    // ========== SERVICE REQUEST HANDLER ==========
-    let requestedServices = [];
+    showOnboardingScreen();
     
-    document.getElementById('request-service-btn')?.addEventListener('click', async () => {
+    // Fetch categories and services from Supabase
+    try {
+        const { data: categories, error: catError } = await supabase
+            .from('service_categories')
+            .select('*')
+            .order('display_order', { ascending: true });
+        
+        if (catError) throw catError;
+        
+        const { data: services, error: servError } = await supabase
+            .from('preset_services')
+            .select('*')
+            .eq('is_active', true);
+        
+        if (servError) throw servError;
+        
+        // Group services by category
+        const servicesByCategory = {};
+        services.forEach(service => {
+            if (!servicesByCategory[service.category_id]) {
+                servicesByCategory[service.category_id] = [];
+            }
+            servicesByCategory[service.category_id].push(service);
+        });
+        
+        // Build HTML
+        let html = '';
+        categories.forEach(category => {
+            const categoryServices = servicesByCategory[category.id] || [];
+            if (categoryServices.length === 0) return;
+            
+            html += `
+                <div class="onboarding-category" style="margin-bottom: 16px; border-bottom: 1px solid var(--border-light); padding-bottom: 8px;">
+                    <div class="category-header" data-category-id="${category.id}" style="display: flex; align-items: center; gap: 8px; padding: 8px 0; cursor: pointer; font-weight: 600;">
+                        <span class="category-arrow" id="arrow-${category.id}" style="font-size: 12px; transition: transform 0.2s;">▶</span>
+                        <span>${category.emoji} ${category.category_name}</span>
+                        <span style="margin-left: auto; font-size: 12px; color: var(--text-secondary);">${categoryServices.length}</span>
+                    </div>
+                    <div class="category-services" id="category-${category.id}" style="display: none; padding-left: 24px; padding-bottom: 8px;">
+            `;
+            
+            categoryServices.forEach(service => {
+                const isSelected = selectedServices.includes(service.service_name);
+                html += `
+                    <div class="onboarding-service-option ${isSelected ? 'selected' : ''}" data-service="${service.service_name}" style="padding: 10px 12px; margin-bottom: 4px; background: ${isSelected ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isSelected ? 'white' : 'var(--text-primary)'}; border-radius: 8px; cursor: pointer;">
+                        ${service.display_name}
+                    </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+                </div>
+            `;
+        });
+        
+        document.getElementById('onboarding-services-container').innerHTML = html || '<p style="color: var(--text-secondary); text-align: center;">No services available</p>';
+        
+        // Add category toggle handlers
+        document.querySelectorAll('.category-header').forEach(header => {
+            header.addEventListener('click', () => {
+                const categoryId = header.dataset.categoryId;
+                const servicesDiv = document.getElementById(`category-${categoryId}`);
+                const arrow = document.getElementById(`arrow-${categoryId}`);
+                
+                if (servicesDiv.style.display === 'none') {
+                    servicesDiv.style.display = 'block';
+                    arrow.style.transform = 'rotate(90deg)';
+                } else {
+                    servicesDiv.style.display = 'none';
+                    arrow.style.transform = 'rotate(0deg)';
+                }
+            });
+        });
+        
+        // Add service selection handlers
+        document.querySelectorAll('.onboarding-service-option').forEach(opt => {
+            opt.addEventListener('click', () => {
+                const service = opt.dataset.service;
+                if (selectedServices.includes(service)) {
+                    selectedServices = selectedServices.filter(s => s !== service);
+                    opt.classList.remove('selected');
+                    opt.style.background = 'var(--bg-secondary)';
+                    opt.style.color = 'var(--text-primary)';
+                } else {
+                    selectedServices.push(service);
+                    opt.classList.add('selected');
+                    opt.style.background = 'var(--accent-orange)';
+                    opt.style.color = 'white';
+                }
+            });
+        });
+        
+    } catch (error) {
+        console.error('Error fetching services:', error);
+        document.getElementById('onboarding-services-container').innerHTML = '<p style="color: var(--error-red); text-align: center;">Error loading services. Please try again.</p>';
+    }
+    
+    // ========== SERVICE REQUEST HANDLER ==========
+    let requestedServices = [...(onboardingData.requestedServices || [])];
+    
+    // Update requested services display
+    function updateRequestedDisplay() {
+        const listDiv = document.getElementById('requested-services-list');
+        if (requestedServices.length > 0) {
+            listDiv.innerHTML = requestedServices.map(s => `
+                <span style="display: inline-block; background: var(--bg-tertiary); padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-right: 8px; margin-bottom: 8px;">⏳ ${s} (Pending)</span>
+            `).join('');
+        } else {
+            listDiv.innerHTML = '';
+        }
+    }
+    updateRequestedDisplay();
+    
+    document.getElementById('request-service-btn')?.addEventListener('click', () => {
         const input = document.getElementById('custom-service-input');
         const serviceName = input.value.trim();
         
@@ -632,33 +739,10 @@ function showOnboardingStep2() {
         }
         
         requestedServices.push(serviceName);
-        
-        // Save to onboardingData
-        if (!onboardingData.requestedServices) onboardingData.requestedServices = [];
-        onboardingData.requestedServices.push(serviceName);
-        
-        // Update display
-        const listDiv = document.getElementById('requested-services-list');
-        listDiv.innerHTML = requestedServices.map(s => `
-            <span style="display: inline-block; background: var(--bg-tertiary); padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-right: 8px; margin-bottom: 8px;">⏳ ${s} (Pending)</span>
-        `).join('');
-        
+        onboardingData.requestedServices = requestedServices;
+        updateRequestedDisplay();
         input.value = '';
         showToast('Service requested! Admin will review.', 'success');
-    });
-    
-    // Attach service selection handlers
-    document.querySelectorAll('.onboarding-service-option').forEach(opt => {
-        opt.addEventListener('click', () => {
-            const service = opt.dataset.service;
-            if (selectedServices.includes(service)) {
-                selectedServices = selectedServices.filter(s => s !== service);
-                opt.classList.remove('selected');
-            } else {
-                selectedServices.push(service);
-                opt.classList.add('selected');
-            }
-        });
     });
     
     // Setup next button
