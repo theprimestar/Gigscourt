@@ -1438,9 +1438,17 @@ async function setupAuthListener() {
     window.currentUser = user;
     
     if (user) {
-        // User is logged in - hide auth screen immediately
+        // FORCE HIDE SPLASH SCREEN IMMEDIATELY - DIRECT DOM MANIPULATION
+        const splash = document.getElementById('splash-screen');
+        const main = document.getElementById('main-app');
+        if (splash) splash.style.setProperty('display', 'none', 'important');
+        if (main) {
+            main.style.setProperty('display', 'block', 'important');
+            main.style.opacity = '1';
+        }
+        
+        // Hide auth screen
         hideAuthScreen();
-        hideSplashScreen();
         
         try {
             // Fetch user profile from Supabase instead of Firestore
@@ -1491,10 +1499,6 @@ async function setupAuthListener() {
                 }, (error) => {
                     console.error('Badge listener error:', error);
                 });
-                
-                // IMPORTANT: Do NOT fire 'appReady' yet.
-                // We will wait for the token refresh so Supabase has the correct auth.
-                // This prevents the home feed from loading twice and causing flicker.
                 
                 navigateToPage('home');
                 
@@ -1554,8 +1558,15 @@ async function setupAuthListener() {
             showToast('Error loading profile. Please refresh.', 'error');
         }
         
-        // Hide splash screen
-        hideSplashScreen();
+        // SAFETY NET - Ensure splash is hidden after everything
+        setTimeout(() => {
+            const splashCheck = document.getElementById('splash-screen');
+            if (splashCheck && window.getComputedStyle(splashCheck).display !== 'none') {
+                splashCheck.style.setProperty('display', 'none', 'important');
+                const mainCheck = document.getElementById('main-app');
+                if (mainCheck) mainCheck.style.setProperty('display', 'block', 'important');
+            }
+        }, 1000);
         
     } else {
         // No user found - show spinner first
@@ -1564,7 +1575,10 @@ async function setupAuthListener() {
         // Give a short delay to ensure no user appears (handles edge cases)
         authScreenTimeout = setTimeout(() => {
             showAuthScreen();
-            hideSplashScreen();
+            const splash = document.getElementById('splash-screen');
+            const main = document.getElementById('main-app');
+            if (splash) splash.style.setProperty('display', 'none', 'important');
+            if (main) main.style.setProperty('display', 'block', 'important');
             authScreenTimeout = null;
         }, 1500);
     }
