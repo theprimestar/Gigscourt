@@ -1000,6 +1000,31 @@ async function saveUserProfile() {
         updateData.photoURL = onboardingData.photoURL;
     }
     await updateProfile(window.currentUser, updateData);
+
+    // 3.5 Save any requested services
+    if (onboardingData.requestedServices && onboardingData.requestedServices.length > 0) {
+        const userEmail = window.currentUser.email;
+        for (const serviceName of onboardingData.requestedServices) {
+            try {
+                const { error: requestError } = await supabase
+                    .from('service_requests')
+                    .insert({
+                        user_id: userId,
+                        user_email: userEmail,
+                        requested_service: serviceName,
+                        status: 'pending'
+                    });
+                
+                if (requestError) {
+                    console.error('Failed to save service request:', requestError);
+                } else {
+                    console.log('Service request saved:', serviceName);
+                }
+            } catch (err) {
+                console.error('Error saving service request:', err);
+            }
+        }
+    }
     
     // 4. Set current user data in memory
     window.currentUserData = {
