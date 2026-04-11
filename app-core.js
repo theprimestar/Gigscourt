@@ -1,6 +1,6 @@
 // ========================================
 // GigsCourt - Core Module (FIXED - Race Condition)
-// Authentication, Navigation, UI, Onboarding
+// Authentication, Navigation, UI, Onboarding.
 // ========================================
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
