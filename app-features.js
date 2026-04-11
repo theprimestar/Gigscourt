@@ -356,30 +356,23 @@ async function uploadImage(file, folder = 'profiles') {
 async function loadHomeFeed(reset = false, skipSpinner = false) {
     if (!homeFeed) return;
     
-    // If no user, show spinner instead of error message
     if (!window.auth?.currentUser) {
         homeFeed.innerHTML = '<div class="loading-spinner"></div>';
-        // Wait for user to appear (Firebase restore)
         let attempts = 0;
-        const maxAttempts = 50; // 2 seconds max (20 * 100ms)
+        const maxAttempts = 50;
         
         while (!window.auth?.currentUser && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 100));
             attempts++;
         }
         
-        // If still no user after waiting, show login message
         if (!window.auth?.currentUser) {
             homeFeed.innerHTML = '<div class="empty-state">Please log in to see providers</div>';
             return;
         }
-        
-        // User appeared, continue to load feed
-        // Reset the feed container and proceed
         homeFeed.innerHTML = '<div class="loading-spinner"></div>';
     }
     
-    // Reset if requested
     if (reset) {
         if (!skipSpinner) {
             homeFeed.innerHTML = '<div class="loading-spinner"></div>';
@@ -391,59 +384,37 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         }
     }
     
-    // Stop if already loading or no more data
     if (isHomeFeedLoading || !hasMoreHomeFeed) return;
-    
     isHomeFeedLoading = true;
     
     try {
-        // Get user location - fetch if not available
         if (!currentUserLocation) {
-            // Try to get location now
             const location = await new Promise((resolve) => {
                 if (!navigator.geolocation) {
-                    resolve(null);
+                    resolve({ lat: 6.5244, lng: 3.3792 });
                     return;
                 }
                 navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        resolve({
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        });
-                    },
-                    () => {
-                        resolve(null);
-                    }
+                    (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+                    () => resolve({ lat: 6.5244, lng: 3.3792 })
                 );
             });
-            
-            if (!location) {
-                homeFeed.innerHTML = '<div class="empty-state">Enable location to see providers near you</div>';
-                isHomeFeedLoading = false;
-                return;
-            }
-            
             currentUserLocation = location;
         }
         
-        let currentLat = currentUserLocation.lat;
-        let currentLng = currentUserLocation.lng;
-        
-        // Query Supabase with offset pagination
-        const { data: providers, error } = await supabase
-            .from('provider_locations')
-            .select('user_id, lat, lng, rating, last_gig_date')
-            .order('rating', { ascending: false })
-            .range(homeFeedOffset, homeFeedOffset + HOME_FEED_LIMIT - 1);
+        // SINGLE QUERY - No N+1!
+        const { data: providers, error } = await supabase.rpc('get_home_feed_providers', {
+            p_current_lat: currentUserLocation.lat,
+            p_current_lng: currentUserLocation.lng,
+            p_limit: HOME_FEED_LIMIT,
+            p_offset: homeFeedOffset
+        });
         
         if (error) throw error;
         
-        // Check if no more providers
         if (!providers || providers.length === 0) {
             hasMoreHomeFeed = false;
             if (homeFeed.children.length === 0 || (homeFeed.children.length === 1 && homeFeed.querySelector('.loading-spinner'))) {
-                // Remove spinner first, then show empty state
                 const spinner = homeFeed.querySelector('.loading-spinner');
                 if (spinner) spinner.remove();
                 homeFeed.insertAdjacentHTML('beforeend', '<div class="empty-state">No providers found nearby</div>');
@@ -452,94 +423,48 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             return;
         }
         
-        // Update offset for next load
         homeFeedOffset += providers.length;
+        if (providers.length < HOME_FEED_LIMIT) hasMoreHomeFeed = false;
         
-        // If fewer than limit, no more data
-        if (providers.length < HOME_FEED_LIMIT) {
-            hasMoreHomeFeed = false;
-        }
-        
-        // Fetch full profiles from Supabase
-        const userIds = providers.map(p => p.user_id);
-        const profiles = await fetchProviderProfilesFromSupabase(userIds);
-        
-        // Merge data
-        const mergedProviders = providers.map(provider => {
-            const profile = profiles[provider.user_id] || {};
-            return {
-                id: provider.user_id,
-                displayName: profile.displayName || 'Anonymous',
-                photoURL: profile.photoURL || null,
-                rating: profile.rating || provider.rating || 0,
-                gigCount: profile.gigCount || 0,
-                reviewCount: profile.reviewCount || 0,
-                services: profile.services || [],
-                distance: calculateDistance(currentLat, currentLng, provider.lat, provider.lng),
-                last_gig_date: provider.last_gig_date,
-            };
-        });
-        
-        // Sort by distance (closest first)
-        mergedProviders.sort((a, b) => a.distance - b.distance);
-        
-        // Sort active providers first
-        mergedProviders.sort((a, b) => {
-            const aActive = getActiveStatus(a).active ? 1 : 0;
-            const bActive = getActiveStatus(b).active ? 1 : 0;
-            return bActive - aActive;
-        });
-        
-        // Filter out the current user so they don't see themselves
-        const filteredProviders = mergedProviders.filter(provider => provider.id !== window.auth.currentUser.uid);
-        
-        // Create HTML for new cards (with async monthly gig count)
-        const cardsHtmlArray = await Promise.all(filteredProviders.map(async (user) => {
-            const monthlyGigs = await getRolling30DayGigCount(user.id);
-            const reviewCount = user.reviewCount || 0;
+        // Build cards - NO MORE N+1 QUERIES!
+        const cardsHtml = providers.map(provider => {
+            const servicesList = provider.services ? provider.services.split(',').map(s => s.trim()) : [];
+            const activeStatus = provider.last_gig_date && new Date(provider.last_gig_date) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
             
             return `
-            <div class="card" data-user-id="${user.id}">
+            <div class="card" data-user-id="${provider.user_id}">
                 <div class="card-header">
-                    <img class="card-avatar" src="${getOptimizedImageUrl(user.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}" loading="lazy">
+                    <img class="card-avatar" src="${getOptimizedImageUrl(provider.photo_url, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(provider.display_name)}" alt="${provider.display_name}" loading="lazy">
                     <div class="card-info">
                         <div class="card-name">
-                            ${user.displayName}
-                            ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
+                            ${provider.display_name}
+                            ${activeStatus ? '<span class="active-badge">Active</span>' : ''}
                         </div>
                         <div class="card-rating">
-                            <span class="star">★</span> ${(user.rating || 0).toFixed(1)} (${reviewCount})
+                            <span class="star">★</span> ${(provider.rating || 0).toFixed(1)} (${provider.review_count || 0})
                         </div>
                     </div>
                 </div>
                 <div class="card-services">
-                    ${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}
+                    ${servicesList.slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}
                 </div>
                 <div class="card-stats">
-                    <div class="stat-item">📊 ${user.gigCount || 0} gigs total</div>
-                    <div class="stat-item">🔥 ${monthlyGigs} gigs this month</div>
+                    <div class="stat-item">📊 ${provider.gig_count || 0} gigs total</div>
+                    <div class="stat-item">🔥 ${provider.monthly_gigs || 0} gigs this month</div>
                 </div>
-                <div class="card-distance">📍 ${formatDistance(user.distance)}</div>
+                <div class="card-distance">📍 ${formatDistance(provider.distance_meters)}</div>
             </div>
         `;
-        }));
+        }).join('');
         
-        const cardsHtml = cardsHtmlArray.join('');
-        
-        // SMOOTH TRANSITION: Add cards FIRST, then remove spinner
-        // This prevents the empty gap between spinner disappearing and cards appearing
-        
-        // If this is a reset (first load), remove the spinner after adding cards
         if (reset) {
             homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
             const spinner = homeFeed.querySelector('.loading-spinner');
             if (spinner) spinner.remove();
         } else {
-            // For infinite scroll (loading more), just append
             homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
         }
         
-        // Attach click listeners to new cards
         document.querySelectorAll('#home-feed .card:not([data-listener])').forEach(card => {
             card.setAttribute('data-listener', 'true');
             card.addEventListener('click', () => {
