@@ -889,7 +889,6 @@ async function initMap() {
 async function performSearch(reset = false) {
     if (!window.db) return;
     
-    // Reset pagination if requested
     if (reset) {
         if (searchListFeed) {
             searchListFeed.innerHTML = '<div class="loading-spinner"></div>';
@@ -903,68 +902,39 @@ async function performSearch(reset = false) {
         }
     }
     
-    // Stop if already loading or no more data
     if (isSearchLoading || !hasMoreSearch) return;
-    
     isSearchLoading = true;
     
     try {
-        // Get current service and radius
-        const service = currentSearchService || searchServiceInput?.value;
-        const radiusMeters = (currentRadius || 5) * 1000;
+        const service = currentSearchService || searchServiceInput?.value || null;
+        const radiusKm = currentRadius || 5;
         
-        // Get user location - fetch if not available
         if (!currentUserLocation) {
             const location = await new Promise((resolve) => {
                 if (!navigator.geolocation) {
-                    resolve(null);
+                    resolve({ lat: 6.5244, lng: 3.3792 });
                     return;
                 }
                 navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        resolve({
-                            lat: position.coords.latitude,
-                            lng: position.coords.longitude
-                        });
-                    },
-                    () => {
-                        resolve(null);
-                    }
+                    (position) => resolve({ lat: position.coords.latitude, lng: position.coords.longitude }),
+                    () => resolve({ lat: 6.5244, lng: 3.3792 })
                 );
             });
-            
-            if (!location) {
-                if (reset && searchListFeed) {
-                    searchListFeed.innerHTML = '<div class="empty-state">Enable location to search for providers</div>';
-                }
-                isSearchLoading = false;
-                return;
-            }
             currentUserLocation = location;
         }
         
-        let currentLat = currentUserLocation.lat;
-        let currentLng = currentUserLocation.lng;
-        
-        // Build Supabase query
-        let query = supabase
-            .from('provider_locations')
-            .select('user_id, lat, lng, rating, last_gig_date')
-            .limit(SEARCH_LIMIT);
-        
-        // Add service filter if selected
-        if (service && service !== '') {
-            query = query.eq('service', service);
-        }
-        
-        // Add offset for pagination
-        query = query.range(searchOffset, searchOffset + SEARCH_LIMIT - 1);
-        
-        const { data: providers, error } = await query;
+        // SINGLE QUERY - No N+1!
+        const { data: providers, error } = await supabase.rpc('search_providers', {
+            p_current_lat: currentUserLocation.lat,
+            p_current_lng: currentUserLocation.lng,
+            p_radius_km: radiusKm,
+            p_service_filter: service,
+            p_limit: SEARCH_LIMIT,
+            p_offset: searchOffset
+        });
         
         if (error) throw error;
         
-        // Check if no more providers
         if (!providers || providers.length === 0) {
             hasMoreSearch = false;
             if (reset && searchListFeed && searchListFeed.children.length === 0) {
@@ -974,102 +944,47 @@ async function performSearch(reset = false) {
             return;
         }
         
-        // Update offset for next load
         searchOffset += providers.length;
+        if (providers.length < SEARCH_LIMIT) hasMoreSearch = false;
         
-        if (providers.length < SEARCH_LIMIT) {
-            hasMoreSearch = false;
-        }
+        const filteredResults = providers.filter(p => p.user_id !== window.auth.currentUser?.uid);
         
-        // Calculate distance for each provider and filter by radius
-        const providersWithDistance = providers.map(provider => {
-            const distance = calculateDistance(currentLat, currentLng, provider.lat, provider.lng);
-            return { ...provider, distance };
-        });
-        
-        const filteredProviders = providersWithDistance.filter(p => p.distance <= radiusMeters);
-        
-        // If filtering removed too many, try to load more
-        if (filteredProviders.length === 0 && providers.length > 0) {
-            isSearchLoading = false;
-            await performSearch(false);
-            return;
-        }
-        
-        // Fetch full profiles from Supabase
-        const userIds = filteredProviders.map(p => p.user_id);
-        const profiles = await fetchProviderProfilesFromSupabase(userIds);
-        
-        // Merge data
-        const mergedProviders = filteredProviders.map(provider => {
-            const profile = profiles[provider.user_id] || {};
-            return {
-                id: provider.user_id,
-                displayName: profile.displayName || 'Anonymous',
-                photoURL: profile.photoURL || null,
-                rating: profile.rating || provider.rating || 0,
-                gigCount: profile.gigCount || 0,
-                reviewCount: profile.reviewCount || 0,
-                services: profile.services || [],
-                distance: provider.distance,
-                last_gig_date: provider.last_gig_date,
-            };
-        });
-        
-        // Sort by distance (closest first)
-        mergedProviders.sort((a, b) => a.distance - b.distance);
-        
-        // Sort active providers first
-        mergedProviders.sort((a, b) => {
-            const aActive = getActiveStatus(a).active ? 1 : 0;
-            const bActive = getActiveStatus(b).active ? 1 : 0;
-            return bActive - aActive;
-        });
-        
-        // Filter out current user
-        const filteredResults = mergedProviders.filter(p => p.id !== window.auth.currentUser?.uid);
-        
-        // Create HTML for cards (with async monthly gig count)
-        const cardsHtmlArray = await Promise.all(filteredResults.map(async (user) => {
-            const monthlyGigs = await getRolling30DayGigCount(user.id);
-            const reviewCount = user.reviewCount || 0;
+        const cardsHtml = filteredResults.map(provider => {
+            const servicesList = provider.services ? provider.services.split(',').map(s => s.trim()) : [];
+            const activeStatus = provider.last_gig_date && new Date(provider.last_gig_date) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
             
             return `
-            <div class="card" data-user-id="${user.id}">
+            <div class="card" data-user-id="${provider.user_id}">
                 <div class="card-header">
-                    <img class="card-avatar" src="${getOptimizedImageUrl(user.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName)}" alt="${user.displayName}" loading="lazy">
+                    <img class="card-avatar" src="${getOptimizedImageUrl(provider.photo_url, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(provider.display_name)}" alt="${provider.display_name}" loading="lazy">
                     <div class="card-info">
                         <div class="card-name">
-                            ${user.displayName}
-                            ${getActiveStatus(user).active ? '<span class="active-badge">Active</span>' : ''}
+                            ${provider.display_name}
+                            ${activeStatus ? '<span class="active-badge">Active</span>' : ''}
                         </div>
                         <div class="card-rating">
-                            <span class="star">★</span> ${(user.rating || 0).toFixed(1)} (${reviewCount})
+                            <span class="star">★</span> ${(provider.rating || 0).toFixed(1)} (${provider.review_count || 0})
                         </div>
                     </div>
                 </div>
                 <div class="card-services">
-                    ${(user.services || []).slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}
+                    ${servicesList.slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}
                 </div>
                 <div class="card-stats">
-                    <div class="stat-item">📊 ${user.gigCount || 0} gigs total</div>
-                    <div class="stat-item">🔥 ${monthlyGigs} gigs this month</div>
+                    <div class="stat-item">📊 ${provider.gig_count || 0} gigs total</div>
+                    <div class="stat-item">🔥 ${provider.monthly_gigs || 0} gigs this month</div>
                 </div>
-                <div class="card-distance">📍 ${formatDistance(user.distance)}</div>
+                <div class="card-distance">📍 ${formatDistance(provider.distance_meters)}</div>
             </div>
         `;
-        }));
+        }).join('');
         
-        const cardsHtml = cardsHtmlArray.join('');
-        
-        // Append to feed
         if (reset) {
             if (searchListFeed) searchListFeed.innerHTML = cardsHtml;
         } else {
             if (searchListFeed) searchListFeed.insertAdjacentHTML('beforeend', cardsHtml);
         }
         
-        // Attach click listeners to new cards
         document.querySelectorAll('#search-list-feed .card:not([data-listener])').forEach(card => {
             card.setAttribute('data-listener', 'true');
             card.addEventListener('click', () => {
@@ -1078,7 +993,6 @@ async function performSearch(reset = false) {
             });
         });
         
-        // Update map markers if in map view
         if (currentViewMode === 'map' && currentMap) {
             updateMapMarkers(filteredResults);
         }
@@ -1194,91 +1108,45 @@ function setupSearch() {
 }
 
 // ========== CHAT LIST (REAL-TIME WITH UNREAD COUNTS) ==========
-async function loadChats() {
-    if (!chatsList) return;
-    if (!window.db || !window.auth || !window.auth.currentUser) {
-        chatsList.innerHTML = '<div class="empty-state">Loading...</div>';
-        return;
-    }
-    
-    // Show loading state
-    chatsList.innerHTML = '<div class="loading-spinner"></div>';
-    
-    // Clean up previous listener if exists
-    if (chatListUnsubscribe) {
-        chatListUnsubscribe();
-        chatListUnsubscribe = null;
-    }
-    
-    // Build query
-    const chatsRef = collection(window.db, 'chats');
-    const q = query(
-        chatsRef, 
-        where('participants', 'array-contains', window.auth.currentUser.uid),
-        orderBy('lastMessageTime', 'desc')
-    );
-    
-    // Set up real-time listener
-    chatListUnsubscribe = onSnapshot(q, async (snapshot) => {
-        if (snapshot.empty) {
-            chatsList.innerHTML = '<div class="empty-state">No messages yet</div>';
-            updateMessagesTabBadge(0);
-            return;
-        }
+// Collect all unique user IDs
+        const userIds = [...new Set(
+            snapshot.docs.map(doc => {
+                const chat = doc.data();
+                return chat.participants.find(p => p !== window.auth.currentUser.uid);
+            })
+        )];
         
-        // Collect all chat data
-        const chats = [];
-        let totalUnread = 0;
+        // Fetch all profiles in ONE query
+        const { data: profiles, error: profilesError } = await supabase.rpc('get_chat_users', {
+            p_user_ids: userIds
+        });
         
+        if (profilesError) throw profilesError;
+        
+        // Build profiles map
+        const profilesMap = {};
+        profiles.forEach(p => { profilesMap[p.user_id] = p; });
+        
+        // Build chats array
         for (const chatDoc of snapshot.docs) {
             const chat = { id: chatDoc.id, ...chatDoc.data() };
             const otherUserId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-            
-            // Get unread count for current user
             const unreadCount = chat.unreadCount?.[window.auth.currentUser.uid] || 0;
             totalUnread += unreadCount;
             
-            // Fetch other user's profile from Supabase
-            const userData = await getSingleProfileFromSupabase(otherUserId);
+            const userData = profilesMap[otherUserId] || {};
             
             chats.push({ 
                 ...chat, 
-                otherUser: { id: otherUserId, ...userData },
+                otherUser: { 
+                    id: otherUserId, 
+                    displayName: userData.display_name || 'User',
+                    photoURL: userData.photo_url,
+                    services: userData.services
+                },
                 unreadCount: unreadCount
             });
         }
-        
-        // Update badge on Messages tab
-        updateMessagesTabBadge(totalUnread);
-        
-        // Render chat list
-        chatsList.innerHTML = chats.map(chat => `
-            <div class="chat-item" data-chat-id="${chat.id}" data-user-id="${chat.otherUser.id}">
-                <img class="chat-avatar" src="${getOptimizedImageUrl(chat.otherUser.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(chat.otherUser.displayName || 'User')}" alt="" loading="lazy">
-                <div class="chat-details">
-                    <div class="chat-name">
-                        ${chat.otherUser.displayName || 'User'}
-                        ${chat.unreadCount > 0 ? `<span class="unread-badge">${chat.unreadCount}</span>` : ''}
-                    </div>
-                    <div class="chat-last-message">${chat.lastMessage || 'No messages'}</div>
-                </div>
-                <div class="chat-meta">
-                    <div class="chat-time">${chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</div>
-                    ${chat.pendingReview ? '<div class="pending-badge">Pending review</div>' : ''}
-                </div>
-            </div>
-        `).join('');
-        
-        // Attach click listeners
-        document.querySelectorAll('.chat-item').forEach(item => {
-            item.addEventListener('click', () => openChat(item.dataset.userId, item.dataset.chatId));
-        });
-        
-    }, (error) => {
-        console.error('Chat list listener error:', error);
-        chatsList.innerHTML = '<div class="empty-state">Error loading chats. Pull to refresh.</div>';
-    });
-}
 
 async function openChat(userId, chatId = null) {
     currentChatUser = userId;
@@ -2990,45 +2858,31 @@ async function editProfile() {
     }
 }
 
-async function showRecentChatsForGig() {
-    try {
-        const chatsRef = collection(window.db, 'chats');
-        const q = query(
-            chatsRef,
-            where('participants', 'array-contains', window.auth.currentUser.uid),
-            where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
-        );
-        const chatsSnapshot = await getDocs(q);
-        const recentUsers = [];
+const userIds = [...new Set(
+            chatsSnapshot.docs.map(doc => {
+                const chat = doc.data();
+                return chat.participants.find(p => p !== window.auth.currentUser.uid);
+            })
+        )];
+        
+        const { data: profiles } = await supabase.rpc('get_chat_users', {
+            p_user_ids: userIds
+        });
+        
+        const profilesMap = {};
+        profiles.forEach(p => { profilesMap[p.user_id] = p; });
+        
         for (const chatDoc of chatsSnapshot.docs) {
             const chat = chatDoc.data();
             const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-            const userData = await getSingleProfileFromSupabase(otherId);
-            recentUsers.push({ id: otherId, ...userData, chatId: chatDoc.id });
-        }
-        if (recentUsers.length === 0) {
-            window.showToast('No recent chats found');
-            return;
-        }
-        window.openBottomSheet(`
-            <h3 style="margin-bottom: 16px;">Select a client you worked with</h3>
-            ${recentUsers.map(u => `
-                <button class="recent-client-btn" data-user-id="${u.id}" data-chat-id="${u.chatId}" style="width: 100%; padding: 16px; margin-bottom: 8px; background: var(--bg-secondary); border: none; border-radius: 12px; text-align: left;">
-                    ${u.displayName || 'User'} - ${u.services ? u.services[0] : ''}
-                </button>
-            `).join('')}
-        `);
-        document.querySelectorAll('.recent-client-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                window.closeBottomSheet();
-                registerGig(btn.dataset.chatId, btn.dataset.userId);
+            const userData = profilesMap[otherId] || {};
+            recentUsers.push({ 
+                id: otherId, 
+                displayName: userData.display_name || 'User',
+                services: userData.services,
+                chatId: chatDoc.id 
             });
-        });
-    } catch (error) {
-        console.error('showRecentChatsForGig error:', error);
-        window.showToast('Error loading recent chats', 'error');
-    }
-}
+        }
 
 async function showSettings() {
     const settingsScreen = document.getElementById('settings-screen');
