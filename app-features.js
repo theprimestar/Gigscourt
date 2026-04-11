@@ -1108,7 +1108,43 @@ function setupSearch() {
 }
 
 // ========== CHAT LIST (REAL-TIME WITH UNREAD COUNTS) ==========
-// Collect all unique user IDs
+async function loadChats() {
+    if (!chatsList) return;
+    if (!window.db || !window.auth || !window.auth.currentUser) {
+        chatsList.innerHTML = '<div class="empty-state">Loading...</div>';
+        return;
+    }
+    
+    // Show loading state
+    chatsList.innerHTML = '<div class="loading-spinner"></div>';
+    
+    // Clean up previous listener if exists
+    if (chatListUnsubscribe) {
+        chatListUnsubscribe();
+        chatListUnsubscribe = null;
+    }
+    
+    // Build query
+    const chatsRef = collection(window.db, 'chats');
+    const q = query(
+        chatsRef, 
+        where('participants', 'array-contains', window.auth.currentUser.uid),
+        orderBy('lastMessageTime', 'desc')
+    );
+    
+    // Set up real-time listener
+    chatListUnsubscribe = onSnapshot(q, async (snapshot) => {
+        if (snapshot.empty) {
+            chatsList.innerHTML = '<div class="empty-state">No messages yet</div>';
+            updateMessagesTabBadge(0);
+            return;
+        }
+        
+        // Collect all chat data
+        const chats = [];
+        let totalUnread = 0;
+        
+        // Collect all unique user IDs
         const userIds = [...new Set(
             snapshot.docs.map(doc => {
                 const chat = doc.data();
@@ -1147,6 +1183,38 @@ function setupSearch() {
                 unreadCount: unreadCount
             });
         }
+        
+        // Update badge on Messages tab
+        updateMessagesTabBadge(totalUnread);
+        
+        // Render chat list
+        chatsList.innerHTML = chats.map(chat => `
+            <div class="chat-item" data-chat-id="${chat.id}" data-user-id="${chat.otherUser.id}">
+                <img class="chat-avatar" src="${getOptimizedImageUrl(chat.otherUser.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(chat.otherUser.displayName || 'User')}" alt="" loading="lazy">
+                <div class="chat-details">
+                    <div class="chat-name">
+                        ${chat.otherUser.displayName || 'User'}
+                        ${chat.unreadCount > 0 ? `<span class="unread-badge">${chat.unreadCount}</span>` : ''}
+                    </div>
+                    <div class="chat-last-message">${chat.lastMessage || 'No messages'}</div>
+                </div>
+                <div class="chat-meta">
+                    <div class="chat-time">${chat.lastMessageTime ? new Date(chat.lastMessageTime).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}</div>
+                    ${chat.pendingReview ? '<div class="pending-badge">Pending review</div>' : ''}
+                </div>
+            </div>
+        `).join('');
+        
+        // Attach click listeners
+        document.querySelectorAll('.chat-item').forEach(item => {
+            item.addEventListener('click', () => openChat(item.dataset.userId, item.dataset.chatId));
+        });
+        
+    }, (error) => {
+        console.error('Chat list listener error:', error);
+        chatsList.innerHTML = '<div class="empty-state">Error loading chats. Pull to refresh.</div>';
+    });
+}
 
 async function openChat(userId, chatId = null) {
     currentChatUser = userId;
@@ -2870,20 +2938,42 @@ async function editProfile() {
     }
 }
 
-const userIds = [...new Set(
+async function showRecentChatsForGig() {
+    try {
+        const chatsRef = collection(window.db, 'chats');
+        const q = query(
+            chatsRef,
+            where('participants', 'array-contains', window.auth.currentUser.uid),
+            where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
+        );
+        const chatsSnapshot = await getDocs(q);
+        
+        if (chatsSnapshot.empty) {
+            window.showToast('No recent chats found');
+            return;
+        }
+        
+        const recentUsers = [];
+        
+        // Collect all unique user IDs
+        const userIds = [...new Set(
             chatsSnapshot.docs.map(doc => {
                 const chat = doc.data();
                 return chat.participants.find(p => p !== window.auth.currentUser.uid);
             })
         )];
         
+        // Fetch all profiles in ONE query
         const { data: profiles } = await supabase.rpc('get_chat_users', {
             p_user_ids: userIds
         });
         
         const profilesMap = {};
-        profiles.forEach(p => { profilesMap[p.user_id] = p; });
+        if (profiles) {
+            profiles.forEach(p => { profilesMap[p.user_id] = p; });
+        }
         
+        // Build recent users array
         for (const chatDoc of chatsSnapshot.docs) {
             const chat = chatDoc.data();
             const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
@@ -2895,6 +2985,33 @@ const userIds = [...new Set(
                 chatId: chatDoc.id 
             });
         }
+        
+        if (recentUsers.length === 0) {
+            window.showToast('No recent chats found');
+            return;
+        }
+        
+        window.openBottomSheet(`
+            <h3 style="margin-bottom: 16px;">Select a client you worked with</h3>
+            ${recentUsers.map(u => `
+                <button class="recent-client-btn" data-user-id="${u.id}" data-chat-id="${u.chatId}" style="width: 100%; padding: 16px; margin-bottom: 8px; background: var(--bg-secondary); border: none; border-radius: 12px; text-align: left;">
+                    ${u.displayName || 'User'} - ${u.services ? u.services.split(',')[0] : ''}
+                </button>
+            `).join('')}
+        `);
+        
+        document.querySelectorAll('.recent-client-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                window.closeBottomSheet();
+                registerGig(btn.dataset.chatId, btn.dataset.userId);
+            });
+        });
+        
+    } catch (error) {
+        console.error('showRecentChatsForGig error:', error);
+        window.showToast('Error loading recent chats', 'error');
+    }
+}
 
 async function showSettings() {
     const settingsScreen = document.getElementById('settings-screen');
