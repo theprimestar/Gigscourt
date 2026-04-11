@@ -1633,6 +1633,7 @@ window.db = db;
 window.auth = auth;
 window.updateProfile = updateProfile;
 window.signOut = signOut;
+window.hideSplashScreen = hideSplashScreen;  
 
 // Force appReady after a short delay to ensure everything is loaded
 setTimeout(() => {
