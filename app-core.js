@@ -1291,6 +1291,15 @@ async function setupAuthListener() {
                 }
 
                 loadNotificationsFromFirestore();
+
+                // Show admin tab if user is admin
+                setTimeout(() => {
+                    const adminTab = document.getElementById('admin-tab');
+                    const adminEmail = 'theprimestarventures@gmail.com';
+                    if (window.currentUser && window.currentUser.email === adminEmail && adminTab) {
+                        adminTab.classList.remove('hidden');
+                    }
+                }, 500);
                 
                 setTimeout(() => {
                     requestNotificationPermission();
