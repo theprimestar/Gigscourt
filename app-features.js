@@ -2329,24 +2329,100 @@ async function loadAdminPage() {
 function showGiftCreditsUI() {
     const panel = document.getElementById('admin-action-panel');
     panel.innerHTML = `
-        <h4>Gift Credits to User</h4>
-        <input type="text" id="admin-target-email" placeholder="User Email" class="search-input" style="margin-bottom: 12px;">
+        <h4>🎁 Gift Credits to User</h4>
+        <input type="email" id="admin-target-email" placeholder="User Email Address" class="search-input" style="margin-bottom: 12px;">
+        <button id="admin-lookup-user-btn" class="admin-btn-secondary" style="margin-bottom: 12px;">🔍 Lookup User</button>
+        <div id="admin-user-info" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--bg-tertiary); border-radius: 12px;"></div>
         <input type="number" id="admin-credits-amount" placeholder="Credits Amount" class="search-input" style="margin-bottom: 12px;" min="1" value="5">
-        <button id="admin-send-credits-btn" class="admin-btn-primary">Send Credits</button>
-        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">User must have completed onboarding.</p>
+        <button id="admin-send-credits-btn" class="admin-btn-primary" disabled>Send Credits</button>
+        <p style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">Enter user's email and click Lookup.</p>
     `;
     
-    document.getElementById('admin-send-credits-btn')?.addEventListener('click', async () => {
+    let foundUserId = null;
+    
+    document.getElementById('admin-lookup-user-btn')?.addEventListener('click', async () => {
         const email = document.getElementById('admin-target-email').value.trim();
-        const credits = parseInt(document.getElementById('admin-credits-amount').value);
-        
-        if (!email || credits < 1) {
-            window.showToast('Please enter valid email and credits', 'error');
+        if (!email) {
+            window.showToast('Please enter an email address', 'error');
             return;
         }
         
-        // Find user by email (we'll need to add this lookup)
-        window.showToast('User lookup coming in next step', 'info');
+        const lookupBtn = document.getElementById('admin-lookup-user-btn');
+        lookupBtn.textContent = '⏳ Looking up...';
+        lookupBtn.disabled = true;
+        
+        try {
+            const { data, error } = await supabase.rpc('admin_find_user_by_email', {
+                p_email: email
+            });
+            
+            if (error) throw error;
+            
+            const userInfo = document.getElementById('admin-user-info');
+            const sendBtn = document.getElementById('admin-send-credits-btn');
+            
+            if (data.success) {
+                foundUserId = data.user_id;
+                userInfo.style.display = 'block';
+                userInfo.innerHTML = `
+                    ✅ <strong>${data.display_name}</strong><br>
+                    Current Credits: ${data.current_credits}
+                `;
+                sendBtn.disabled = false;
+                window.showToast('User found!', 'success');
+            } else {
+                userInfo.style.display = 'block';
+                userInfo.innerHTML = `❌ ${data.message}`;
+                sendBtn.disabled = true;
+                foundUserId = null;
+            }
+        } catch (error) {
+            console.error('Lookup error:', error);
+            window.showToast('Error looking up user', 'error');
+        } finally {
+            lookupBtn.textContent = '🔍 Lookup User';
+            lookupBtn.disabled = false;
+        }
+    });
+    
+    document.getElementById('admin-send-credits-btn')?.addEventListener('click', async () => {
+        const credits = parseInt(document.getElementById('admin-credits-amount').value);
+        
+        if (!foundUserId || credits < 1) {
+            window.showToast('Please lookup a user and enter valid credits', 'error');
+            return;
+        }
+        
+        const sendBtn = document.getElementById('admin-send-credits-btn');
+        sendBtn.textContent = '⏳ Sending...';
+        sendBtn.disabled = true;
+        
+        try {
+            const { data, error } = await supabase.rpc('admin_add_credits', {
+                p_target_user_id: foundUserId,
+                p_credits: credits,
+                p_notes: 'Admin gift'
+            });
+            
+            if (error) throw error;
+            
+            if (data.success) {
+                window.showToast(`✅ Sent ${credits} credits! New balance: ${data.new_credits}`, 'success');
+                document.getElementById('admin-user-info').innerHTML = `
+                    ✅ Credits sent!<br>
+                    New Balance: ${data.new_credits}
+                `;
+                document.getElementById('admin-credits-amount').value = 5;
+            } else {
+                window.showToast(data.message, 'error');
+            }
+        } catch (error) {
+            console.error('Send credits error:', error);
+            window.showToast('Error sending credits', 'error');
+        } finally {
+            sendBtn.textContent = 'Send Credits';
+            sendBtn.disabled = false;
+        }
     });
 }
 
