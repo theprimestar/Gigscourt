@@ -602,9 +602,50 @@ function showOnboardingStep2() {
         <div class="onboarding-services-list" id="onboarding-services-list">
             ${servicesHtml}
         </div>
+        <div class="service-request-section" style="margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-light);">
+            <p style="font-size: 14px; color: var(--text-secondary); margin-bottom: 8px;">Can't find your service?</p>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="custom-service-input" placeholder="Type your service here" class="onboarding-input" style="flex: 1; margin-bottom: 0;">
+                <button id="request-service-btn" class="onboarding-btn-secondary" style="padding: 0 16px; white-space: nowrap;">Request</button>
+            </div>
+            <div id="requested-services-list" style="margin-top: 12px;"></div>
+        </div>
     `;
     
     document.getElementById('onboarding-content').innerHTML = content;
+
+    // ========== SERVICE REQUEST HANDLER ==========
+    let requestedServices = [];
+    
+    document.getElementById('request-service-btn')?.addEventListener('click', async () => {
+        const input = document.getElementById('custom-service-input');
+        const serviceName = input.value.trim();
+        
+        if (!serviceName) {
+            showToast('Please enter a service name', 'error');
+            return;
+        }
+        
+        if (requestedServices.includes(serviceName)) {
+            showToast('You already requested this service', 'error');
+            return;
+        }
+        
+        requestedServices.push(serviceName);
+        
+        // Save to onboardingData
+        if (!onboardingData.requestedServices) onboardingData.requestedServices = [];
+        onboardingData.requestedServices.push(serviceName);
+        
+        // Update display
+        const listDiv = document.getElementById('requested-services-list');
+        listDiv.innerHTML = requestedServices.map(s => `
+            <span style="display: inline-block; background: var(--bg-tertiary); padding: 4px 12px; border-radius: 20px; font-size: 12px; margin-right: 8px; margin-bottom: 8px;">⏳ ${s} (Pending)</span>
+        `).join('');
+        
+        input.value = '';
+        showToast('Service requested! Admin will review.', 'success');
+    });
     
     // Attach service selection handlers
     document.querySelectorAll('.onboarding-service-option').forEach(opt => {
