@@ -445,7 +445,8 @@ window.pushToNavigationHistory = function() {
     
     const state = { 
         page: pageId, 
-        scrollY: scrollY 
+        scrollY: scrollY,
+        viewedUserId: window.currentViewedUserId || null
     };
     
     window.navigationHistory.push(state);
@@ -464,7 +465,18 @@ window.goBack = function() {
     const previousState = window.navigationHistory.pop();
     console.log('📚 Returning to:', previousState);
     
-    window.navigateToPage(previousState.page, { preserveHistory: false, skipProfileLoad: false });
+    // Restore viewed user ID if returning to a profile
+    if (previousState.page === 'profile' && previousState.viewedUserId) {
+        window.currentViewedUserId = previousState.viewedUserId;
+        if (typeof window.loadProfile === 'function') {
+            window.loadProfile(previousState.viewedUserId);
+        }
+    }
+    
+    window.navigateToPage(previousState.page, { 
+        preserveHistory: false, 
+        skipProfileLoad: previousState.page === 'profile' 
+    });
     
     setTimeout(() => {
         const targetPage = document.getElementById(`${previousState.page}-page`);
@@ -473,7 +485,10 @@ window.goBack = function() {
         }
     }, 50);
     
-    window.currentViewedUserId = null;
+    // Only clear viewedUserId if we're NOT returning to a profile
+    if (previousState.page !== 'profile') {
+        window.currentViewedUserId = null;
+    }
     window.currentChatUser = null;
     window.currentChatId = null;
     
