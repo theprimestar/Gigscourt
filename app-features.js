@@ -894,21 +894,35 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 <p style="color: var(--text-secondary); margin: 8px 0;">${user.bio || 'No bio yet'}</p>
                 <div class="card-services" style="justify-content: center;">${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
                 <div style="display: flex; gap: 12px; margin-top: 20px;">
-                    <button id="view-full-profile" class="btn-primary" style="flex: 1;">View Full Profile</button>
+                    <button id="view-full-profile" class="btn-primary" style="flex: 1;" data-user-id="${userId}">View Full Profile</button>
                     <button id="message-from-sheet" class="btn-secondary" style="flex: 1;">Message</button>
                 </div>
             </div>
         `);
         
-        document.getElementById('view-full-profile')?.addEventListener('click', () => {
-            window.closeBottomSheet();
-            loadProfile(userId);
-            window.navigateToPage('profile');
-        });
-        document.getElementById('message-from-sheet')?.addEventListener('click', () => {
-            window.closeBottomSheet();
-            openChat(userId);
-        });
+        const viewProfileBtn = document.getElementById('view-full-profile');
+        if (viewProfileBtn) {
+            viewProfileBtn.addEventListener('click', () => {
+                const profileId = viewProfileBtn.dataset.userId;
+                
+                // Push current page to history BEFORE navigating
+                window.pushToNavigationHistory();
+                
+                window.closeBottomSheet();
+                loadProfile(profileId);
+                window.navigateToPage('profile');
+            });
+        }
+        const messageBtn = document.getElementById('message-from-sheet');
+        if (messageBtn) {
+            messageBtn.addEventListener('click', () => {
+                // Push current page to history BEFORE navigating
+                window.pushToNavigationHistory();
+                
+                window.closeBottomSheet();
+                openChat(userId);
+            });
+        }
         
     } catch (error) {
         console.error('showUserBottomSheet error:', error);
