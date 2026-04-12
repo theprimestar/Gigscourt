@@ -1285,6 +1285,9 @@ async function loadChats() {
 }
 
 async function openChat(userId, chatId = null) {
+    // Push current page to history BEFORE navigating
+    window.pushToNavigationHistory();
+    
     currentChatUser = userId;
     currentChatId = chatId;
     let chat = chatId;
@@ -1317,10 +1320,10 @@ async function openChat(userId, chatId = null) {
     }
 
     // Reset unread count for this chat room
-const chatRoomRef = doc(window.db, 'chats', chat);
-await updateDoc(chatRoomRef, {
-    [`unreadCount.${window.auth.currentUser.uid}`]: 0
-});
+    const chatRoomRef = doc(window.db, 'chats', chat);
+    await updateDoc(chatRoomRef, {
+        [`unreadCount.${window.auth.currentUser.uid}`]: 0
+    });
     
     try {
         const userData = await getSingleProfileFromSupabase(userId);
@@ -1328,30 +1331,110 @@ await updateDoc(chatRoomRef, {
             window.showToast('Error loading user', 'error');
             return;
         }
-        window.openBottomSheet(`
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3>${userData.displayName || 'User'}</h3>
-                <button id="close-chat" class="icon-btn">✕</button>
-            </div>
-            <div id="chat-messages" style="height: 400px; overflow-y: auto; margin-bottom: 16px; display: flex; flex-direction: column; gap: 8px;"></div>
-            <div style="display: flex; gap: 8px;">
-                <input type="text" id="chat-input" placeholder="Type a message..." class="search-input" style="flex: 1;">
-                <button id="send-message" class="btn-primary" style="padding: 12px 20px;">Send</button>
-            </div>
-            <div id="pending-review-toast-provider" style="display: none; margin-top: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
-            <div id="pending-review-toast-client" style="display: none; margin-top: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
-            <button id="register-gig-chat" class="btn-secondary" style="width: 100%; margin-top: 12px; padding: 12px; background: var(--accent-orange); color: white;">📋 Register Gig with this person</button>
+        
+        // Navigate to chat page
+        window.navigateToPage('chat');
+        
+        // Set up chat header
+        const headerName = document.getElementById('chat-header-name');
+        const headerAvatar = document.getElementById('chat-header-avatar');
+        const headerInfo = document.getElementById('chat-header-info');
+        
+        if (headerName) {
+            headerName.textContent = userData.displayName || 'User';
+        }
+        if (headerAvatar) {
+            headerAvatar.src = getOptimizedImageUrl(userData.photoURL, 80, 80) || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.displayName || 'User')}`;
+            headerAvatar.style.display = 'inline-block';
+            headerAvatar.alt = userData.displayName || 'User';
+        }
+        
+        // Make header clickable to view profile
+        if (headerInfo) {
+            headerInfo.style.cursor = 'pointer';
+            const newHeaderInfo = headerInfo.cloneNode(true);
+            headerInfo.parentNode.replaceChild(newHeaderInfo, headerInfo);
+            newHeaderInfo.addEventListener('click', () => {
+                window.pushToNavigationHistory();
+                loadProfile(userId);
+                window.navigateToPage('profile');
+            });
+        }
+        
+        // Set up back button
+        const backBtn = document.getElementById('chat-back-btn');
+        if (backBtn) {
+            const newBackBtn = backBtn.cloneNode(true);
+            backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+            newBackBtn.addEventListener('click', () => {
+                window.goBack();
+            });
+        }
+        
+        // Get chat page elements
+        const messagesDiv = document.getElementById('chat-messages-container');
+        const input = document.getElementById('chat-page-input');
+        const sendBtn = document.getElementById('chat-page-send-btn');
+        
+        // Clear and show loading
+        if (messagesDiv) {
+            messagesDiv.innerHTML = '<div class="loading-spinner"></div>';
+        }
+        
+        // Set up action buttons container
+        const chatContent = document.querySelector('.chat-page-content');
+        let actionsContainer = document.getElementById('chat-actions-container');
+        if (!actionsContainer) {
+            actionsContainer = document.createElement('div');
+            actionsContainer.id = 'chat-actions-container';
+            actionsContainer.style.cssText = 'padding: 12px 16px; border-top: 1px solid var(--border-light);';
+            
+            // Insert before input container
+            const inputContainer = document.querySelector('.chat-input-container');
+            if (inputContainer && chatContent) {
+                chatContent.insertBefore(actionsContainer, inputContainer);
+            }
+        }
+        
+        // Build actions HTML
+        actionsContainer.innerHTML = `
+            <div id="pending-review-toast-provider" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
+            <div id="pending-review-toast-client" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
+            <button id="register-gig-chat" class="btn-secondary" style="width: 100%; padding: 12px; background: var(--accent-orange); color: white; border: none; border-radius: 30px; font-weight: 600;">📋 Register Gig with this person</button>
             <div style="display: flex; gap: 12px; margin-top: 12px;">
-                <button id="submit-review-chat" class="btn-primary" style="flex: 1; padding: 12px; display: none;">⭐ Submit Review</button>
-                <button id="cancel-gig-chat" class="btn-secondary" style="flex: 1; padding: 12px; display: none; border-color: var(--error-red); color: var(--error-red);">❌ Cancel Gig</button>
+                <button id="submit-review-chat" class="btn-primary" style="flex: 1; padding: 12px; border-radius: 30px; display: none;">⭐ Submit Review</button>
+                <button id="cancel-gig-chat" class="btn-secondary" style="flex: 1; padding: 12px; border-radius: 30px; display: none; border: 1px solid var(--error-red); color: var(--error-red);">❌ Cancel Gig</button>
             </div>
-        `);
-        document.getElementById('close-chat').addEventListener('click', () => window.closeBottomSheet());
-        const messagesDiv = document.getElementById('chat-messages');
-        const input = document.getElementById('chat-input');
-        document.getElementById('send-message').addEventListener('click', () => sendMessage(chat, input.value));
-        input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendMessage(chat, input.value); });
-        document.getElementById('register-gig-chat').addEventListener('click', () => registerGig(chat, userId));
+        `;
+        
+        // Attach event listeners
+        if (sendBtn) {
+            const newSendBtn = sendBtn.cloneNode(true);
+            sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+            newSendBtn.addEventListener('click', () => {
+                const msgInput = document.getElementById('chat-page-input');
+                if (msgInput) {
+                    sendMessage(chat, msgInput.value);
+                    msgInput.value = '';
+                }
+            });
+        }
+        
+        if (input) {
+            const newInput = input.cloneNode(true);
+            input.parentNode.replaceChild(newInput, input);
+            newInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const msgInput = document.getElementById('chat-page-input');
+                    if (msgInput) {
+                        sendMessage(chat, msgInput.value);
+                        msgInput.value = '';
+                    }
+                }
+            });
+        }
+        
+        document.getElementById('register-gig-chat')?.addEventListener('click', () => registerGig(chat, userId));
         document.getElementById('submit-review-chat')?.addEventListener('click', () => showReviewBottomSheet(userId, chat));
         document.getElementById('cancel-gig-chat')?.addEventListener('click', () => cancelGig(chat, userId));
         if (currentMessagesUnsubscribe) currentMessagesUnsubscribe();
@@ -1368,8 +1451,12 @@ await updateDoc(chatRoomRef, {
         hasMoreMessages = true;
         isLoadingMoreMessages = false;
         
+        // Get fresh reference to messages container
+        const messagesContainer = document.getElementById('chat-messages-container');
+        
         currentMessagesUnsubscribe = onSnapshot(q, (snapshot) => {
-            messagesDiv.innerHTML = '';
+            if (!messagesContainer) return;
+            messagesContainer.innerHTML = '';
             
             if (snapshot.empty) {
                 hasMoreMessages = false;
@@ -1385,8 +1472,8 @@ await updateDoc(chatRoomRef, {
             reversedDocs.forEach(doc => {
                 const msg = doc.data();
                 const isMe = msg.senderId === window.auth.currentUser.uid;
-                messagesDiv.innerHTML += `
-                    <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
+                messagesContainer.innerHTML += `
+                    <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'}; padding: 4px 16px;">
                         <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
                             ${msg.text}
                             ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
@@ -1396,16 +1483,16 @@ await updateDoc(chatRoomRef, {
                 `;
             });
             // Check if user was already at bottom before adding new messages
-            const wasAtBottom = messagesDiv.scrollTop + messagesDiv.clientHeight >= messagesDiv.scrollHeight - 50;
+            const wasAtBottom = messagesContainer.scrollTop + messagesContainer.clientHeight >= messagesContainer.scrollHeight - 50;
             
             if (wasAtBottom) {
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
             
             // Setup scroll observer for loading more messages
-            setupMessagesScrollObserver(messagesDiv, chat);
+            setupMessagesScrollObserver(messagesContainer, chat);
             
-            document.querySelectorAll('.message-wrapper').forEach(wrapper => {
+            document.querySelectorAll('#chat-messages-container .message-wrapper').forEach(wrapper => {
                 let pressTimer;
                 wrapper.addEventListener('touchstart', () => {
                     pressTimer = setTimeout(() => {
