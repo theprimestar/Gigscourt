@@ -464,7 +464,7 @@ window.goBack = function() {
     const previousState = window.navigationHistory.pop();
     console.log('📚 Returning to:', previousState);
     
-    window.navigateToPage(previousState.page);
+    window.navigateToPage(previousState.page, { preserveHistory: false, skipProfileLoad: false });
     
     setTimeout(() => {
         const targetPage = document.getElementById(`${previousState.page}-page`);
@@ -488,18 +488,20 @@ window.goBack = function() {
     }
 };
 
-function navigateToPage(pageId) {
-    // Clear navigation history when user uses bottom nav
-    // (They're starting fresh, not "going back")
-    // BUT don't clear if we're navigating to profile (it's often from a card/chat)
-    const mainPages = ['home', 'search', 'chats', 'admin'];
-    if (mainPages.includes(pageId)) {
-        window.navigationHistory = [];
-        console.log('🧹 Cleared navigation history - starting fresh');
+function navigateToPage(pageId, options = {}) {
+    const { preserveHistory = false, skipProfileLoad = false } = options;
+    
+    // Only clear history if explicitly told NOT to preserve it
+    if (!preserveHistory) {
+        const mainPages = ['home', 'search', 'chats', 'admin', 'profile'];
+        if (mainPages.includes(pageId)) {
+            window.navigationHistory = [];
+            console.log('🧹 Cleared navigation history - starting fresh');
+        }
+    } else {
+        console.log('📌 Preserving navigation history');
     }
     
-    // For profile page, we handle history in the click handlers (pushToNavigationHistory)
-    // So we do NOT clear history when navigating to profile
     saveScrollPosition();
     const pages = document.querySelectorAll('.page');
     const navItems = document.querySelectorAll('.nav-item');
@@ -515,6 +517,7 @@ function navigateToPage(pageId) {
     haptic('light');
     
     // Handle bottom nav visibility
+    const mainPages = ['home', 'search', 'chats', 'admin', 'profile'];
     const bottomNav = document.getElementById('bottom-nav');
     if (bottomNav) {
         if (mainPages.includes(pageId)) {
@@ -524,8 +527,13 @@ function navigateToPage(pageId) {
         }
     }
     
-    // Dispatch event for features file
-    window.dispatchEvent(new CustomEvent('navigate', { detail: { page: pageId } }));
+    // Dispatch event for features file with skip flag
+    window.dispatchEvent(new CustomEvent('navigate', { 
+        detail: { 
+            page: pageId,
+            skipProfileLoad: skipProfileLoad 
+        } 
+    }));
 }
 
 function setupNavigation() {
@@ -533,7 +541,8 @@ function setupNavigation() {
     navItems.forEach(item => {
         item.addEventListener('click', () => {
             const pageId = item.dataset.page;
-            navigateToPage(pageId);
+            // Bottom nav = fresh start, don't preserve history, allow normal profile load
+            navigateToPage(pageId, { preserveHistory: false, skipProfileLoad: false });
         });
     });
 }
