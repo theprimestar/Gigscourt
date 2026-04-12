@@ -2227,15 +2227,33 @@ async function loadProfile(userId = null, skipSpinner = false) {
         
         const profileHeaderTitle = document.getElementById('profile-header-title');
         const settingsBtn = document.getElementById('profile-settings-btn');
+        const backBtn = document.getElementById('profile-back-btn');
+        const bottomNav = document.getElementById('bottom-nav');
         
         if (profileHeaderTitle) {
             if (isOwnProfile) {
                 profileHeaderTitle.textContent = 'Profile';
                 if (settingsBtn) settingsBtn.style.display = 'flex';
+                if (backBtn) backBtn.style.display = 'none';
+                if (bottomNav) bottomNav.style.display = 'flex';
             } else {
                 profileHeaderTitle.textContent = profile.displayName || 'User';
                 if (settingsBtn) settingsBtn.style.display = 'none';
+                if (backBtn) backBtn.style.display = 'flex';
+                if (bottomNav) bottomNav.style.display = 'none';
+                
+                // Store current viewed user ID
+                window.currentViewedUserId = targetId;
             }
+        }
+        
+        // Back button handler for viewing other profiles
+        if (backBtn) {
+            const newBackBtn = backBtn.cloneNode(true);
+            backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+            newBackBtn.addEventListener('click', () => {
+                window.goBack();
+            });
         }
         
         profileContent.innerHTML = `
@@ -2296,7 +2314,14 @@ async function loadProfile(userId = null, skipSpinner = false) {
             document.getElementById('edit-services-btn')?.addEventListener('click', editServices);
             document.getElementById('add-portfolio-btn')?.addEventListener('click', addPortfolioImage);
         } else {
-            document.getElementById('contact-now-btn')?.addEventListener('click', () => openChat(profile.id));
+            const contactBtn = document.getElementById('contact-now-btn');
+            if (contactBtn) {
+                contactBtn.addEventListener('click', () => {
+                    // Push current page to history BEFORE navigating to chat
+                    window.pushToNavigationHistory();
+                    openChat(profile.id);
+                });
+            }
         }
         
         document.querySelectorAll('.portfolio-item').forEach(img => {
@@ -2306,6 +2331,16 @@ async function loadProfile(userId = null, skipSpinner = false) {
             });
         });
         document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
+
+        // Profile avatar click handler (for viewing other profiles' avatars)
+        const profileAvatar = document.querySelector('.profile-avatar');
+        if (profileAvatar && !isOwnProfile) {
+            profileAvatar.style.cursor = 'pointer';
+            profileAvatar.addEventListener('click', () => {
+                const fullSizeUrl = getOptimizedImageUrl(profile.photoURL, null, null, true);
+                window.openBottomSheet(`<img src="${fullSizeUrl}" style="width: 100%; border-radius: 20px;">`);
+            });
+        }
         
     } catch (error) {
         console.error('loadProfile error:', error);
