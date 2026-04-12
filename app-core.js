@@ -67,6 +67,12 @@ let scrollPositions = {
 };
 let lastScrollY = 0;
 let isNavHidden = false;
+
+// Unified navigation history stack for back button functionality
+window.navigationHistory = [];
+window.currentViewedUserId = null;
+window.currentChatUser = null;
+window.currentChatId = null;
 let appReadyFired = false;
 let appReadyTimeout = null;
 let authStateChecked = false;
@@ -429,7 +435,68 @@ function restoreScrollPosition(pageId) {
     }
 }
 
+// Push current page to history before navigating away
+window.pushToNavigationHistory = function() {
+    const activePage = document.querySelector('.page.active');
+    if (!activePage) return;
+    
+    const pageId = activePage.id.replace('-page', '');
+    const scrollY = activePage.scrollTop || 0;
+    
+    const state = { 
+        page: pageId, 
+        scrollY: scrollY 
+    };
+    
+    window.navigationHistory.push(state);
+    console.log('📚 Pushed to history:', state);
+};
+
+// Go back to previous page (works for profile, chat, any page)
+window.goBack = function() {
+    console.log('⬅️ goBack called, history length:', window.navigationHistory.length);
+    
+    if (window.navigationHistory.length === 0) {
+        window.navigateToPage('home');
+        return;
+    }
+    
+    const previousState = window.navigationHistory.pop();
+    console.log('📚 Returning to:', previousState);
+    
+    window.navigateToPage(previousState.page);
+    
+    setTimeout(() => {
+        const targetPage = document.getElementById(`${previousState.page}-page`);
+        if (targetPage) {
+            targetPage.scrollTop = previousState.scrollY;
+        }
+    }, 50);
+    
+    window.currentViewedUserId = null;
+    window.currentChatUser = null;
+    window.currentChatId = null;
+    
+    const mainPages = ['home', 'search', 'chats', 'profile'];
+    const bottomNav = document.getElementById('bottom-nav');
+    if (bottomNav) {
+        if (mainPages.includes(previousState.page)) {
+            bottomNav.style.display = 'flex';
+        } else {
+            bottomNav.style.display = 'none';
+        }
+    }
+};
+
 function navigateToPage(pageId) {
+    // Clear navigation history when user uses bottom nav
+    // (They're starting fresh, not "going back")
+    const mainPages = ['home', 'search', 'chats', 'profile', 'admin'];
+    if (mainPages.includes(pageId)) {
+        window.navigationHistory = [];
+        console.log('🧹 Cleared navigation history - starting fresh');
+    }
+    
     saveScrollPosition();
     const pages = document.querySelectorAll('.page');
     const navItems = document.querySelectorAll('.nav-item');
@@ -443,6 +510,16 @@ function navigateToPage(pageId) {
     currentPage = pageId;
     restoreScrollPosition(pageId);
     haptic('light');
+    
+    // Handle bottom nav visibility
+    const bottomNav = document.getElementById('bottom-nav');
+    if (bottomNav) {
+        if (mainPages.includes(pageId)) {
+            bottomNav.style.display = 'flex';
+        } else {
+            bottomNav.style.display = 'none';
+        }
+    }
     
     // Dispatch event for features file
     window.dispatchEvent(new CustomEvent('navigate', { detail: { page: pageId } }));
