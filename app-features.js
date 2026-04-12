@@ -910,15 +910,14 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 
                 window.closeBottomSheet();
                 loadProfile(profileId);
-                window.navigateToPage('profile');
+                // Preserve history and skip the automatic profile reload
+                window.navigateToPage('profile', { preserveHistory: true, skipProfileLoad: true });
             });
         }
         const messageBtn = document.getElementById('message-from-sheet');
         if (messageBtn) {
             messageBtn.addEventListener('click', () => {
-                // Push current page to history BEFORE navigating
-                window.pushToNavigationHistory();
-                
+                // openChat() will handle history pushing
                 window.closeBottomSheet();
                 openChat(userId);
             });
@@ -1346,8 +1345,8 @@ async function openChat(userId, chatId = null) {
             return;
         }
         
-        // Navigate to chat page
-        window.navigateToPage('chat');
+        // Navigate to chat page with history preserved
+        window.navigateToPage('chat', { preserveHistory: true });
         
         // Set up chat header
         const headerName = document.getElementById('chat-header-name');
@@ -1371,7 +1370,7 @@ async function openChat(userId, chatId = null) {
             newHeaderInfo.addEventListener('click', () => {
                 window.pushToNavigationHistory();
                 loadProfile(userId);
-                window.navigateToPage('profile');
+                window.navigateToPage('profile', { preserveHistory: true, skipProfileLoad: true });
             });
         }
         
@@ -2317,8 +2316,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
             const contactBtn = document.getElementById('contact-now-btn');
             if (contactBtn) {
                 contactBtn.addEventListener('click', () => {
-                    // Push current page to history BEFORE navigating to chat
-                    window.pushToNavigationHistory();
+                    // openChat() will handle history pushing
                     openChat(profile.id);
                 });
             }
@@ -3420,7 +3418,7 @@ async function initFeatures() {
     
     // Set up navigation event listener for tab changes
     window.addEventListener('navigate', (e) => {
-        console.log('Navigate event:', e.detail.page);
+        console.log('Navigate event:', e.detail.page, 'skipProfileLoad:', e.detail.skipProfileLoad);
         if (e.detail.page === 'home' && homeFeed) {
             loadHomeFeed().catch(err => console.error('Navigate loadHomeFeed error:', err));
         }
@@ -3428,7 +3426,10 @@ async function initFeatures() {
             loadChats().catch(err => console.error('Navigate loadChats error:', err));
         }
         if (e.detail.page === 'profile' && profileContent) {
-            loadProfile().catch(err => console.error('Navigate loadProfile error:', err));
+            // Only auto-load profile if we didn't already load it with a specific userId
+            if (!e.detail.skipProfileLoad) {
+                loadProfile().catch(err => console.error('Navigate loadProfile error:', err));
+            }
         }
         if (e.detail.page === 'admin') {
             loadAdminPage().catch(err => console.error('Navigate loadAdminPage error:', err));
