@@ -1550,11 +1550,33 @@ async function setupAuthListener() {
             }
         } catch (error) {
             console.error('Error loading user data:', error);
+            
+            // Only show toast for actual errors (not just "no profile yet")
+            // Supabase returns a specific error when no rows found
+            const isNoProfileError = error && (
+                error.code === 'PGRST116' || 
+                error.message?.includes('JSON object requested') ||
+                error.message?.includes('contains 0 rows')
+            );
+            
+            if (!isNoProfileError) {
+                showToast('Error loading profile. Please refresh.', 'error');
+            }
+            
+            // Always fire appReady so the app can continue
             if (!appReadyFired) {
                 appReadyFired = true;
                 window.dispatchEvent(new CustomEvent('appReady'));
             }
-            showToast('Error loading profile. Please refresh.', 'error');
+            
+            // For new users with no profile, trigger onboarding
+            if (isNoProfileError && user) {
+                if (user.emailVerified) {
+                    showOnboarding();
+                } else {
+                    showVerificationRequiredScreen();
+                }
+            }
         }
         
         // SAFETY NET - Ensure splash is hidden after everything
