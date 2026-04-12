@@ -474,7 +474,7 @@ window.goBack = function() {
     }
     
     window.navigateToPage(previousState.page, { 
-        preserveHistory: false, 
+        preserveHistory: true, 
         skipProfileLoad: previousState.page === 'profile' 
     });
     
