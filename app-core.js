@@ -277,7 +277,8 @@ async function addNotification(title, body, link = '') {
         } catch (error) {
             console.error('Failed to update unread count:', error);
         }
-        
+    }
+    
     // 3. Update badge count
     await updateNotificationBadgeCount();
 }
@@ -394,8 +395,6 @@ async function markAllNotificationsAsRead() {
         const metaRef = doc(db, 'user_notification_meta', window.currentUser.uid);
         await setDoc(metaRef, { unreadCount: 0 });
         
-        await updateNotificationBadgeCount();
-        await loadNotificationsFromFirestore();
         await updateNotificationBadgeCount();
         await loadNotificationsFromFirestore();
         
@@ -1654,4 +1653,3 @@ setTimeout(() => {
         window.dispatchEvent(new CustomEvent('appReady'));
     }
 }, 1000);
-}
