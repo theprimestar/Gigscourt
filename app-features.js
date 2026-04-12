@@ -1287,7 +1287,13 @@ async function loadChats() {
         
         // Attach click listeners
         document.querySelectorAll('.chat-item').forEach(item => {
-            item.addEventListener('click', () => openChat(item.dataset.userId, item.dataset.chatId));
+            item.addEventListener('click', (e) => {
+                // Don't open chat if the click was on the avatar
+                if (e.target.closest('.chat-avatar')) {
+                    return;
+                }
+                openChat(item.dataset.userId, item.dataset.chatId);
+            });
         });
         
     }, (error) => {
