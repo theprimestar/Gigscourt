@@ -41,6 +41,17 @@ window.db = db;
 window.app = app;
 window.sendPasswordResetEmail = sendPasswordResetEmail;
 
+// Temporarily expose Firestore functions for Eruda backfill
+import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js').then(module => {
+    window.collection = module.collection;
+    window.query = module.query;
+    window.where = module.where;
+    window.limit = module.limit;
+    window.getDocs = module.getDocs;
+    window.writeBatch = module.writeBatch;
+    console.log('✅ Firestore functions exposed to Eruda');
+});
+
 // ========== DOM ELEMENTS ==========
 let splashScreen, mainApp, bottomNav, header, pageContainer, bottomSheet, sheetOverlay, sheetContent, toastContainer, notificationsBtn, notificationsDropdown, notificationsList, clearNotificationsBtn, notificationBadge;
 
