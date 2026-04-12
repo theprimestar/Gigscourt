@@ -905,12 +905,11 @@ async function showUserBottomSheet(userId, cachedData = null) {
             viewProfileBtn.addEventListener('click', () => {
                 const profileId = viewProfileBtn.dataset.userId;
                 
-                // Push current page to history BEFORE navigating
+                window.currentViewedUserId = profileId;
                 window.pushToNavigationHistory();
                 
                 window.closeBottomSheet();
                 loadProfile(profileId);
-                // Preserve history and skip the automatic profile reload
                 window.navigateToPage('profile', { preserveHistory: true, skipProfileLoad: true });
             });
         }
@@ -1368,6 +1367,7 @@ async function openChat(userId, chatId = null) {
             const newHeaderInfo = headerInfo.cloneNode(true);
             headerInfo.parentNode.replaceChild(newHeaderInfo, headerInfo);
             newHeaderInfo.addEventListener('click', () => {
+                window.currentViewedUserId = userId;
                 window.pushToNavigationHistory();
                 loadProfile(userId);
                 window.navigateToPage('profile', { preserveHistory: true, skipProfileLoad: true });
