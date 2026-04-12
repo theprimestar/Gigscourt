@@ -1449,6 +1449,20 @@ async function setupAuthListener() {
         // Hide auth screen
         hideAuthScreen();
         
+        // SAFETY: Wait for supabase to be defined
+        let attempts = 0;
+        while (typeof supabase === 'undefined' && attempts < 20) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        // If still undefined, show error and stop
+        if (typeof supabase === 'undefined') {
+            console.error('Supabase failed to initialize');
+            showToast('Connection error. Please restart the app.', 'error');
+            return;
+        }
+        
         try {
             // Fetch user profile from Supabase instead of Firestore
             const { data: profile, error } = await supabase
