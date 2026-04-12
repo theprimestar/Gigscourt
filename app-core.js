@@ -491,12 +491,15 @@ window.goBack = function() {
 function navigateToPage(pageId) {
     // Clear navigation history when user uses bottom nav
     // (They're starting fresh, not "going back")
-    const mainPages = ['home', 'search', 'chats', 'profile', 'admin'];
+    // BUT don't clear if we're navigating to profile (it's often from a card/chat)
+    const mainPages = ['home', 'search', 'chats', 'admin'];
     if (mainPages.includes(pageId)) {
         window.navigationHistory = [];
         console.log('🧹 Cleared navigation history - starting fresh');
     }
     
+    // For profile page, we handle history in the click handlers (pushToNavigationHistory)
+    // So we do NOT clear history when navigating to profile
     saveScrollPosition();
     const pages = document.querySelectorAll('.page');
     const navItems = document.querySelectorAll('.nav-item');
