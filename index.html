@@ -236,6 +236,34 @@
         </div>
     </div>
 
+    <div id="chat-page" class="page">
+        <div class="page-header chat-header-nav">
+            <button id="chat-back-btn" class="icon-btn" aria-label="Back">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M19 12H5M12 19l-7-7 7-7" />
+                </svg>
+            </button>
+            <div id="chat-header-info" class="chat-header-info">
+                <img id="chat-header-avatar" class="chat-header-avatar" src="" alt="" style="display: none;">
+                <span id="chat-header-name">Chat</span>
+            </div>
+            <div style="width: 40px;"></div> <!-- Empty for balance -->
+        </div>
+        <div class="page-content chat-page-content">
+            <div id="chat-messages-container" class="chat-messages-container">
+                <div class="loading-spinner"></div>
+            </div>
+            <div class="chat-input-container">
+                <input type="text" id="chat-page-input" placeholder="Type a message..." class="chat-input">
+                <button id="chat-page-send-btn" class="chat-send-btn">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </div>
+    
     <div id="admin-page" class="page">
             <div class="page-header admin-header">
                 <h2>Admin Dashboard</h2>
