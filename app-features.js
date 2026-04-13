@@ -1526,119 +1526,177 @@ async function loadChats() {
 }
 
 async function openChat(userId, chatId = null) {
-    // Push current page to history BEFORE navigating
+    // ========== STEP 1: Navigate IMMEDIATELY ==========
     window.pushToNavigationHistory();
+    window.navigateToPage('chat', { preserveHistory: true });
     
-    currentChatUser = userId;
-    currentChatId = chatId;
-    let chat = chatId;
-    if (!chat) {
-        try {
-            const chatsRef = collection(window.db, 'chats');
-            const q = query(chatsRef, where('participants', 'array-contains', window.auth.currentUser.uid));
-            const existingChat = await getDocs(q);
-            let found = null;
-            existingChat.forEach(doc => {
-                if (doc.data().participants.includes(userId)) found = doc.id;
-            });
-            chat = found;
-            if (!chat) {
-                const chatsRef = collection(window.db, 'chats');
-                const newChatRef = await addDoc(chatsRef, {
-                    participants: [window.auth.currentUser.uid, userId],
-                    createdAt: new Date().toISOString(),
-                    lastMessageTime: new Date().toISOString(),
-                    lastMessage: ''
-                });
-                chat = newChatRef.id;
-            }
-            currentChatId = chat;
-        } catch (error) {
-            console.error('openChat error:', error);
-            window.showToast('Error opening chat', 'error');
-            return;
+    // ========== STEP 2: Show cached header IMMEDIATELY ==========
+    const cachedProvider = getCachedProvider(userId);
+    const headerName = document.getElementById('chat-header-name');
+    const headerAvatar = document.getElementById('chat-header-avatar');
+    
+    if (headerName) {
+        headerName.textContent = cachedProvider?.displayName || 'Chat';
+    }
+    if (headerAvatar) {
+        if (cachedProvider?.photoURL) {
+            headerAvatar.src = getOptimizedImageUrl(cachedProvider.photoURL, 80, 80);
+            headerAvatar.style.display = 'inline-block';
+        } else {
+            headerAvatar.style.display = 'none';
         }
     }
-
-    // Reset unread count for this chat room
-    const chatRoomRef = doc(window.db, 'chats', chat);
-    await updateDoc(chatRoomRef, {
-        [`unreadCount.${window.auth.currentUser.uid}`]: 0
-    });
     
-    try {
-        const userData = await getSingleProfileFromSupabase(userId);
-        if (!userData) {
-            window.showToast('Error loading user', 'error');
-            return;
-        }
-        
-        // Navigate to chat page with history preserved
-        window.navigateToPage('chat', { preserveHistory: true });
-        
-        // Set up chat header
-        const headerName = document.getElementById('chat-header-name');
-        const headerAvatar = document.getElementById('chat-header-avatar');
-        const headerInfo = document.getElementById('chat-header-info');
-        
-        if (headerName) {
-            headerName.textContent = userData.displayName || 'User';
-        }
-        if (headerAvatar) {
-            headerAvatar.src = getOptimizedImageUrl(userData.photoURL, 80, 80) || `https://ui-avatars.com/api/?name=${encodeURIComponent(userData.displayName || 'User')}`;
-            headerAvatar.style.display = 'inline-block';
-            headerAvatar.alt = userData.displayName || 'User';
-        }
-        
-        // Make header clickable to view profile
-        if (headerInfo) {
-            headerInfo.style.cursor = 'pointer';
-            const newHeaderInfo = headerInfo.cloneNode(true);
-            headerInfo.parentNode.replaceChild(newHeaderInfo, headerInfo);
-            newHeaderInfo.addEventListener('click', () => {
-                window.currentViewedUserId = userId;
-                window.pushToNavigationHistory();
-                loadProfile(userId);
-                window.navigateToPage('profile', { preserveHistory: true, skipProfileLoad: true });
+    // ========== STEP 3: Show messages container with loading ==========
+    const messagesContainer = document.getElementById('chat-messages-container');
+    if (messagesContainer) {
+        messagesContainer.innerHTML = '<div class="loading-spinner"></div>';
+    }
+    
+    // ========== STEP 4: Do everything else in background ==========
+    currentChatUser = userId;
+    currentChatId = chatId;
+    
+    (async () => {
+        try {
+            let chat = chatId;
+            
+            // Find or create chat
+            if (!chat) {
+                const chatsRef = collection(window.db, 'chats');
+                const q = query(chatsRef, where('participants', 'array-contains', window.auth.currentUser.uid));
+                const existingChat = await getDocs(q);
+                let found = null;
+                existingChat.forEach(doc => {
+                    if (doc.data().participants.includes(userId)) found = doc.id;
+                });
+                chat = found;
+                if (!chat) {
+                    const newChatRef = await addDoc(collection(window.db, 'chats'), {
+                        participants: [window.auth.currentUser.uid, userId],
+                        createdAt: new Date().toISOString(),
+                        lastMessageTime: new Date().toISOString(),
+                        lastMessage: ''
+                    });
+                    chat = newChatRef.id;
+                }
+                currentChatId = chat;
+            }
+            
+            // Reset unread count
+            const chatRoomRef = doc(window.db, 'chats', chat);
+            await updateDoc(chatRoomRef, {
+                [`unreadCount.${window.auth.currentUser.uid}`]: 0
             });
+            
+            // Fetch fresh user data
+            const userData = await getSingleProfileFromSupabase(userId);
+            
+            // Update header with fresh data
+            if (headerName && userData) {
+                headerName.textContent = userData.displayName || 'User';
+            }
+            if (headerAvatar && userData?.photoURL) {
+                headerAvatar.src = getOptimizedImageUrl(userData.photoURL, 80, 80);
+                headerAvatar.style.display = 'inline-block';
+            }
+            
+            // Cache the fresh data
+            if (userData) {
+                setCachedProvider(userId, {
+                    displayName: userData.displayName,
+                    photoURL: userData.photoURL,
+                    rating: userData.rating,
+                    reviewCount: userData.reviewCount,
+                    gigCount: userData.gigCount,
+                    monthlyGigs: 0,
+                    services: userData.services,
+                    bio: userData.bio,
+                    active: false
+                });
+            }
+            
+        } catch (error) {
+            console.warn('Background chat setup error:', error);
+        }
+    })();
+    
+    // ========== STEP 5: Set up UI elements (header click, back button, etc.) ==========
+    const headerInfo = document.getElementById('chat-header-info');
+    if (headerInfo) {
+        headerInfo.style.cursor = 'pointer';
+        const newHeaderInfo = headerInfo.cloneNode(true);
+        headerInfo.parentNode.replaceChild(newHeaderInfo, headerInfo);
+        newHeaderInfo.addEventListener('click', () => {
+            window.currentViewedUserId = userId;
+            window.pushToNavigationHistory();
+            loadProfile(userId);
+            window.navigateToPage('profile', { preserveHistory: true, skipProfileLoad: true });
+        });
+    }
+    
+    const backBtn = document.getElementById('chat-back-btn');
+    if (backBtn) {
+        const newBackBtn = backBtn.cloneNode(true);
+        backBtn.parentNode.replaceChild(newBackBtn, backBtn);
+        newBackBtn.addEventListener('click', () => {
+            window.goBack();
+        });
+    }
+    
+    // Set up message input and send button
+    const input = document.getElementById('chat-page-input');
+    const sendBtn = document.getElementById('chat-page-send-btn');
+    
+    if (sendBtn) {
+        const newSendBtn = sendBtn.cloneNode(true);
+        sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+        newSendBtn.addEventListener('click', () => {
+            const msgInput = document.getElementById('chat-page-input');
+            if (msgInput) {
+                sendMessage(currentChatId, msgInput.value);
+                msgInput.value = '';
+            }
+        });
+    }
+    
+    if (input) {
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+        newInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const msgInput = document.getElementById('chat-page-input');
+                if (msgInput) {
+                    sendMessage(currentChatId, msgInput.value);
+                    msgInput.value = '';
+                }
+            }
+        });
+    }
+    
+    // ========== STEP 6: Set up actions container (Register Gig, Review, etc.) ==========
+    // This runs after we have chat ID
+    (async () => {
+        // Wait for chat ID to be set
+        while (!currentChatId) {
+            await new Promise(resolve => setTimeout(resolve, 50));
         }
         
-        // Set up back button
-        const backBtn = document.getElementById('chat-back-btn');
-        if (backBtn) {
-            const newBackBtn = backBtn.cloneNode(true);
-            backBtn.parentNode.replaceChild(newBackBtn, backBtn);
-            newBackBtn.addEventListener('click', () => {
-                window.goBack();
-            });
-        }
-        
-        // Get chat page elements
-        const messagesDiv = document.getElementById('chat-messages-container');
-        const input = document.getElementById('chat-page-input');
-        const sendBtn = document.getElementById('chat-page-send-btn');
-        
-        // Clear and show loading
-        if (messagesDiv) {
-            messagesDiv.innerHTML = '<div class="loading-spinner"></div>';
-        }
-        
-        // Set up action buttons container
+        const chat = currentChatId;
         const chatContent = document.querySelector('.chat-page-content');
         let actionsContainer = document.getElementById('chat-actions-container');
+        
         if (!actionsContainer) {
             actionsContainer = document.createElement('div');
             actionsContainer.id = 'chat-actions-container';
             actionsContainer.style.cssText = 'padding: 12px 16px; border-top: 1px solid var(--border-light);';
             
-            // Insert before input container
             const inputContainer = document.querySelector('.chat-input-container');
             if (inputContainer && chatContent) {
                 chatContent.insertBefore(actionsContainer, inputContainer);
             }
         }
         
-        // Build actions HTML
         actionsContainer.innerHTML = `
             <div id="pending-review-toast-provider" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
             <div id="pending-review-toast-client" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
@@ -1649,38 +1707,25 @@ async function openChat(userId, chatId = null) {
             </div>
         `;
         
-        // Attach event listeners
-        if (sendBtn) {
-            const newSendBtn = sendBtn.cloneNode(true);
-            sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
-            newSendBtn.addEventListener('click', () => {
-                const msgInput = document.getElementById('chat-page-input');
-                if (msgInput) {
-                    sendMessage(chat, msgInput.value);
-                    msgInput.value = '';
-                }
-            });
-        }
-        
-        if (input) {
-            const newInput = input.cloneNode(true);
-            input.parentNode.replaceChild(newInput, input);
-            newInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    const msgInput = document.getElementById('chat-page-input');
-                    if (msgInput) {
-                        sendMessage(chat, msgInput.value);
-                        msgInput.value = '';
-                    }
-                }
-            });
-        }
-        
         document.getElementById('register-gig-chat')?.addEventListener('click', () => registerGig(chat, userId));
         document.getElementById('submit-review-chat')?.addEventListener('click', () => showReviewBottomSheet(userId, chat));
         document.getElementById('cancel-gig-chat')?.addEventListener('click', () => cancelGig(chat, userId));
-        if (currentMessagesUnsubscribe) currentMessagesUnsubscribe();
         
+        await checkGigStatusAndUpdateUI(chat, userId);
+    })();
+    
+    // ========== STEP 7: Set up messages listener ==========
+    if (currentMessagesUnsubscribe) {
+        currentMessagesUnsubscribe();
+    }
+    
+    // Wait for chat ID, then set up listener
+    (async () => {
+        while (!currentChatId) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        
+        const chat = currentChatId;
         const messagesRef = collection(window.db, 'chats', chat, 'messages');
         const q = query(
             messagesRef,
@@ -1688,12 +1733,10 @@ async function openChat(userId, chatId = null) {
             limit(MESSAGES_PER_PAGE)
         );
         
-        // Reset pagination state
         lastVisibleMessage = null;
         hasMoreMessages = true;
         isLoadingMoreMessages = false;
         
-        // Get fresh reference to messages container
         const messagesContainer = document.getElementById('chat-messages-container');
         
         currentMessagesUnsubscribe = onSnapshot(q, (snapshot) => {
@@ -1705,11 +1748,9 @@ async function openChat(userId, chatId = null) {
                 return;
             }
             
-            // Store the last visible message for pagination
             lastVisibleMessage = snapshot.docs[snapshot.docs.length - 1];
             hasMoreMessages = snapshot.docs.length === MESSAGES_PER_PAGE;
             
-            // Reverse to display oldest to newest (bottom)
             const reversedDocs = [...snapshot.docs].reverse();
             reversedDocs.forEach(doc => {
                 const msg = doc.data();
@@ -1724,14 +1765,12 @@ async function openChat(userId, chatId = null) {
                     </div>
                 `;
             });
-            // Check if user was already at bottom before adding new messages
-            const wasAtBottom = messagesContainer.scrollTop + messagesContainer.clientHeight >= messagesContainer.scrollHeight - 50;
             
+            const wasAtBottom = messagesContainer.scrollTop + messagesContainer.clientHeight >= messagesContainer.scrollHeight - 50;
             if (wasAtBottom) {
                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
             }
             
-            // Setup scroll observer for loading more messages
             setupMessagesScrollObserver(messagesContainer, chat);
             
             document.querySelectorAll('#chat-messages-container .message-wrapper').forEach(wrapper => {
@@ -1750,14 +1789,7 @@ async function openChat(userId, chatId = null) {
                 wrapper.addEventListener('touchmove', () => clearTimeout(pressTimer));
             });
         });
-        
-        // Check gig status and update UI accordingly
-        await checkGigStatusAndUpdateUI(chat, userId);
-        
-    } catch (error) {
-        console.error('openChat error:', error);
-        window.showToast('Error opening chat', 'error');
-    }
+    })();
 }
 
 function setupMessagesScrollObserver(messagesDiv, chatId) {
