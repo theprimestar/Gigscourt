@@ -2314,6 +2314,20 @@ async function showReviewBottomSheet(providerId, chatId) {
 
 // ========== REGISTER GIG ==========
 async function registerGig(chatId, clientId) {
+    // ========== STEP 1: IMMEDIATE feedback ==========
+    window.showToast('Registering gig...');
+    window.haptic('light');
+    
+    // Optimistically update UI
+    const registerBtn = document.getElementById('register-gig-chat');
+    const originalText = registerBtn?.textContent;
+    if (registerBtn) {
+        registerBtn.disabled = true;
+        registerBtn.textContent = '⏳ Registering...';
+        registerBtn.style.opacity = '0.7';
+    }
+    
+    // ========== STEP 2: Do the work in background ==========
     try {
         // Call the database function
         const { data, error } = await supabase.rpc('register_gig', {
@@ -2325,8 +2339,7 @@ async function registerGig(chatId, clientId) {
         if (error) throw error;
         
         if (!data.success) {
-            window.showToast(data.message, 'error');
-            return;
+            throw new Error(data.message);
         }
         
         // Update chat (still in Firestore)
@@ -2344,22 +2357,31 @@ async function registerGig(chatId, clientId) {
             `/chat/${chatId}`
         );
         
-        await sendPushNotification(
+        // Send push notification (fire and forget - don't wait)
+        sendPushNotification(
             clientId,
             'New Gig Request',
             `${providerName} registered a gig with you. Please review within 7 days.`,
             `/chat/${chatId}`
-        );
+        ).catch(err => console.warn('Push notification failed:', err));
         
-        window.showToast('Gig registered! Client will review within 7 days.');
+        // ========== STEP 3: Success! ==========
+        window.showToast('✅ Gig registered! Client will review within 7 days.', 'success');
         window.haptic('heavy');
         
         window.closeBottomSheet();
-        setTimeout(() => openChat(clientId, chatId), 500);
+        setTimeout(() => openChat(clientId, chatId), 300);
         
     } catch (error) {
         console.error('registerGig error:', error);
         window.showToast(error.message || 'Error registering gig', 'error');
+        
+        // Re-enable button on error
+        if (registerBtn) {
+            registerBtn.disabled = false;
+            registerBtn.textContent = originalText || '📋 Register Gig with this person';
+            registerBtn.style.opacity = '1';
+        }
     }
 }
 
@@ -3561,78 +3583,93 @@ async function editProfile() {
 }
 
 async function showRecentChatsForGig() {
-    try {
-        const chatsRef = collection(window.db, 'chats');
-        const q = query(
-            chatsRef,
-            where('participants', 'array-contains', window.auth.currentUser.uid),
-            where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
-        );
-        const chatsSnapshot = await getDocs(q);
-        
-        if (chatsSnapshot.empty) {
-            window.showToast('No recent chats found');
-            return;
-        }
-        
-        const recentUsers = [];
-        
-        // Collect all unique user IDs
-        const userIds = [...new Set(
-            chatsSnapshot.docs.map(doc => {
-                const chat = doc.data();
-                return chat.participants.find(p => p !== window.auth.currentUser.uid);
-            })
-        )];
-        
-        // Fetch all profiles in ONE query
-        const { data: profiles } = await supabase.rpc('get_chat_users', {
-            p_user_ids: userIds
-        });
-        
-        const profilesMap = {};
-        if (profiles) {
-            profiles.forEach(p => { profilesMap[p.user_id] = p; });
-        }
-        
-        // Build recent users array
-        for (const chatDoc of chatsSnapshot.docs) {
-            const chat = chatDoc.data();
-            const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-            const userData = profilesMap[otherId] || {};
-            recentUsers.push({ 
-                id: otherId, 
-                displayName: userData.display_name || 'User',
-                services: userData.services,
-                chatId: chatDoc.id 
+    // ========== STEP 1: Open sheet IMMEDIATELY with loading state ==========
+    window.openBottomSheet(`
+        <h3 style="margin-bottom: 16px;">Select a client you worked with</h3>
+        <div id="recent-chats-container" style="max-height: 400px; overflow-y: auto;">
+            <div class="loading-spinner"></div>
+        </div>
+    `);
+    
+    window.haptic('light');
+    
+    // ========== STEP 2: Fetch data in background ==========
+    (async () => {
+        try {
+            const chatsRef = collection(window.db, 'chats');
+            const q = query(
+                chatsRef,
+                where('participants', 'array-contains', window.auth.currentUser.uid),
+                where('lastMessageTime', '>=', new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString())
+            );
+            const chatsSnapshot = await getDocs(q);
+            
+            const container = document.getElementById('recent-chats-container');
+            if (!container) return; // Sheet was closed
+            
+            if (chatsSnapshot.empty) {
+                container.innerHTML = '<div class="empty-state">No recent chats found</div>';
+                return;
+            }
+            
+            const recentUsers = [];
+            const userIds = [...new Set(
+                chatsSnapshot.docs.map(doc => {
+                    const chat = doc.data();
+                    return chat.participants.find(p => p !== window.auth.currentUser.uid);
+                })
+            )];
+            
+            const { data: profiles } = await supabase.rpc('get_chat_users', {
+                p_user_ids: userIds
             });
-        }
-        
-        if (recentUsers.length === 0) {
-            window.showToast('No recent chats found');
-            return;
-        }
-        
-        window.openBottomSheet(`
-            <h3 style="margin-bottom: 16px;">Select a client you worked with</h3>
-            ${recentUsers.map(u => `
+            
+            const profilesMap = {};
+            if (profiles) {
+                profiles.forEach(p => { profilesMap[p.user_id] = p; });
+            }
+            
+            for (const chatDoc of chatsSnapshot.docs) {
+                const chat = chatDoc.data();
+                const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
+                const userData = profilesMap[otherId] || {};
+                recentUsers.push({ 
+                    id: otherId, 
+                    displayName: userData.display_name || 'User',
+                    services: userData.services,
+                    chatId: chatDoc.id 
+                });
+            }
+            
+            if (recentUsers.length === 0) {
+                container.innerHTML = '<div class="empty-state">No recent chats found</div>';
+                return;
+            }
+            
+            // ========== STEP 3: Render the list ==========
+            container.innerHTML = recentUsers.map(u => `
                 <button class="recent-client-btn" data-user-id="${u.id}" data-chat-id="${u.chatId}" style="width: 100%; padding: 16px; margin-bottom: 8px; background: var(--bg-secondary); border: none; border-radius: 12px; text-align: left;">
                     ${u.displayName || 'User'} - ${u.services ? u.services.split(',')[0] : ''}
                 </button>
-            `).join('')}
-        `);
-        
-        document.querySelectorAll('.recent-client-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                window.closeBottomSheet();
-                registerGig(btn.dataset.chatId, btn.dataset.userId);
+            `).join('');
+            
+            // Attach click listeners
+            document.querySelectorAll('.recent-client-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    window.closeBottomSheet();
+                    registerGig(btn.dataset.chatId, btn.dataset.userId);
+                });
             });
-        });
-        
-    } catch (error) {
-        console.error('showRecentChatsForGig error:', error);
-        window.showToast('Error loading recent chats', 'error');
-    }
+            
+        } catch (error) {
+            console.error('showRecentChatsForGig error:', error);
+            const container = document.getElementById('recent-chats-container');
+            if (container) {
+                container.innerHTML = '<div class="empty-state">Error loading chats</div>';
+            }
+            window.showToast('Error loading recent chats', 'error');
+        }
+    })();
 }
 
 async function showSettings() {
