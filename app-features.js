@@ -1859,10 +1859,11 @@ async function openChat(userId, chatId = null) {
     }
 
     // Clean up gig status listener when opening new chat
-if (gigStatusListener) {
-    gigStatusListener.unsubscribe();
-    gigStatusListener = null;
-}
+    if (window.gigStatusListener) {
+        window.gigStatusListener.unsubscribe();
+        window.gigStatusListener = null;
+        console.log('🧹 Cleaned up previous gig status listener');
+    }
     
     // Wait for chat ID, then set up listener
     (async () => {
@@ -2086,9 +2087,10 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
         const currentUser = window.auth.currentUser.uid;
         
         // Clean up any previous listener for a different chat
-        if (gigStatusListener && currentListenerChatId !== chatId) {
-            gigStatusListener.unsubscribe();
-            gigStatusListener = null;
+        if (window.gigStatusListener && currentListenerChatId !== chatId) {
+            window.gigStatusListener.unsubscribe();
+            window.gigStatusListener = null;
+            console.log('🧹 Cleaned up gig listener for different chat');
         }
         
         // Function to update UI based on gig data
@@ -2212,6 +2214,7 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
                     }
             
             gigStatusListener = channel;
+            window.gigStatusListener = channel; // Expose for cleanup
         }
         
     } catch (error) {
