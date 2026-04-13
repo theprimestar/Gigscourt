@@ -2176,17 +2176,9 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             currentListenerChatId = chatId;
             
             // Create a channel for real-time updates
-            const channel = supabase
-                .channel(`gig-status-${chatId}`)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: '*', // Listen to all changes (INSERT, UPDATE, DELETE)
-                        schema: 'public',
-                        table: 'gigs',
-                        filter: `provider_id=eq.${currentUser},client_id=eq.${userId}`
-                    },
-                    async () => {
+            async (payload) => {
+                        console.log('🔔 Real-time gig update detected:', payload.eventType, payload.new);
+                        
                         // Re-query when anything changes
                         const { data: newProviderGig } = await supabase
                             .from('gigs')
@@ -2206,6 +2198,8 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
                             .limit(1)
                             .maybeSingle();
                         
+                        console.log('📊 Re-queried gigs - Provider:', newProviderGig?.status, 'Client:', newClientGig?.status);
+                        
                         const newIsProviderPending = newProviderGig && newProviderGig.status === 'pending_review';
                         const newIsClientPending = newClientGig && newClientGig.status === 'pending_review';
                         
@@ -2213,14 +2207,9 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
                         
                         // If gig is no longer pending (review submitted), refresh the chat messages
                         if (!newIsProviderPending && !newIsClientPending) {
-                            // Optionally refresh messages or show a success message
                             console.log('✅ Gig review completed, UI updated in real-time');
                         }
                     }
-                )
-                .subscribe((status) => {
-                    console.log(`Gig status listener for chat ${chatId}: ${status}`);
-                });
             
             gigStatusListener = channel;
         }
