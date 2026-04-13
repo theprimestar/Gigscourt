@@ -7,7 +7,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, sendEmailVerification } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy, writeBatch, limit, increment, onSnapshot } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy, writeBatch, limit, increment, onSnapshot, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // Supabase configuration
 const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
@@ -17,6 +17,21 @@ const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
 const app = initializeApp(window.firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// Enable offline persistence for instant chat loading
+enableIndexedDbPersistence(db)
+    .then(() => {
+        console.log('✅ Firestore offline persistence enabled');
+    })
+    .catch((err) => {
+        if (err.code === 'failed-precondition') {
+            console.warn('⚠️ Multiple tabs open - persistence enabled in another tab');
+        } else if (err.code === 'unimplemented') {
+            console.warn('⚠️ Browser does not support offline persistence');
+        } else {
+            console.error('❌ Persistence error:', err);
+        }
+    });
 
 // Initialize FCM
 let messaging = null;
