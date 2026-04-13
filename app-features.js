@@ -2177,8 +2177,18 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
         if (!gigStatusListener || currentListenerChatId !== chatId) {
             currentListenerChatId = chatId;
             
-            // Create a channel for real-time updates
-            async (payload) => {
+            // Create the channel properly
+            const channel = supabase
+                .channel(`gig-status-${chatId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'gigs',
+                        filter: `provider_id=eq.${currentUser}`
+                    },
+                    async (payload) => {
                         console.log('🔔 Real-time gig update detected:', payload.eventType, payload.new);
                         
                         // Re-query when anything changes
@@ -2207,11 +2217,15 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
                         
                         await updateUI(newIsProviderPending ? newProviderGig : null, newIsClientPending ? newClientGig : null);
                         
-                        // If gig is no longer pending (review submitted), refresh the chat messages
+                        // If gig is no longer pending (review submitted)
                         if (!newIsProviderPending && !newIsClientPending) {
                             console.log('✅ Gig review completed, UI updated in real-time');
                         }
                     }
+                )
+                .subscribe((status) => {
+                    console.log(`Gig status listener for chat ${chatId}: ${status}`);
+                });
             
             gigStatusListener = channel;
             window.gigStatusListener = channel; // Expose for cleanup
