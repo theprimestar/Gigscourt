@@ -228,6 +228,7 @@ let hasMoreHomeFeed = true;
 const HOME_FEED_LIMIT = 20;
 let chatListUnsubscribe = null;
 let globalUnreadListener = null;
+let currentSheetAbortController = null;
 // Supabase search pagination
 let searchOffset = 0;
 let isSearchLoading = false;
@@ -990,27 +991,51 @@ async function showUserBottomSheet(userId, cachedData = null) {
         }
         
         // ========== STEP 4: Fetch fresh data in background ==========
+        
+        // Cancel any in-flight background fetch from a previous sheet
+        if (currentSheetAbortController) {
+            currentSheetAbortController.abort();
+        }
+        
+        /// Create new abort controller for this fetch
+        currentSheetAbortController = new AbortController();
+        window.currentSheetAbortController = currentSheetAbortController; // Expose for closeBottomSheet
+        const signal = currentSheetAbortController.signal;
+        
         (async () => {
             try {
                 // Fetch fresh bio
-                const { data: minimalData } = await supabase
+                const minimalPromise = supabase
                     .from('provider_profiles')
                     .select('bio, display_name, photo_url, rating, gig_count, services')
                     .eq('user_id', userId)
                     .single();
                 
                 // Fetch active status
-                const { data: locationData } = await supabase
+                const locationPromise = supabase
                     .from('provider_locations')
                     .select('last_gig_date')
                     .eq('user_id', userId)
                     .single();
                 
                 // Get monthly gigs
-                const monthlyGigs = await getRolling30DayGigCount(userId);
+                const monthlyGigsPromise = getRolling30DayGigCount(userId);
                 
-                // Get review count (from the profile data if available, or keep existing)
-                const reviewCount = minimalData?.review_count || displayData.reviewCount;
+                // Wait for all fetches
+                const [minimalResult, locationResult, monthlyGigs] = await Promise.all([
+                    minimalPromise,
+                    locationPromise,
+                    monthlyGigsPromise
+                ]);
+                
+                // Check if aborted before processing
+                if (signal.aborted) {
+                    console.log('🛑 Background fetch aborted for:', userId);
+                    return;
+                }
+                
+                const minimalData = minimalResult.data;
+                const locationData = locationResult.data;
                 
                 // Determine active status
                 const lastGigDate = locationData?.last_gig_date;
@@ -1021,13 +1046,19 @@ async function showUserBottomSheet(userId, cachedData = null) {
                     displayName: minimalData?.display_name || displayData.displayName,
                     photoURL: minimalData?.photo_url || displayData.photoURL,
                     rating: minimalData?.rating || displayData.rating,
-                    reviewCount: reviewCount,
+                    reviewCount: displayData.reviewCount,
                     gigCount: minimalData?.gig_count || displayData.gigCount,
                     monthlyGigs: monthlyGigs,
                     services: minimalData?.services ? minimalData.services.split(',').map(s => s.trim()) : displayData.services,
                     bio: minimalData?.bio || '',
                     active: active
                 };
+                
+                // Check again before DOM updates
+                if (signal.aborted) {
+                    console.log('🛑 Skipping DOM updates, fetch aborted');
+                    return;
+                }
                 
                 // ========== STEP 5: Update DOM only if changed ==========
                 
@@ -1037,20 +1068,25 @@ async function showUserBottomSheet(userId, cachedData = null) {
                     bioElement.style.transition = 'opacity 0.15s ease';
                     bioElement.style.opacity = '0';
                     setTimeout(() => {
-                        bioElement.textContent = freshData.bio;
-                        bioElement.style.opacity = '1';
+                        if (!signal.aborted) {
+                            bioElement.textContent = freshData.bio;
+                            bioElement.style.opacity = '1';
+                        }
                     }, 100);
                 }
                 
                 // Update active badge if changed
-                if (freshData.active !== displayData.active) {
+                if (!signal.aborted && freshData.active !== displayData.active) {
                     const headerDiv = document.getElementById('bottom-sheet-header');
                     if (freshData.active) {
-                        const badge = document.createElement('span');
-                        badge.className = 'active-badge active-badge-in-sheet';
-                        badge.textContent = 'Active this week';
-                        badge.style.marginLeft = '8px';
-                        headerDiv.appendChild(badge);
+                        const existingBadge = document.querySelector('.active-badge-in-sheet');
+                        if (!existingBadge && headerDiv) {
+                            const badge = document.createElement('span');
+                            badge.className = 'active-badge active-badge-in-sheet';
+                            badge.textContent = 'Active this week';
+                            badge.style.marginLeft = '8px';
+                            headerDiv.appendChild(badge);
+                        }
                     } else {
                         const existingBadge = document.querySelector('.active-badge-in-sheet');
                         if (existingBadge) existingBadge.remove();
@@ -1058,11 +1094,17 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 }
                 
                 // ========== STEP 6: Save to cache ==========
-                setCachedProvider(userId, freshData);
-                
-                console.log('✅ Background fetch completed for:', userId);
+                if (!signal.aborted) {
+                    setCachedProvider(userId, freshData);
+                    console.log('✅ Background fetch completed for:', userId);
+                }
                 
             } catch (error) {
+                // Ignore abort errors
+                if (error.name === 'AbortError' || signal.aborted) {
+                    console.log('🛑 Background fetch aborted');
+                    return;
+                }
                 console.warn('Background fetch failed, using cached/display data:', error);
             }
         })();
