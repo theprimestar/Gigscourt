@@ -423,13 +423,44 @@ async function uploadImage(file, folder = 'profiles') {
     }
 }
 
+// ========== HOME FEED SKELETONS ==========
+function showHomeFeedSkeletons(count = 5) {
+    if (!homeFeed) return;
+    
+    let skeletonsHtml = '';
+    for (let i = 0; i < count; i++) {
+        skeletonsHtml += `
+            <div class="skeleton-card">
+                <div class="skeleton-header">
+                    <div class="skeleton-avatar"></div>
+                    <div class="skeleton-info">
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                </div>
+                <div class="skeleton-tags">
+                    <div class="skeleton-tag"></div>
+                    <div class="skeleton-tag"></div>
+                    <div class="skeleton-tag"></div>
+                </div>
+                <div class="skeleton-stats">
+                    <div class="skeleton-stat"></div>
+                    <div class="skeleton-stat"></div>
+                </div>
+                <div class="skeleton-line short"></div>
+            </div>
+        `;
+    }
+    
+    homeFeed.innerHTML = skeletonsHtml;
+}
 
 // ========== HOME PAGE (Supabase - Infinite Scroll) ==========
 async function loadHomeFeed(reset = false, skipSpinner = false) {
     if (!homeFeed) return;
     
     if (!window.auth?.currentUser) {
-        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+        showHomeFeedSkeletons(5);
         let attempts = 0;
         const maxAttempts = 50;
         
@@ -442,17 +473,22 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             homeFeed.innerHTML = '<div class="empty-state">Please log in to see providers</div>';
             return;
         }
-        homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+        showHomeFeedSkeletons(5);
     }
     
     if (reset) {
         if (!skipSpinner) {
-            homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+            // Show skeletons instead of spinner
+            showHomeFeedSkeletons(5);
         }
         homeFeedOffset = 0;
         hasMoreHomeFeed = true;
         while (homeFeed.firstChild) {
             homeFeed.removeChild(homeFeed.firstChild);
+        }
+        // Re-show skeletons after clearing
+        if (!skipSpinner) {
+            showHomeFeedSkeletons(5);
         }
     }
     
