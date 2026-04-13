@@ -424,35 +424,112 @@ async function uploadImage(file, folder = 'profiles') {
 }
 
 // ========== HOME FEED SKELETONS ==========
+// Legacy wrapper for backward compatibility
 function showHomeFeedSkeletons(count = 5) {
-    if (!homeFeed) return;
+    showSkeletons('home', count);
+}
+
+// ========== UNIFIED SKELETON SYSTEM ==========
+function showSkeletons(type, count = 5) {
+    const containers = {
+        home: document.getElementById('home-feed'),
+        chat: document.getElementById('chats-list'),
+        profile: document.getElementById('profile-content'),
+        search: document.getElementById('search-list-feed')
+    };
     
-    let skeletonsHtml = '';
-    for (let i = 0; i < count; i++) {
-        skeletonsHtml += `
-            <div class="skeleton-card">
-                <div class="skeleton-header">
-                    <div class="skeleton-avatar"></div>
-                    <div class="skeleton-info">
-                        <div class="skeleton-line medium"></div>
+    const container = containers[type];
+    if (!container) return;
+    
+    const templates = {
+        home: (count) => {
+            let html = '';
+            for (let i = 0; i < count; i++) {
+                html += `
+                    <div class="skeleton-card">
+                        <div class="skeleton-header">
+                            <div class="skeleton-avatar"></div>
+                            <div class="skeleton-info">
+                                <div class="skeleton-line medium"></div>
+                                <div class="skeleton-line short"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-tags">
+                            <div class="skeleton-tag"></div>
+                            <div class="skeleton-tag"></div>
+                            <div class="skeleton-tag"></div>
+                        </div>
+                        <div class="skeleton-stats">
+                            <div class="skeleton-stat"></div>
+                            <div class="skeleton-stat"></div>
+                        </div>
                         <div class="skeleton-line short"></div>
                     </div>
+                `;
+            }
+            return html;
+        },
+        chat: (count) => {
+            let html = '';
+            for (let i = 0; i < count; i++) {
+                html += `
+                    <div class="skeleton-chat-item">
+                        <div class="skeleton-avatar"></div>
+                        <div class="skeleton-chat-info">
+                            <div class="skeleton-line medium"></div>
+                            <div class="skeleton-line short"></div>
+                        </div>
+                        <div class="skeleton-chat-meta">
+                            <div class="skeleton-line short"></div>
+                        </div>
+                    </div>
+                `;
+            }
+            return html;
+        },
+        profile: () => {
+            return `
+                <div class="skeleton-profile">
+                    <div class="skeleton-avatar large"></div>
+                    <div class="skeleton-line medium" style="margin: 16px auto; width: 200px;"></div>
+                    <div class="skeleton-line short" style="margin: 8px auto; width: 150px;"></div>
+                    <div class="skeleton-stats" style="justify-content: center;">
+                        <div class="skeleton-stat"></div>
+                        <div class="skeleton-stat"></div>
+                        <div class="skeleton-stat"></div>
+                    </div>
                 </div>
-                <div class="skeleton-tags">
-                    <div class="skeleton-tag"></div>
-                    <div class="skeleton-tag"></div>
-                    <div class="skeleton-tag"></div>
-                </div>
-                <div class="skeleton-stats">
-                    <div class="skeleton-stat"></div>
-                    <div class="skeleton-stat"></div>
-                </div>
-                <div class="skeleton-line short"></div>
-            </div>
-        `;
-    }
+            `;
+        },
+        search: (count) => {
+            // Same as home for now
+            let html = '';
+            for (let i = 0; i < count; i++) {
+                html += `
+                    <div class="skeleton-card">
+                        <div class="skeleton-header">
+                            <div class="skeleton-avatar"></div>
+                            <div class="skeleton-info">
+                                <div class="skeleton-line medium"></div>
+                                <div class="skeleton-line short"></div>
+                            </div>
+                        </div>
+                        <div class="skeleton-tags">
+                            <div class="skeleton-tag"></div>
+                            <div class="skeleton-tag"></div>
+                        </div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                `;
+            }
+            return html;
+        }
+    };
     
-    homeFeed.innerHTML = skeletonsHtml;
+    const template = templates[type];
+    if (template) {
+        container.innerHTML = template(count);
+    }
 }
 
 // ========== HOME PAGE (Supabase - Infinite Scroll) ==========
@@ -1418,8 +1495,15 @@ async function loadChats() {
         return;
     }
     
-    // Show loading state
-    chatsList.innerHTML = '<div class="loading-spinner"></div>';
+    // Check if we have cached chats (Firestore persistence will handle this)
+    // Just show skeletons for first-ever load
+    const hasCachedData = localStorage.getItem('has_chats_cache') === 'true';
+    
+    if (!hasCachedData) {
+        // First time ever - show skeletons
+        showSkeletons('chat', 6);
+    }
+    // If has cached data, leave container empty - Firestore will populate near-instantly
     
     // Clean up previous listener if exists
     if (chatListUnsubscribe) {
@@ -1437,6 +1521,9 @@ async function loadChats() {
     
     // Set up real-time listener
     chatListUnsubscribe = onSnapshot(q, async (snapshot) => {
+        // Mark that we have data (for future loads)
+        localStorage.setItem('has_chats_cache', 'true');
+        
         if (snapshot.empty) {
             chatsList.innerHTML = '<div class="empty-state">No messages yet</div>';
             updateMessagesTabBadge(0);
@@ -1522,6 +1609,7 @@ async function loadChats() {
     }, (error) => {
         console.error('Chat list listener error:', error);
         chatsList.innerHTML = '<div class="empty-state">Error loading chats. Pull to refresh.</div>';
+        localStorage.removeItem('has_chats_cache');
     });
 }
 
