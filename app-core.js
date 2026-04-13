@@ -205,6 +205,13 @@ function closeBottomSheet() {
     sheetOverlay.classList.remove('visible');
     sheetOverlay.classList.add('hidden');
     document.body.style.overflow = '';
+    
+    // Cancel any pending background fetch (industry standard)
+    if (window.currentSheetAbortController) {
+        window.currentSheetAbortController.abort();
+        window.currentSheetAbortController = null;
+        console.log('🛑 Background fetch cancelled (sheet closed)');
+    }
 }
 
 function setupBottomSheet() {
