@@ -489,14 +489,65 @@ function showSkeletons(type, count = 5) {
         },
         profile: () => {
             return `
-                <div class="skeleton-profile">
-                    <div class="skeleton-avatar large"></div>
-                    <div class="skeleton-line medium" style="margin: 16px auto; width: 200px;"></div>
-                    <div class="skeleton-line short" style="margin: 8px auto; width: 150px;"></div>
-                    <div class="skeleton-stats" style="justify-content: center;">
-                        <div class="skeleton-stat"></div>
-                        <div class="skeleton-stat"></div>
-                        <div class="skeleton-stat"></div>
+                <div class="skeleton-profile-container" style="padding: 0 16px 20px;">
+                    <!-- Profile Header -->
+                    <div style="text-align: center; padding: 24px 0 16px; border-bottom: 1px solid var(--border-light);">
+                        <div class="skeleton-avatar large" style="width: 100px; height: 100px; margin: 0 auto 12px; border-radius: 50%; background: var(--bg-tertiary);"></div>
+                        <div class="skeleton-line medium" style="margin: 0 auto 8px; width: 180px; height: 22px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                        <div class="skeleton-line short" style="margin: 0 auto 12px; width: 120px; height: 14px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                        <div class="skeleton-line short" style="margin: 0 auto; width: 80px; height: 20px; background: var(--bg-tertiary); border-radius: 20px;"></div>
+                    </div>
+                    
+                    <!-- Stats -->
+                    <div style="display: flex; justify-content: space-around; padding: 20px 0; border-bottom: 1px solid var(--border-light);">
+                        <div style="text-align: center;">
+                            <div class="skeleton-line short" style="width: 40px; height: 22px; margin: 0 auto 4px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                            <div class="skeleton-line short" style="width: 30px; height: 12px; margin: 0 auto; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div class="skeleton-line short" style="width: 40px; height: 22px; margin: 0 auto 4px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                            <div class="skeleton-line short" style="width: 30px; height: 12px; margin: 0 auto; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                        </div>
+                        <div style="text-align: center;">
+                            <div class="skeleton-line short" style="width: 40px; height: 22px; margin: 0 auto 4px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                            <div class="skeleton-line short" style="width: 30px; height: 12px; margin: 0 auto; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Monthly gigs -->
+                    <div style="text-align: center; padding: 8px 0;">
+                        <div class="skeleton-line short" style="margin: 0 auto; width: 150px; height: 14px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                    </div>
+                    
+                    <!-- Address -->
+                    <div style="padding: 16px 0; border-bottom: 1px solid var(--border-light);">
+                        <div class="skeleton-line medium" style="height: 14px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div style="display: flex; flex-wrap: wrap; gap: 12px; padding: 20px 0; border-bottom: 1px solid var(--border-light);">
+                        <div class="skeleton-line" style="flex: 1; height: 44px; background: var(--bg-tertiary); border-radius: 12px;"></div>
+                        <div class="skeleton-line" style="flex: 1; height: 44px; background: var(--bg-tertiary); border-radius: 12px;"></div>
+                    </div>
+                    
+                    <!-- Services Section -->
+                    <div style="padding: 20px 0; border-bottom: 1px solid var(--border-light);">
+                        <div class="skeleton-line short" style="width: 120px; height: 18px; margin-bottom: 16px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                            <div class="skeleton-tag" style="height: 28px; width: 70px; background: var(--bg-tertiary); border-radius: 20px;"></div>
+                            <div class="skeleton-tag" style="height: 28px; width: 70px; background: var(--bg-tertiary); border-radius: 20px;"></div>
+                            <div class="skeleton-tag" style="height: 28px; width: 70px; background: var(--bg-tertiary); border-radius: 20px;"></div>
+                        </div>
+                    </div>
+                    
+                    <!-- Portfolio Section -->
+                    <div style="padding: 20px 0;">
+                        <div class="skeleton-line short" style="width: 100px; height: 18px; margin-bottom: 16px; background: var(--bg-tertiary); border-radius: 4px;"></div>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                            <div class="skeleton-line" style="aspect-ratio: 1/1; background: var(--bg-tertiary); border-radius: 12px;"></div>
+                            <div class="skeleton-line" style="aspect-ratio: 1/1; background: var(--bg-tertiary); border-radius: 12px;"></div>
+                            <div class="skeleton-line" style="aspect-ratio: 1/1; background: var(--bg-tertiary); border-radius: 12px;"></div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -2533,10 +2584,16 @@ async function loadProfile(userId = null, skipSpinner = false) {
     const targetId = userId || window.auth.currentUser?.uid;
     if (!targetId || !profileContent) return;
     
+    const isOwnProfile = targetId === window.auth.currentUser?.uid;
+    
     try {
+        // Show skeleton immediately (unless skipSpinner is true)
         if (!skipSpinner) {
-            profileContent.innerHTML = '<div class="loading-spinner"></div>';
+            showSkeletons('profile');
         }
+        
+        // For others' profiles, we already have cache from bottom sheet
+        // (Skeleton is already visible, fresh data will replace it)
         
         // SINGLE QUERY - Gets everything at once!
         const { data: profileData, error } = await supabase.rpc('get_profile_data', {
@@ -2568,7 +2625,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
             lastGigDate: profileData.last_gig_date
         };
         
-        const isOwnProfile = targetId === window.auth.currentUser?.uid;
+        //const isOwnProfile = targetId === window.auth.currentUser?.uid;//
         window.setCurrentViewedUserId(targetId);
         
         const activeStatus = profile.lastGigDate && new Date(profile.lastGigDate) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -2678,7 +2735,21 @@ async function loadProfile(userId = null, skipSpinner = false) {
             });
         });
         document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
-
+// Cache the profile data for others (reuse bottom sheet cache)
+        if (!isOwnProfile) {
+            setCachedProvider(targetId, {
+                displayName: profile.displayName,
+                photoURL: profile.photoURL,
+                rating: profile.rating,
+                reviewCount: profile.reviewCount,
+                gigCount: profile.gigCount,
+                monthlyGigs: profile.monthlyGigs,
+                services: profile.services,
+                bio: profile.bio,
+                active: activeStatus
+            });
+            console.log('💾 Cached profile data for:', targetId);
+        }
         // Profile avatar click handler (for viewing other profiles' avatars)
         const profileAvatar = document.querySelector('.profile-avatar');
         if (profileAvatar && !isOwnProfile) {
