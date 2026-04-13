@@ -2298,12 +2298,24 @@ async function showReviewBottomSheet(providerId, chatId) {
                     window.showToast('Please select a rating', 'error');
                     return;
                 }
+                
+                // Optimistic UI update
+                newSubmitBtn.disabled = true;
+                newSubmitBtn.textContent = '⏳ Submitting...';
+                
                 const comment = document.getElementById('review-comment')?.value || '';
                 window.closeBottomSheet();
-                await submitReview(providerId, window.auth.currentUser.uid, selectedRating, comment);
-                // Refresh chat view
-                window.closeBottomSheet();
-                openChat(providerId, chatId);
+                
+                try {
+                    await submitReview(providerId, window.auth.currentUser.uid, selectedRating, comment);
+                    // Refresh chat view on success
+                    window.closeBottomSheet();
+                    openChat(providerId, chatId);
+                } catch (error) {
+                    // Re-enable button on error (sheet is closed, but just in case)
+                    newSubmitBtn.disabled = false;
+                    newSubmitBtn.textContent = 'Submit Review';
+                }
             });
         }
     } catch (error) {
@@ -2387,6 +2399,11 @@ async function registerGig(chatId, clientId) {
 
 // ========== REVIEW SYSTEM ==========
 async function submitReview(providerId, clientId, rating, reviewText) {
+    // ========== STEP 1: IMMEDIATE feedback ==========
+    window.showToast('Submitting review...');
+    window.haptic('light');
+    
+    // ========== STEP 2: Do the work in background ==========
     try {
         // Call the database function
         const { data, error } = await supabase.rpc('submit_review', {
@@ -2413,14 +2430,15 @@ async function submitReview(providerId, clientId, rating, reviewText) {
             `⭐ ${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`
         );
         
-        await sendPushNotification(
+        // Send push notification (fire and forget)
+        sendPushNotification(
             providerId,
             'New Review',
             `${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`,
             `/profile/${providerId}`
-        );
+        ).catch(err => console.warn('Push notification failed:', err));
         
-        // ========== CREDIT BALANCE ALERTS ==========
+        // Credit balance alerts
         if (data.credit_alert) {
             let creditMessage = '';
             if (data.credit_alert === 'two') {
@@ -2433,11 +2451,12 @@ async function submitReview(providerId, clientId, rating, reviewText) {
             
             if (creditMessage) {
                 window.addNotification('Low Credits', creditMessage);
-                await sendPushNotification(providerId, 'Low Credits Alert', creditMessage, '/profile');
+                sendPushNotification(providerId, 'Low Credits Alert', creditMessage, '/profile')
+                    .catch(err => console.warn('Push notification failed:', err));
             }
         }
         
-        // ========== GIG MILESTONE ALERTS ==========
+        // Gig milestone alerts
         if (data.milestone) {
             let milestoneMessage = '';
             if (data.milestone === 1) {
@@ -2454,11 +2473,13 @@ async function submitReview(providerId, clientId, rating, reviewText) {
             
             if (milestoneMessage) {
                 window.addNotification('🎉 Milestone Achieved!', milestoneMessage);
-                await sendPushNotification(providerId, 'Milestone Achieved! 🎉', milestoneMessage, '/profile');
+                sendPushNotification(providerId, 'Milestone Achieved! 🎉', milestoneMessage, '/profile')
+                    .catch(err => console.warn('Push notification failed:', err));
             }
         }
         
-        window.showToast(`Review submitted! ${rating} stars. Thank you!`);
+        // ========== STEP 3: Success! ==========
+        window.showToast(`✅ Review submitted! ${rating} stars. Thank you!`, 'success');
         window.haptic('heavy');
         
         return data;
