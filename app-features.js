@@ -1547,10 +1547,10 @@ async function openChat(userId, chatId = null) {
         }
     }
     
-    // ========== STEP 3: Show messages container with loading ==========
+    // ========== STEP 3: Clear messages container (no spinner needed with persistence) ==========
     const messagesContainer = document.getElementById('chat-messages-container');
     if (messagesContainer) {
-        messagesContainer.innerHTML = '<div class="loading-spinner"></div>';
+        messagesContainer.innerHTML = ''; // Empty - messages will populate near-instantly
     }
     
     // ========== STEP 4: Do everything else in background ==========
