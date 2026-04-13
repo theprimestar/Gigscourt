@@ -1857,6 +1857,12 @@ async function openChat(userId, chatId = null) {
     if (currentMessagesUnsubscribe) {
         currentMessagesUnsubscribe();
     }
+
+    // Clean up gig status listener when opening new chat
+if (gigStatusListener) {
+    gigStatusListener.unsubscribe();
+    gigStatusListener = null;
+}
     
     // Wait for chat ID, then set up listener
     (async () => {
@@ -2071,78 +2077,154 @@ async function checkPendingReview(chatId, userId) {
     }
 }
 
+// Store active listeners so we can clean them up
+let gigStatusListener = null;
+let currentListenerChatId = null;
+
 async function checkGigStatusAndUpdateUI(chatId, userId) {
     try {
         const currentUser = window.auth.currentUser.uid;
         
-        // Query for pending gig where current user is provider
+        // Clean up any previous listener for a different chat
+        if (gigStatusListener && currentListenerChatId !== chatId) {
+            gigStatusListener.unsubscribe();
+            gigStatusListener = null;
+        }
+        
+        // Function to update UI based on gig data
+        const updateUI = async (providerGig, clientGig) => {
+            const registerBtn = document.getElementById('register-gig-chat');
+            const reviewBtn = document.getElementById('submit-review-chat');
+            const cancelBtn = document.getElementById('cancel-gig-chat');
+            const providerToast = document.getElementById('pending-review-toast-provider');
+            const clientToast = document.getElementById('pending-review-toast-client');
+            
+            // Get other user's name for toasts
+            const otherUser = await getSingleProfileFromSupabase(userId);
+            const otherUserName = otherUser?.displayName || 'User';
+            
+            if (providerGig) {
+                // Current user is provider with pending gig
+                if (registerBtn) {
+                    registerBtn.disabled = true;
+                    registerBtn.style.opacity = '0.5';
+                    registerBtn.style.cursor = 'not-allowed';
+                }
+                if (providerToast) {
+                    providerToast.textContent = `⏳ Waiting for ${otherUserName} to review this gig`;
+                    providerToast.style.display = 'block';
+                }
+                if (reviewBtn) reviewBtn.style.display = 'none';
+                if (cancelBtn) cancelBtn.style.display = 'none';
+            } 
+            else if (clientGig) {
+                // Current user is client with pending gig
+                if (registerBtn) {
+                    registerBtn.disabled = true;
+                    registerBtn.style.opacity = '0.5';
+                    registerBtn.style.cursor = 'not-allowed';
+                }
+                if (clientToast) {
+                    clientToast.textContent = `⭐ You have a pending review for ${otherUserName}`;
+                    clientToast.style.display = 'block';
+                }
+                if (reviewBtn) reviewBtn.style.display = 'block';
+                if (cancelBtn) cancelBtn.style.display = 'block';
+            }
+            else {
+                // No pending gig
+                if (registerBtn) {
+                    registerBtn.disabled = false;
+                    registerBtn.style.opacity = '1';
+                    registerBtn.style.cursor = 'pointer';
+                }
+                if (providerToast) providerToast.style.display = 'none';
+                if (clientToast) clientToast.style.display = 'none';
+                if (reviewBtn) reviewBtn.style.display = 'none';
+                if (cancelBtn) cancelBtn.style.display = 'none';
+            }
+        };
+        
+        // Initial query to get current state
         const { data: providerGig } = await supabase
             .from('gigs')
-            .select('id')
+            .select('id, status')
             .eq('provider_id', currentUser)
             .eq('client_id', userId)
-            .eq('status', 'pending_review')
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
         
-        // Query for pending gig where current user is client
         const { data: clientGig } = await supabase
             .from('gigs')
-            .select('id')
+            .select('id, status')
             .eq('client_id', currentUser)
             .eq('provider_id', userId)
-            .eq('status', 'pending_review')
+            .order('created_at', { ascending: false })
+            .limit(1)
             .maybeSingle();
         
-        const registerBtn = document.getElementById('register-gig-chat');
-        const reviewBtn = document.getElementById('submit-review-chat');
-        const cancelBtn = document.getElementById('cancel-gig-chat');
-        const providerToast = document.getElementById('pending-review-toast-provider');
-        const clientToast = document.getElementById('pending-review-toast-client');
+        const isProviderPending = providerGig && providerGig.status === 'pending_review';
+        const isClientPending = clientGig && clientGig.status === 'pending_review';
         
-        // Get other user's name for toasts
-        const otherUser = await getSingleProfileFromSupabase(userId);
-        const otherUserName = otherUser?.displayName || 'User';
+        // Update UI with initial state
+        await updateUI(isProviderPending ? providerGig : null, isClientPending ? clientGig : null);
         
-        if (providerGig) {
-            // Current user is provider with pending gig
-            if (registerBtn) {
-                registerBtn.disabled = true;
-                registerBtn.style.opacity = '0.5';
-                registerBtn.style.cursor = 'not-allowed';
-            }
-            if (providerToast) {
-                providerToast.textContent = `⏳ Waiting for ${otherUserName} to review this gig`;
-                providerToast.style.display = 'block';
-            }
-            if (reviewBtn) reviewBtn.style.display = 'none';
-            if (cancelBtn) cancelBtn.style.display = 'none';
-        } 
-        else if (clientGig) {
-            // Current user is client with pending gig
-            if (registerBtn) {
-                registerBtn.disabled = true;
-                registerBtn.style.opacity = '0.5';
-                registerBtn.style.cursor = 'not-allowed';
-            }
-            if (clientToast) {
-                clientToast.textContent = `⭐ You have a pending review for ${otherUserName}`;
-                clientToast.style.display = 'block';
-            }
-            if (reviewBtn) reviewBtn.style.display = 'block';
-            if (cancelBtn) cancelBtn.style.display = 'block';
+        // Set up REAL-TIME LISTENER for gig changes
+        // Only set up if we don't already have one for this chat
+        if (!gigStatusListener || currentListenerChatId !== chatId) {
+            currentListenerChatId = chatId;
+            
+            // Create a channel for real-time updates
+            const channel = supabase
+                .channel(`gig-status-${chatId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*', // Listen to all changes (INSERT, UPDATE, DELETE)
+                        schema: 'public',
+                        table: 'gigs',
+                        filter: `provider_id=eq.${currentUser},client_id=eq.${userId}`
+                    },
+                    async () => {
+                        // Re-query when anything changes
+                        const { data: newProviderGig } = await supabase
+                            .from('gigs')
+                            .select('id, status')
+                            .eq('provider_id', currentUser)
+                            .eq('client_id', userId)
+                            .order('created_at', { ascending: false })
+                            .limit(1)
+                            .maybeSingle();
+                        
+                        const { data: newClientGig } = await supabase
+                            .from('gigs')
+                            .select('id, status')
+                            .eq('client_id', currentUser)
+                            .eq('provider_id', userId)
+                            .order('created_at', { ascending: false })
+                            .limit(1)
+                            .maybeSingle();
+                        
+                        const newIsProviderPending = newProviderGig && newProviderGig.status === 'pending_review';
+                        const newIsClientPending = newClientGig && newClientGig.status === 'pending_review';
+                        
+                        await updateUI(newIsProviderPending ? newProviderGig : null, newIsClientPending ? newClientGig : null);
+                        
+                        // If gig is no longer pending (review submitted), refresh the chat messages
+                        if (!newIsProviderPending && !newIsClientPending) {
+                            // Optionally refresh messages or show a success message
+                            console.log('✅ Gig review completed, UI updated in real-time');
+                        }
+                    }
+                )
+                .subscribe((status) => {
+                    console.log(`Gig status listener for chat ${chatId}: ${status}`);
+                });
+            
+            gigStatusListener = channel;
         }
-        else {
-            // No pending gig
-            if (registerBtn) {
-                registerBtn.disabled = false;
-                registerBtn.style.opacity = '1';
-                registerBtn.style.cursor = 'pointer';
-            }
-            if (providerToast) providerToast.style.display = 'none';
-            if (clientToast) clientToast.style.display = 'none';
-            if (reviewBtn) reviewBtn.style.display = 'none';
-            if (cancelBtn) cancelBtn.style.display = 'none';
-        }
+        
     } catch (error) {
         console.error('checkGigStatusAndUpdateUI error:', error);
     }
