@@ -104,6 +104,77 @@ async function getSingleProfileFromSupabase(userId) {
     }
 }
 
+// ========== PROVIDER CACHE (LocalStorage) ==========
+const CACHE_PREFIX = 'provider_';
+const CACHE_EXPIRY_DAYS = 7; // Cache expires after 7 days
+
+function getCachedProvider(userId) {
+    try {
+        const cached = localStorage.getItem(`${CACHE_PREFIX}${userId}`);
+        if (!cached) return null;
+        
+        const data = JSON.parse(cached);
+        const cacheAge = Date.now() - data.cachedAt;
+        const maxAge = CACHE_EXPIRY_DAYS * 24 * 60 * 60 * 1000;
+        
+        if (cacheAge > maxAge) {
+            localStorage.removeItem(`${CACHE_PREFIX}${userId}`);
+            return null;
+        }
+        
+        return data;
+    } catch (e) {
+        console.warn('Cache read error:', e);
+        return null;
+    }
+}
+
+function setCachedProvider(userId, data) {
+    try {
+        const cacheData = {
+            ...data,
+            cachedAt: Date.now()
+        };
+        localStorage.setItem(`${CACHE_PREFIX}${userId}`, JSON.stringify(cacheData));
+    } catch (e) {
+        console.warn('Cache write error:', e);
+    }
+}
+
+function updateBioInDOM(bio, elementId = null) {
+    const bioElement = document.querySelector('#profile-bio-text');
+    if (bioElement) {
+        const newBio = bio || '';
+        if (bioElement.textContent !== newBio) {
+            bioElement.style.transition = 'opacity 0.2s ease';
+            bioElement.style.opacity = '0';
+            setTimeout(() => {
+                bioElement.textContent = newBio;
+                bioElement.style.opacity = '1';
+            }, 100);
+        }
+    }
+}
+
+function updateActiveBadgeInDOM(active, elementId = null) {
+    const existingBadge = document.querySelector('.active-badge-in-sheet');
+    const headerDiv = document.querySelector('#bottom-sheet-header');
+    
+    if (active) {
+        if (!existingBadge && headerDiv) {
+            const badge = document.createElement('span');
+            badge.className = 'active-badge active-badge-in-sheet';
+            badge.textContent = 'Active this week';
+            badge.style.marginLeft = '8px';
+            headerDiv.appendChild(badge);
+        }
+    } else {
+        if (existingBadge) {
+            existingBadge.remove();
+        }
+    }
+}
+
 // ========== ROLLING 30-DAY GIG COUNT ==========
 async function getRolling30DayGigCount(userId) {
     if (!userId) return 0;
@@ -827,72 +898,69 @@ function setupSearchInfiniteScroll() {
 // ========== BOTTOM SHEET CARD -> EXPAND TO FULL PROFILE ==========
 async function showUserBottomSheet(userId, cachedData = null) {
     try {
-        let user, monthlyGigs, reviewCount, activeStatus;
+        // ========== STEP 1: Try to load from cache ==========
+        const cachedProvider = getCachedProvider(userId);
         
-        if (cachedData) {
-            // Use cached data from card - NO QUERIES!
-            user = {
-                displayName: cachedData.displayName,
-                photoURL: cachedData.photoURL,
-                rating: cachedData.rating,
-                gigCount: cachedData.gigCount,
-                services: cachedData.services,
-                bio: null // Bio not on card, will fetch only if needed
+        // ========== STEP 2: Determine what data to show immediately ==========
+        let displayData;
+        
+        if (cachedProvider) {
+            // Use full cache
+            displayData = {
+                displayName: cachedProvider.displayName || 'Anonymous',
+                photoURL: cachedProvider.photoURL || null,
+                rating: cachedProvider.rating || 0,
+                reviewCount: cachedProvider.reviewCount || 0,
+                gigCount: cachedProvider.gigCount || 0,
+                monthlyGigs: cachedProvider.monthlyGigs || 0,
+                services: cachedProvider.services || [],
+                bio: cachedProvider.bio || '',
+                active: cachedProvider.active || false
             };
-            monthlyGigs = cachedData.monthlyGigs;
-            reviewCount = cachedData.reviewCount;
-            
-            // We still need active status and bio - do a minimal query
-            const { data: minimalData } = await supabase
-                .from('provider_profiles')
-                .select('bio')
-                .eq('user_id', userId)
-                .single();
-            
-            if (minimalData) {
-                user.bio = minimalData.bio;
-            }
-            
-            // Get location for active status (1 query instead of 3)
-            const { data: locationData } = await supabase
-                .from('provider_locations')
-                .select('last_gig_date')
-                .eq('user_id', userId)
-                .single();
-            
-            const userWithLocation = { ...user, ...(locationData || {}) };
-            activeStatus = getActiveStatus(userWithLocation);
-            
+            console.log('📦 Using cached provider data for:', userId);
+        } else if (cachedData) {
+            // Fallback to card data
+            displayData = {
+                displayName: cachedData.displayName || 'Anonymous',
+                photoURL: cachedData.photoURL || null,
+                rating: cachedData.rating || 0,
+                reviewCount: cachedData.reviewCount || 0,
+                gigCount: cachedData.gigCount || 0,
+                monthlyGigs: cachedData.monthlyGigs || 0,
+                services: cachedData.services || [],
+                bio: '',
+                active: false
+            };
+            console.log('📋 Using card data for:', userId);
         } else {
-            // Fallback: Full fetch if no cached data (e.g., opened from chat)
-            user = await getSingleProfileFromSupabase(userId);
-            if (!user) {
-                window.showToast('Error loading profile', 'error');
-                return;
-            }
-            
-            const { data: locationData } = await supabase
-                .from('provider_locations')
-                .select('last_gig_date')
-                .eq('user_id', userId)
-                .single();
-            
-            monthlyGigs = await getRolling30DayGigCount(userId);
-            reviewCount = user.reviewCount || 0;
-            
-            const userWithLocation = { ...user, ...(locationData || {}) };
-            activeStatus = getActiveStatus(userWithLocation);
+            // No data at all - show minimal
+            displayData = {
+                displayName: 'Loading...',
+                photoURL: null,
+                rating: 0,
+                reviewCount: 0,
+                gigCount: 0,
+                monthlyGigs: 0,
+                services: [],
+                bio: '',
+                active: false
+            };
         }
+        
+        // ========== STEP 3: Open bottom sheet IMMEDIATELY ==========
+        const activeStatusText = displayData.active ? '<span class="active-badge active-badge-in-sheet">Active this week</span>' : '';
         
         window.openBottomSheet(`
             <div style="text-align: center; padding: 8px 0;">
-                <img src="${getOptimizedImageUrl(user.photoURL, 160, 160) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(user.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
-                <h3>${user.displayName || 'Anonymous'}</h3>
-                ${activeStatus?.active ? '<span class="active-badge">Active this week</span>' : ''}
-                <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(user.rating || 0).toFixed(1)} (${reviewCount})</div>
-                <div style="font-size: 13px; color: var(--text-secondary); margin: 4px 0;">📊 ${user.gigCount || 0} gigs total • 🔥 ${monthlyGigs} this month</div>
-                <p style="color: var(--text-secondary); margin: 8px 0;">${user.bio || 'No bio yet'}</p>
-                <div class="card-services" style="justify-content: center;">${(user.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
+                <img src="${getOptimizedImageUrl(displayData.photoURL, 160, 160) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(displayData.displayName || 'User')}" style="width: 80px; height: 80px; border-radius: 50%; object-fit: cover; margin-bottom: 12px;">
+                <div id="bottom-sheet-header" style="display: flex; align-items: center; justify-content: center; flex-wrap: wrap;">
+                    <h3>${displayData.displayName || 'Anonymous'}</h3>
+                    ${activeStatusText}
+                </div>
+                <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(displayData.rating || 0).toFixed(1)} (${displayData.reviewCount || 0})</div>
+                <div style="font-size: 13px; color: var(--text-secondary); margin: 4px 0;">📊 ${displayData.gigCount || 0} gigs total • 🔥 ${displayData.monthlyGigs || 0} this month</div>
+                <p id="profile-bio-text" style="color: var(--text-secondary); margin: 8px 0;">${displayData.bio || ''}</p>
+                <div class="card-services" style="justify-content: center;">${(displayData.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
                 <div style="display: flex; gap: 12px; margin-top: 20px;">
                     <button id="view-full-profile" class="btn-primary" style="flex: 1;" data-user-id="${userId}">View Full Profile</button>
                     <button id="message-from-sheet" class="btn-secondary" style="flex: 1;">Message</button>
@@ -900,27 +968,104 @@ async function showUserBottomSheet(userId, cachedData = null) {
             </div>
         `);
         
+        // Attach event listeners
         const viewProfileBtn = document.getElementById('view-full-profile');
         if (viewProfileBtn) {
             viewProfileBtn.addEventListener('click', () => {
                 const profileId = viewProfileBtn.dataset.userId;
-                
                 window.currentViewedUserId = profileId;
                 window.pushToNavigationHistory();
-                
                 window.closeBottomSheet();
                 loadProfile(profileId);
                 window.navigateToPage('profile', { preserveHistory: true, skipProfileLoad: true });
             });
         }
+        
         const messageBtn = document.getElementById('message-from-sheet');
         if (messageBtn) {
             messageBtn.addEventListener('click', () => {
-                // openChat() will handle history pushing
                 window.closeBottomSheet();
                 openChat(userId);
             });
         }
+        
+        // ========== STEP 4: Fetch fresh data in background ==========
+        (async () => {
+            try {
+                // Fetch fresh bio
+                const { data: minimalData } = await supabase
+                    .from('provider_profiles')
+                    .select('bio, display_name, photo_url, rating, gig_count, services')
+                    .eq('user_id', userId)
+                    .single();
+                
+                // Fetch active status
+                const { data: locationData } = await supabase
+                    .from('provider_locations')
+                    .select('last_gig_date')
+                    .eq('user_id', userId)
+                    .single();
+                
+                // Get monthly gigs
+                const monthlyGigs = await getRolling30DayGigCount(userId);
+                
+                // Get review count (from the profile data if available, or keep existing)
+                const reviewCount = minimalData?.review_count || displayData.reviewCount;
+                
+                // Determine active status
+                const lastGigDate = locationData?.last_gig_date;
+                const active = lastGigDate && new Date(lastGigDate) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                
+                // Build fresh data object
+                const freshData = {
+                    displayName: minimalData?.display_name || displayData.displayName,
+                    photoURL: minimalData?.photo_url || displayData.photoURL,
+                    rating: minimalData?.rating || displayData.rating,
+                    reviewCount: reviewCount,
+                    gigCount: minimalData?.gig_count || displayData.gigCount,
+                    monthlyGigs: monthlyGigs,
+                    services: minimalData?.services ? minimalData.services.split(',').map(s => s.trim()) : displayData.services,
+                    bio: minimalData?.bio || '',
+                    active: active
+                };
+                
+                // ========== STEP 5: Update DOM only if changed ==========
+                
+                // Update bio if changed
+                const bioElement = document.getElementById('profile-bio-text');
+                if (bioElement && bioElement.textContent !== freshData.bio) {
+                    bioElement.style.transition = 'opacity 0.15s ease';
+                    bioElement.style.opacity = '0';
+                    setTimeout(() => {
+                        bioElement.textContent = freshData.bio;
+                        bioElement.style.opacity = '1';
+                    }, 100);
+                }
+                
+                // Update active badge if changed
+                if (freshData.active !== displayData.active) {
+                    const headerDiv = document.getElementById('bottom-sheet-header');
+                    if (freshData.active) {
+                        const badge = document.createElement('span');
+                        badge.className = 'active-badge active-badge-in-sheet';
+                        badge.textContent = 'Active this week';
+                        badge.style.marginLeft = '8px';
+                        headerDiv.appendChild(badge);
+                    } else {
+                        const existingBadge = document.querySelector('.active-badge-in-sheet');
+                        if (existingBadge) existingBadge.remove();
+                    }
+                }
+                
+                // ========== STEP 6: Save to cache ==========
+                setCachedProvider(userId, freshData);
+                
+                console.log('✅ Background fetch completed for:', userId);
+                
+            } catch (error) {
+                console.warn('Background fetch failed, using cached/display data:', error);
+            }
+        })();
         
     } catch (error) {
         console.error('showUserBottomSheet error:', error);
