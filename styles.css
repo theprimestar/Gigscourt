@@ -2066,3 +2066,99 @@ body {
 }
 
 /* Dark mode already handled by your existing variables */
+
+/* ========== SKELETON LOADERS ========== */
+.skeleton-card {
+    background: var(--bg-card);
+    border-radius: var(--border-radius-xl);
+    padding: 16px;
+    border: 1px solid var(--border-light);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.skeleton-avatar {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+}
+
+.skeleton-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.skeleton-line {
+    height: 14px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    width: 100%;
+}
+
+.skeleton-line.short {
+    width: 60%;
+}
+
+.skeleton-line.medium {
+    width: 80%;
+}
+
+.skeleton-tags {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.skeleton-tag {
+    height: 28px;
+    width: 70px;
+    background: var(--bg-tertiary);
+    border-radius: 20px;
+}
+
+.skeleton-stats {
+    display: flex;
+    gap: 16px;
+    margin-top: 4px;
+}
+
+.skeleton-stat {
+    height: 12px;
+    width: 80px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+}
+
+@keyframes skeletonPulse {
+    0% {
+        opacity: 0.6;
+    }
+    50% {
+        opacity: 1;
+    }
+    100% {
+        opacity: 0.6;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .skeleton-avatar,
+    .skeleton-line,
+    .skeleton-tag,
+    .skeleton-stat {
+        background: var(--bg-tertiary);
+    }
+}
