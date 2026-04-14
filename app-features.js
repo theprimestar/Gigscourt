@@ -3056,6 +3056,10 @@ async function editServices() {
             
             input.value = '';
             window.showToast('Service requested! Admin will review.', 'success');
+
+            // Increment pending requests count
+            incrementAdminStats('pendingRequests', 1);
+            
         } catch (error) {
             console.error('Service request error:', error);
             window.showToast('Error submitting request', 'error');
