@@ -247,7 +247,8 @@ async function submitReview(providerId, clientId, rating, reviewText) {
     window.haptic('light');
     
     try {
-        const gigsRef = collection(window.db, 'chats', window.currentChatId, 'gigs');
+        const currentChatId = window.currentChatId;
+        const gigsRef = collection(window.db, 'chats', currentChatId, 'gigs');
         const q = query(
             gigsRef,
             where('status', '==', 'pending_review'),
@@ -263,8 +264,9 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         }
         
         const gigDoc = snapshot.docs[0];
-        const gigRef = doc(window.db, 'chats', window.currentChatId, 'gigs', gigDoc.id);
+        const gigRef = doc(window.db, 'chats', currentChatId, 'gigs', gigDoc.id);
         
+        // Update Firestore gig document
         await updateDoc(gigRef, {
             status: 'completed',
             completedAt: new Date().toISOString(),
@@ -277,50 +279,114 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         
         console.log('✅ Firestore gig updated to completed:', gigDoc.id);
         
-        const chatRef = doc(window.db, 'chats', window.currentChatId);
+        // Update chat's pendingReview flag
+        const chatRef = doc(window.db, 'chats', currentChatId);
         await updateDoc(chatRef, { pendingReview: false });
         
-        const supabase = window.supabase;
-        if (supabase) {
-            const { data, error } = await supabase.rpc('submit_review_backend', {
-                p_provider_id: providerId,
-                p_client_id: clientId,
-                p_rating: rating,
-                p_review_text: reviewText,
-                p_gig_id: gigDoc.id
-            });
-            
-            if (error) {
-                console.warn('Supabase backend error:', error);
-            }
-            
-            if (data && data.credit_alert) {
-                let creditMessage = '';
-                if (data.credit_alert === 'two') {
-                    creditMessage = '⚠️ You have 2 credits left. Buy more to keep registering gigs.';
-                } else if (data.credit_alert === 'one') {
-                    creditMessage = '⚠️ Only 1 credit left! Register one more gig then you\'ll need more credits.';
-                } else if (data.credit_alert === 'zero') {
-                    creditMessage = '❌ You\'re out of credits. Buy credits to register new gigs.';
-                }
-                
-                if (creditMessage) {
-                    window.addNotification('Low Credits', creditMessage);
-                }
-            }
-            
-            if (data && data.milestone) {
-                let milestoneMessage = '';
-                if (data.milestone === 1) milestoneMessage = '🎉 Congrats on your first gig! Keep going!';
-                else if (data.milestone === 5) milestoneMessage = '🌟 5 gigs completed! You\'re on fire!';
-                else if (data.milestone === 10) milestoneMessage = '🏆 10 gigs! You\'re a GigsCourt pro!';
-                else if (data.milestone === 25) milestoneMessage = '👑 25 gigs! You\'re one of our top providers!';
-                else if (data.milestone === 50) milestoneMessage = '💎 50 gigs! Legendary status!';
-                
-                if (milestoneMessage) {
-                    window.addNotification('🎉 Milestone Achieved!', milestoneMessage);
-                }
-            }
+        // Get provider data from Firestore
+        const providerRef = doc(window.db, 'users', providerId);
+        const providerSnap = await getDoc(providerRef);
+        
+        if (!providerSnap.exists()) {
+            throw new Error('Provider profile not found');
+        }
+        
+        const providerData = providerSnap.data();
+        const currentCredits = providerData.credits || 0;
+        const currentGigCount = providerData.gigCount || 0;
+        const currentTotalRatingSum = providerData.totalRatingSum || 0;
+        const currentReviewCount = providerData.reviewCount || 0;
+        
+        // Check if provider has credits
+        if (currentCredits <= 0) {
+            throw new Error('Provider has insufficient credits');
+        }
+        
+        // Deduct 1 credit
+        const newCredits = currentCredits - 1;
+        const newGigCount = currentGigCount + 1;
+        
+        // Calculate new rating
+        const newTotalRatingSum = currentTotalRatingSum + rating;
+        const newReviewCount = currentReviewCount + 1;
+        const newRating = newTotalRatingSum / newReviewCount;
+        
+        // Update provider in Firestore
+        await updateDoc(providerRef, {
+            credits: newCredits,
+            gigCount: newGigCount,
+            totalRatingSum: newTotalRatingSum,
+            reviewCount: newReviewCount,
+            rating: newRating,
+            updatedAt: new Date().toISOString()
+        });
+        
+        // Update in-memory currentUserData if this is the current user
+        if (window.currentUserData && window.auth.currentUser.uid === providerId) {
+            window.currentUserData.credits = newCredits;
+            window.currentUserData.gigCount = newGigCount;
+            window.currentUserData.rating = newRating;
+            window.currentUserData.totalRatingSum = newTotalRatingSum;
+            window.currentUserData.reviewCount = newReviewCount;
+        }
+        
+        // Save review to Firestore reviews collection
+        const reviewsRef = collection(window.db, 'reviews');
+        const reviewId = `${providerId}_${clientId}`;
+        await setDoc(doc(reviewsRef, reviewId), {
+            providerId: providerId,
+            clientId: clientId,
+            rating: rating,
+            review: reviewText || '',
+            gigId: gigDoc.id,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+        
+        // Add transaction record
+        const transactionsRef = collection(window.db, 'transactions');
+        await addDoc(transactionsRef, {
+            userId: providerId,
+            type: 'gig_used',
+            credits: -1,
+            amount: 0,
+            reference: gigDoc.id,
+            createdAt: new Date().toISOString()
+        });
+        
+        // Update Supabase provider_locations rating and gig_count
+        try {
+            await window.supabase
+                .from('provider_locations')
+                .update({ 
+                    rating: newRating,
+                    gig_count: newGigCount
+                })
+                .eq('user_id', providerId);
+        } catch (err) {
+            console.warn('Could not update location stats:', err);
+        }
+        
+        // Credit alerts
+        if (newCredits === 2) {
+            window.addNotification('Low Credits', '⚠️ You have 2 credits left. Buy more to keep registering gigs.');
+        } else if (newCredits === 1) {
+            window.addNotification('Low Credits', '⚠️ Only 1 credit left! Register one more gig then you\'ll need more credits.');
+        } else if (newCredits === 0) {
+            window.addNotification('Low Credits', '❌ You\'re out of credits. Buy credits to register new gigs.');
+        }
+        
+        // Milestone alerts
+        if (newGigCount === 1) {
+            window.addNotification('🎉 Milestone Achieved!', '🎉 Congrats on your first gig! Keep going!');
+        } else if (newGigCount === 5) {
+            window.addNotification('🎉 Milestone Achieved!', '🌟 5 gigs completed! You\'re on fire!');
+        } else if (newGigCount === 10) {
+            window.addNotification('🎉 Milestone Achieved!', '🏆 10 gigs! You\'re a GigsCourt pro!');
+        } else if (newGigCount === 25) {
+            window.addNotification('🎉 Milestone Achieved!', '👑 25 gigs! You\'re one of our top providers!');
+        } else if (newGigCount === 50) {
+            window.addNotification('🎉 Milestone Achieved!', '💎 50 gigs! Legendary status!');
         }
         
         const clientName = window.currentUserData?.displayName || 'Client';
