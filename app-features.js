@@ -2452,12 +2452,12 @@ async function registerGig(chatId, clientId) {
             throw new Error(registerResult?.message || 'Failed to register gig');
         }
         
-        console.log('✅ Supabase gig registered, credits deducted. New balance:', registerResult.new_credits);
-        
-        // Update local credits display if needed
-        if (window.currentUserData) {
-            window.currentUserData.credits = registerResult.new_credits;
-        }
+        console.log('✅ Supabase gig registered. Credits remaining:', registerResult.credits_remaining);
+
+// Update local credits display if needed
+if (window.currentUserData) {
+    window.currentUserData.credits = registerResult.credits_remaining;
+}
         
         // STEP 2b: Create gig in Firestore for real-time UI
         const gigsRef = collection(window.db, 'chats', chatId, 'gigs');
