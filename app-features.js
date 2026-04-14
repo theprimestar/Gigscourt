@@ -2085,23 +2085,34 @@ function buyCredits() {
                     currency: 'NGN',
                     callback: async (response) => {
                         try {
-                            // Call the database function
-                            const { data, error } = await supabase.rpc('add_credits', {
-                                p_user_id: window.auth.currentUser.uid,
-                                p_credits: credits,
-                                p_amount: price,
-                                p_reference: response.reference
+                            const userId = window.auth.currentUser.uid;
+                            const userRef = doc(window.db, 'users', userId);
+                            
+                            // Get current credits
+                            const userSnap = await getDoc(userRef);
+                            const currentCredits = userSnap.exists() ? (userSnap.data().credits || 0) : 0;
+                            const newCredits = currentCredits + credits;
+                            
+                            // Update Firestore user credits
+                            await updateDoc(userRef, {
+                                credits: newCredits,
+                                updatedAt: new Date().toISOString()
                             });
                             
-                            if (error) throw error;
-                            
-                            if (!data.success) {
-                                throw new Error(data.message);
-                            }
+                            // Add transaction record
+                            const transactionsRef = collection(window.db, 'transactions');
+                            await addDoc(transactionsRef, {
+                                userId: userId,
+                                type: 'credit_purchase',
+                                credits: credits,
+                                amount: price,
+                                reference: response.reference,
+                                createdAt: new Date().toISOString()
+                            });
                             
                             // Update in-memory currentUserData
                             if (window.currentUserData) {
-                                window.currentUserData.credits = data.new_credits;
+                                window.currentUserData.credits = newCredits;
                             }
                             
                             window.showToast(`Added ${credits} credits!`);
@@ -2110,7 +2121,7 @@ function buyCredits() {
                             
                         } catch (error) {
                             console.error('Credit purchase error:', error);
-                            window.showToast(error.message || 'Error processing purchase', 'error');
+                            window.showToast('Error processing purchase', 'error');
                         }
                     }
                 });
