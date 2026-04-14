@@ -414,6 +414,7 @@ async function cancelGig(chatId, providerId) {
         
         const currentUser = window.auth.currentUser.uid;
         
+        // Find the pending gig in Firestore
         const gigsRef = collection(window.db, 'chats', chatId, 'gigs');
         const q = query(
             gigsRef,
@@ -433,6 +434,7 @@ async function cancelGig(chatId, providerId) {
         const gigDoc = snapshot.docs[0];
         const gigRef = doc(window.db, 'chats', chatId, 'gigs', gigDoc.id);
         
+        // Update Firestore gig document
         await updateDoc(gigRef, {
             status: 'cancelled',
             cancelledAt: new Date().toISOString(),
@@ -441,16 +443,11 @@ async function cancelGig(chatId, providerId) {
         
         console.log('✅ Firestore gig cancelled:', gigDoc.id);
         
+        // Update chat's pendingReview flag
         const chatRef = doc(window.db, 'chats', chatId);
         await updateDoc(chatRef, { pendingReview: false });
         
-        const supabase = window.supabase;
-        if (supabase) {
-            supabase.rpc('cancel_gig_backend', {
-                p_gig_id: gigDoc.id,
-                p_cancelled_by: currentUser
-            }).catch(err => console.warn('Supabase cancel error:', err));
-        }
+        // NO credit refund - credits were never deducted
         
         window.addNotification('Gig Cancelled', 'Client cancelled the gig request. No credits were deducted.');
         
