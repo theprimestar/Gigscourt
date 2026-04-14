@@ -1189,42 +1189,41 @@ async function saveUserProfile() {
     }
     
     const userId = window.currentUser.uid;
+    const userEmail = window.currentUser.email;
     const servicesList = (onboardingData.services || []).join(', ');
     const portfolio = onboardingData.portfolio || [];
     
-    // 1. Save to Supabase provider_profiles
+    // 1. Save to FIRESTORE users collection
     try {
-        const { error: profileError } = await supabase
-            .from('provider_profiles')
-            .upsert({
-                user_id: userId,
-                email: window.currentUser.email,
-                display_name: onboardingData.displayName || 'User',
-                phone: onboardingData.phone || '',
-                bio: onboardingData.bio || '',
-                address_text: onboardingData.addressText || '',
-                services: servicesList,
-                photo_url: onboardingData.photoURL || null,
-                portfolio: portfolio,
-                credits: 5,
-                gig_count: 0,
-                rating: 0,
-                total_rating_sum: 0,
-                created_at: new Date().toISOString(),
-                last_active: new Date().toISOString()
-            }, { onConflict: 'user_id' });
-        
-        if (profileError) {
-            console.error('Supabase profile save error:', profileError);
-            throw profileError;
-        }
-        console.log('Supabase profile saved for user:', userId);
+        const userRef = doc(db, 'users', userId);
+        await setDoc(userRef, {
+            displayName: onboardingData.displayName || 'User',
+            email: userEmail || '',
+            phone: onboardingData.phone || '',
+            bio: onboardingData.bio || '',
+            addressText: onboardingData.addressText || '',
+            services: onboardingData.services || [],
+            photoURL: onboardingData.photoURL || null,
+            portfolio: portfolio,
+            credits: 5,
+            gigCount: 0,
+            rating: 0,
+            totalRatingSum: 0,
+            reviewCount: 0,
+            isActive: true,
+            deactivatedAt: null,
+            deactivateExpires: null,
+            fcmToken: null,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+        console.log('✅ Firestore user profile created:', userId);
     } catch (err) {
-        console.error('Failed to save profile to Supabase:', err);
+        console.error('❌ Failed to save profile to Firestore:', err);
         throw err;
     }
     
-    // 2. Save to Supabase provider_locations (if location exists)
+    // 2. Save to Supabase provider_locations (for map search - KEEP THIS)
     if (onboardingData.location && onboardingData.location.lat && onboardingData.location.lng) {
         try {
             const { error: locationError } = await supabase
@@ -1243,7 +1242,7 @@ async function saveUserProfile() {
             if (locationError) {
                 console.error('Supabase location sync error:', locationError);
             } else {
-                console.log('Supabase location synced for user:', userId);
+                console.log('✅ Supabase location synced for user:', userId);
             }
         } catch (err) {
             console.error('Failed to sync location to Supabase:', err);
@@ -1259,9 +1258,8 @@ async function saveUserProfile() {
     }
     await updateProfile(window.currentUser, updateData);
 
-    // 3.5 Save any requested services
+    // 4. Save any requested services (Supabase - KEEP THIS)
     if (onboardingData.requestedServices && onboardingData.requestedServices.length > 0) {
-        const userEmail = window.currentUser.email;
         for (const serviceName of onboardingData.requestedServices) {
             try {
                 const { error: requestError } = await supabase
@@ -1284,7 +1282,7 @@ async function saveUserProfile() {
         }
     }
     
-    // 4. Set current user data in memory
+    // 5. Set current user data in memory
     window.currentUserData = {
         displayName: onboardingData.displayName || 'User',
         phone: onboardingData.phone || '',
@@ -1297,6 +1295,8 @@ async function saveUserProfile() {
         gigCount: 0,
         rating: 0
     };
+    
+    console.log('✅ User profile setup complete');
 }
 
 // ========== AUTH UI ==========
