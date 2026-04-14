@@ -3038,20 +3038,18 @@ async function addPortfolioImage() {
                     return;
                 }
                 
-                // Get current portfolio from Supabase
-                const { data: profile, error: fetchError } = await supabase
-                    .from('provider_profiles')
-                    .select('portfolio')
-                    .eq('user_id', window.auth.currentUser.uid)
-                    .single();
+                // Get current portfolio from Firestore
+                const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+                const userSnap = await getDoc(userRef);
                 
-                if (fetchError) {
-                    console.error('Fetch portfolio error:', fetchError);
-                    window.showToast('Error fetching portfolio', 'error');
+                if (!userSnap.exists()) {
+                    window.showToast('User profile not found', 'error');
                     return;
                 }
                 
-                const currentPortfolio = profile.portfolio || [];
+                const userData = userSnap.data();
+                const currentPortfolio = userData.portfolio || [];
+                
                 if (currentPortfolio.length >= 15) {
                     window.showToast('Maximum 15 images. Delete some first.', 'error');
                     return;
@@ -3059,17 +3057,11 @@ async function addPortfolioImage() {
                 
                 currentPortfolio.push(url);
                 
-                // Update Supabase
-                const { error: updateError } = await supabase
-                    .from('provider_profiles')
-                    .update({ portfolio: currentPortfolio })
-                    .eq('user_id', window.auth.currentUser.uid);
-                
-                if (updateError) {
-                    console.error('Portfolio update error:', updateError);
-                    window.showToast('Error updating portfolio', 'error');
-                    return;
-                }
+                // Update Firestore
+                await updateDoc(userRef, {
+                    portfolio: currentPortfolio,
+                    updatedAt: new Date().toISOString()
+                });
                 
                 // Update in-memory currentUserData
                 if (window.currentUserData) {
