@@ -2044,7 +2044,7 @@ async function sendMessage(chatId, text) {
             `/chat/${chatId}`
         );
         
-        document.getElementById('chat-input').value = '';
+        document.getElementById('chat-page-input').value = '';
         window.haptic('light');
     } catch (error) {
         console.error('sendMessage error:', error);
