@@ -2085,6 +2085,8 @@ let gigStatusListener = null;
 let currentListenerChatId = null;
 
 async function checkGigStatusAndUpdateUI(chatId, userId) {
+    console.log('🔍 checkGigStatusAndUpdateUI called for chat:', chatId);
+    
     try {
         const currentUser = window.auth.currentUser.uid;
         
@@ -2097,6 +2099,8 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
         
         // Function to update UI based on gig data
         const updateUI = async (gigData) => {
+            console.log('🎨 updateUI called with gigData:', gigData);
+            
             const registerBtn = document.getElementById('register-gig-chat');
             const reviewBtn = document.getElementById('submit-review-chat');
             const cancelBtn = document.getElementById('cancel-gig-chat');
@@ -2108,11 +2112,13 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             const otherUserName = otherUser?.displayName || 'User';
             
             if (!gigData) {
+                console.log('No pending gig found');
                 // No pending gig
                 if (registerBtn) {
                     registerBtn.disabled = false;
                     registerBtn.style.opacity = '1';
                     registerBtn.style.cursor = 'pointer';
+                    registerBtn.textContent = '📋 Register Gig with this person';
                 }
                 if (providerToast) providerToast.style.display = 'none';
                 if (clientToast) clientToast.style.display = 'none';
@@ -2125,12 +2131,16 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             const isClient = gigData.clientId === currentUser;
             const isPending = gigData.status === 'pending_review';
             
+            console.log('Gig status - isProvider:', isProvider, 'isClient:', isClient, 'isPending:', isPending);
+            
             if (isProvider && isPending) {
                 // Current user is provider with pending gig
+                console.log('✅ Provider view - showing waiting toast');
                 if (registerBtn) {
                     registerBtn.disabled = true;
                     registerBtn.style.opacity = '0.5';
                     registerBtn.style.cursor = 'not-allowed';
+                    registerBtn.textContent = '⏳ Pending Review';
                 }
                 if (providerToast) {
                     providerToast.textContent = `⏳ Waiting for ${otherUserName} to review this gig`;
@@ -2141,10 +2151,12 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             } 
             else if (isClient && isPending) {
                 // Current user is client with pending gig
+                console.log('✅ Client view - showing review button');
                 if (registerBtn) {
                     registerBtn.disabled = true;
                     registerBtn.style.opacity = '0.5';
                     registerBtn.style.cursor = 'not-allowed';
+                    registerBtn.textContent = '⏳ Pending Review';
                 }
                 if (clientToast) {
                     clientToast.textContent = `⭐ You have a pending review for ${otherUserName}`;
@@ -2155,10 +2167,12 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             }
             else {
                 // Gig exists but not pending (completed/cancelled)
+                console.log('Gig exists but not pending - resetting UI');
                 if (registerBtn) {
                     registerBtn.disabled = false;
                     registerBtn.style.opacity = '1';
                     registerBtn.style.cursor = 'pointer';
+                    registerBtn.textContent = '📋 Register Gig with this person';
                 }
                 if (providerToast) providerToast.style.display = 'none';
                 if (clientToast) clientToast.style.display = 'none';
@@ -2167,30 +2181,40 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             }
         };
         
-        // ========== FIRESTORE REAL-TIME LISTENER (Replaces Supabase) ==========
-        // Only set up if we don't already have one for this chat
+        // ========== STEP 1: Check initial state IMMEDIATELY ==========
+        const gigsRef = collection(window.db, 'chats', chatId, 'gigs');
+        const q = query(
+            gigsRef,
+            where('status', '==', 'pending_review'),
+            limit(1)
+        );
+        
+        const initialSnapshot = await getDocs(q);
+        console.log('📊 Initial query - pending gigs found:', initialSnapshot.size);
+        
+        if (!initialSnapshot.empty) {
+            const gigDoc = initialSnapshot.docs[0];
+            const gigData = gigDoc.data();
+            gigData.id = gigDoc.id;
+            await updateUI(gigData);
+        } else {
+            await updateUI(null);
+        }
+        
+        // ========== STEP 2: Set up real-time listener ==========
         if (!gigStatusListener || currentListenerChatId !== chatId) {
             currentListenerChatId = chatId;
             window.currentListenerChatId = chatId;
-            
-            const gigsRef = collection(window.db, 'chats', chatId, 'gigs');
-            const q = query(
-                gigsRef,
-                where('status', '==', 'pending_review'),
-                limit(1)
-            );
             
             // Real-time listener
             gigStatusListener = onSnapshot(q, async (snapshot) => {
                 console.log('🔔 Firestore gig update detected. Docs:', snapshot.size);
                 
                 if (snapshot.empty) {
-                    // No pending gigs
                     await updateUI(null);
                     return;
                 }
                 
-                // Get the first pending gig
                 const gigDoc = snapshot.docs[0];
                 const gigData = gigDoc.data();
                 gigData.id = gigDoc.id;
@@ -2199,21 +2223,20 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
                 
                 await updateUI(gigData);
                 
-                // If gig is no longer pending (this shouldn't happen with our query filter, but just in case)
                 if (gigData.status !== 'pending_review') {
                     console.log('✅ Gig review completed, UI updated in real-time');
                 }
             }, (error) => {
-                console.error('Firestore gig listener error:', error);
+                console.error('❌ Firestore gig listener error:', error);
             });
             
             window.gigStatusListener = gigStatusListener;
             
-            console.log(`Firestore gig listener started for chat ${chatId}`);
+            console.log(`✅ Firestore gig listener started for chat ${chatId}`);
         }
         
     } catch (error) {
-        console.error('checkGigStatusAndUpdateUI error:', error);
+        console.error('❌ checkGigStatusAndUpdateUI error:', error);
     }
 }
 
@@ -2394,6 +2417,8 @@ async function showReviewBottomSheet(providerId, chatId) {
 
 // ========== REGISTER GIG ==========
 async function registerGig(chatId, clientId) {
+    console.log('🚀 registerGig called with chatId:', chatId, 'clientId:', clientId);
+    
     // ========== STEP 1: IMMEDIATE feedback ==========
     window.showToast('Registering gig...');
     window.haptic('light');
@@ -2407,22 +2432,34 @@ async function registerGig(chatId, clientId) {
         registerBtn.style.opacity = '0.7';
     }
     
-    // ========== STEP 2: Write to Firestore FIRST for real-time ==========
     try {
         const providerId = window.auth.currentUser.uid;
+        console.log('Provider ID:', providerId);
         
-        // STEP 2a: Check credits via Supabase FIRST
-        const { data: creditCheck, error: creditError } = await supabase.rpc('check_provider_credits', {
-            p_provider_id: providerId
+        // STEP 2a: Check AND deduct credits via Supabase
+        const { data: registerResult, error: registerError } = await supabase.rpc('register_gig', {
+            p_provider_id: providerId,
+            p_client_id: clientId,
+            p_chat_id: chatId
         });
         
-        if (creditError) throw creditError;
-        
-        if (!creditCheck.success) {
-            throw new Error(creditCheck.message);
+        if (registerError) {
+            console.error('Supabase register_gig error:', registerError);
+            throw new Error(registerError.message || 'Database error');
         }
         
-        // STEP 2b: Create gig in Firestore (this triggers real-time UI update for client)
+        if (!registerResult || !registerResult.success) {
+            throw new Error(registerResult?.message || 'Failed to register gig');
+        }
+        
+        console.log('✅ Supabase gig registered, credits deducted. New balance:', registerResult.new_credits);
+        
+        // Update local credits display if needed
+        if (window.currentUserData) {
+            window.currentUserData.credits = registerResult.new_credits;
+        }
+        
+        // STEP 2b: Create gig in Firestore for real-time UI
         const gigsRef = collection(window.db, 'chats', chatId, 'gigs');
         const gigDoc = await addDoc(gigsRef, {
             providerId: providerId,
@@ -2444,20 +2481,31 @@ async function registerGig(chatId, clientId) {
             pendingGigId: gigDoc.id
         });
         
-        // STEP 2d: Call Supabase for backend processing (non-real-time stuff)
-        const { data, error } = await supabase.rpc('register_gig_backend', {
-            p_provider_id: providerId,
-            p_client_id: clientId,
-            p_gig_id: gigDoc.id
-        });
+        // ========== STEP 3: Immediate UI update for provider ==========
+        const providerToast = document.getElementById('pending-review-toast-provider');
+        const clientName = await getSingleProfileFromSupabase(clientId);
+        const clientDisplayName = clientName?.displayName || 'Client';
         
-        if (error) {
-            console.warn('Supabase backend error (gig already in Firestore):', error);
-            // Don't throw - Firestore already has the gig, real-time works
+        if (providerToast) {
+            providerToast.textContent = `⏳ Waiting for ${clientDisplayName} to review this gig`;
+            providerToast.style.display = 'block';
         }
         
+        if (registerBtn) {
+            registerBtn.disabled = true;
+            registerBtn.style.opacity = '0.5';
+            registerBtn.style.cursor = 'not-allowed';
+            registerBtn.textContent = '⏳ Pending Review';
+        }
+        
+        // Hide review/cancel buttons for provider
+        const reviewBtn = document.getElementById('submit-review-chat');
+        const cancelBtn = document.getElementById('cancel-gig-chat');
+        if (reviewBtn) reviewBtn.style.display = 'none';
+        if (cancelBtn) cancelBtn.style.display = 'none';
+        
         // Notify provider
-        window.addNotification('Gig Registered', 'Client has been notified to review you');
+        window.addNotification('Gig Registered', `${clientDisplayName} has been notified to review you`);
         
         // Notify client
         const providerName = window.currentUserData?.displayName || 'Provider';
@@ -2467,7 +2515,7 @@ async function registerGig(chatId, clientId) {
             `/chat/${chatId}`
         );
         
-        // Send push notification (fire and forget - don't wait)
+        // Send push notification
         sendPushNotification(
             clientId,
             'New Gig Request',
@@ -2475,14 +2523,12 @@ async function registerGig(chatId, clientId) {
             `/chat/${chatId}`
         ).catch(err => console.warn('Push notification failed:', err));
         
-        // ========== STEP 3: Success! ==========
+        // ========== STEP 4: Success! ==========
         window.showToast('✅ Gig registered! Client will review within 7 days.', 'success');
         window.haptic('heavy');
         
-        // No need to close/reopen chat - Firestore onSnapshot will update UI automatically
-        
     } catch (error) {
-        console.error('registerGig error:', error);
+        console.error('❌ registerGig error:', error);
         window.showToast(error.message || 'Error registering gig', 'error');
         
         // Re-enable button on error
@@ -2490,6 +2536,7 @@ async function registerGig(chatId, clientId) {
             registerBtn.disabled = false;
             registerBtn.textContent = originalText || '📋 Register Gig with this person';
             registerBtn.style.opacity = '1';
+            registerBtn.style.cursor = 'pointer';
         }
     }
 }
