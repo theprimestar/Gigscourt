@@ -1142,29 +1142,22 @@ async function showUserBottomSheet(userId, cachedData = null) {
         
         (async () => {
             try {
-                // Fetch fresh bio
-                const minimalPromise = supabase
-                    .from('provider_profiles')
-                    .select('bio, display_name, photo_url, rating, gig_count, services')
-                    .eq('user_id', userId)
-                    .single();
+                // Fetch fresh data from Firestore
+                const userRef = doc(window.db, 'users', userId);
+                const userSnap = await getDoc(userRef);
                 
-                // Fetch active status
+                // Fetch active status from Supabase (KEEP THIS)
                 const locationPromise = supabase
                     .from('provider_locations')
                     .select('last_gig_date')
                     .eq('user_id', userId)
                     .single();
                 
-                // Get monthly gigs
-                const monthlyGigsPromise = getRolling30DayGigCount(userId);
+                // Get monthly gigs (set to 0 until gigs migrated)
+                const monthlyGigs = 0;
                 
-                // Wait for all fetches
-                const [minimalResult, locationResult, monthlyGigs] = await Promise.all([
-                    minimalPromise,
-                    locationPromise,
-                    monthlyGigsPromise
-                ]);
+                // Wait for location fetch
+                const locationResult = await locationPromise;
                 
                 // Check if aborted before processing
                 if (signal.aborted) {
@@ -1172,7 +1165,7 @@ async function showUserBottomSheet(userId, cachedData = null) {
                     return;
                 }
                 
-                const minimalData = minimalResult.data;
+                const userData = userSnap.exists() ? userSnap.data() : null;
                 const locationData = locationResult.data;
                 
                 // Determine active status
@@ -1181,14 +1174,14 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 
                 // Build fresh data object
                 const freshData = {
-                    displayName: minimalData?.display_name || displayData.displayName,
-                    photoURL: minimalData?.photo_url || displayData.photoURL,
-                    rating: minimalData?.rating || displayData.rating,
-                    reviewCount: displayData.reviewCount,
-                    gigCount: minimalData?.gig_count || displayData.gigCount,
+                    displayName: userData?.displayName || displayData.displayName,
+                    photoURL: userData?.photoURL || displayData.photoURL,
+                    rating: userData?.rating || displayData.rating,
+                    reviewCount: userData?.reviewCount || displayData.reviewCount,
+                    gigCount: userData?.gigCount || displayData.gigCount,
                     monthlyGigs: monthlyGigs,
-                    services: minimalData?.services ? minimalData.services.split(',').map(s => s.trim()) : displayData.services,
-                    bio: minimalData?.bio || '',
+                    services: userData?.services || displayData.services,
+                    bio: userData?.bio || '',
                     active: active
                 };
                 
