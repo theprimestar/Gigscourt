@@ -2136,21 +2136,26 @@ function buyCredits() {
 
 async function showTransactionHistory() {
     try {
-        const { data: transactions, error } = await supabase
-            .from('transactions')
-            .select('*')
-            .eq('user_id', window.auth.currentUser.uid)
-            .order('created_at', { ascending: false });
+        const userId = window.auth.currentUser.uid;
+        const transactionsRef = collection(window.db, 'transactions');
+        const q = query(
+            transactionsRef,
+            where('userId', '==', userId),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
         
-        if (error) throw error;
+        const snapshot = await getDocs(q);
         
-        if (!transactions || transactions.length === 0) {
+        if (snapshot.empty) {
             window.showToast('No transactions yet');
             return;
         }
         
         let html = '<h3 style="margin-bottom: 16px;">Transaction History</h3>';
-        transactions.forEach(t => {
+        snapshot.forEach(doc => {
+            const t = doc.data();
+            
             // Determine display type
             let typeDisplay = '';
             let amountDisplay = '';
@@ -2161,16 +2166,22 @@ async function showTransactionHistory() {
             } else if (t.type === 'admin_gift') {
                 typeDisplay = '🎁 Admin Gift';
                 amountDisplay = 'Free';
-            } else {
+            } else if (t.type === 'gig_used') {
                 typeDisplay = '📋 Gig Used';
                 amountDisplay = `₦${t.amount?.toLocaleString() || '0'}`;
+            } else {
+                typeDisplay = t.type || 'Transaction';
+                amountDisplay = '—';
             }
+            
+            const creditDisplay = t.credits > 0 ? `+${t.credits}` : `${t.credits}`;
+            const date = t.createdAt ? new Date(t.createdAt).toLocaleDateString() : 'Unknown date';
             
             html += `
                 <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
                     <div><strong>${typeDisplay}</strong></div>
-                    <div>${t.credits > 0 ? '+' : ''}${t.credits} credits • ${amountDisplay}</div>
-                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(t.created_at).toLocaleDateString()}</div>
+                    <div>${creditDisplay} credits • ${amountDisplay}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">${date}</div>
                 </div>
             `;
         });
