@@ -1560,16 +1560,41 @@ async function loadChats() {
             })
         )];
         
-        // Fetch all profiles in ONE query
-        const { data: profiles, error: profilesError } = await supabase.rpc('get_chat_users', {
-            p_user_ids: userIds
-        });
-        
-        if (profilesError) throw profilesError;
-        
-        // Build profiles map
+        // Fetch all profiles from FIRESTORE
         const profilesMap = {};
-        profiles.forEach(p => { profilesMap[p.user_id] = p; });
+        
+        if (userIds.length > 0) {
+            // Firestore doesn't support "IN" queries with more than 30 items
+            // So we fetch in batches if needed
+            const batchSize = 30;
+            for (let i = 0; i < userIds.length; i += batchSize) {
+                const batch = userIds.slice(i, i + batchSize);
+                
+                // We need to fetch each user individually since Firestore doesn't have a native batch get by ID
+                const promises = batch.map(async (uid) => {
+                    const userRef = doc(window.db, 'users', uid);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        const data = userSnap.data();
+                        profilesMap[uid] = {
+                            user_id: uid,
+                            display_name: data.displayName || 'User',
+                            photo_url: data.photoURL || null,
+                            services: data.services ? data.services.join(', ') : ''
+                        };
+                    } else {
+                        profilesMap[uid] = {
+                            user_id: uid,
+                            display_name: 'User',
+                            photo_url: null,
+                            services: ''
+                        };
+                    }
+                });
+                
+                await Promise.all(promises);
+            }
+        }
         
         // Build chats array
         for (const chatDoc of snapshot.docs) {
