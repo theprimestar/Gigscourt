@@ -3133,21 +3133,29 @@ async function editProfile() {
         });
         document.getElementById('save-profile')?.addEventListener('click', async () => {
             const updates = {
-                display_name: document.getElementById('edit-name').value,
+                displayName: document.getElementById('edit-name').value,
                 phone: document.getElementById('edit-phone').value,
                 bio: document.getElementById('edit-bio').value,
-                address_text: document.getElementById('edit-address').value
+                addressText: document.getElementById('edit-address').value,
+                updatedAt: new Date().toISOString()
             };
             
             try {
-                const { error } = await supabase
-                    .from('provider_profiles')
-                    .update(updates)
-                    .eq('user_id', window.auth.currentUser.uid);
+                // Update Firestore
+                const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+                await updateDoc(userRef, updates);
                 
-                if (error) throw error;
+                // Update Firebase Auth
+                await window.updateProfile(window.auth.currentUser, { displayName: updates.displayName });
                 
-                await window.updateProfile(window.auth.currentUser, { displayName: updates.display_name });
+                // Update local cache
+                if (window.currentUserData) {
+                    window.currentUserData.displayName = updates.displayName;
+                    window.currentUserData.phone = updates.phone;
+                    window.currentUserData.bio = updates.bio;
+                    window.currentUserData.addressText = updates.addressText;
+                }
+                
                 window.closeBottomSheet();
                 window.showToast('Profile updated!');
                 loadProfile();
