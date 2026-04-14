@@ -1610,6 +1610,52 @@ async function setupAuthListener() {
                     fcmToken: profile.fcmToken || null
                 };
                 console.log('✅ Firestore profile loaded for:', user.uid);
+                
+                // ========== REAL-TIME NOTIFICATION BADGE LISTENER ==========
+                const metaRef = doc(db, 'user_notification_meta', user.uid);
+                onSnapshot(metaRef, (doc) => {
+                    const count = doc.exists() ? (doc.data().unreadCount || 0) : 0;
+                    if (count > 0) {
+                        notificationBadge.textContent = count > 99 ? '99+' : count;
+                        notificationBadge.classList.remove('hidden');
+                    } else {
+                        notificationBadge.classList.add('hidden');
+                    }
+                }, (error) => {
+                    console.error('Badge listener error:', error);
+                });
+                
+                navigateToPage('home');
+                
+                const homeFeed = document.getElementById('home-feed');
+                if (homeFeed) {
+                    homeFeed.innerHTML = '<div class="loading-spinner"></div>';
+                }
+
+                loadNotificationsFromFirestore();
+
+                setTimeout(() => {
+                    const adminTab = document.getElementById('admin-tab');
+                    const adminEmail = 'theprimestarventures@gmail.com';
+                    if (window.currentUser && window.currentUser.email === adminEmail && adminTab) {
+                        adminTab.classList.remove('hidden');
+                    }
+                }, 500);
+                
+                setTimeout(() => {
+                    requestNotificationPermission();
+                    setupFCMForegroundListener();
+                }, 2000);
+                
+                setTimeout(async () => {
+                    await forceRefreshHomeFeed();
+                    
+                    if (!appReadyFired) {
+                        appReadyFired = true;
+                        window.dispatchEvent(new CustomEvent('appReady'));
+                    }
+                }, 500);
+                
             } else {
                 // No Firestore profile - create a fresh one (Option B)
                 console.log('🆕 No Firestore profile found, creating fresh profile for:', user.uid);
@@ -1654,18 +1700,7 @@ async function setupAuthListener() {
                     fcmToken: newProfile.fcmToken
                 };
                 console.log('✅ Fresh Firestore profile created for:', user.uid);
-            }
-
-                // Backfill email for existing users who don't have it yet
-                if (!profile.email && user.email) {
-                    supabase
-                        .from('provider_profiles')
-                        .update({ email: user.email })
-                        .eq('user_id', user.uid)
-                        .then(() => console.log('Email backfilled for user:', user.email))
-                        .catch(err => console.error('Email backfill error:', err));
-                }
-
+                
                 // ========== REAL-TIME NOTIFICATION BADGE LISTENER ==========
                 const metaRef = doc(db, 'user_notification_meta', user.uid);
                 onSnapshot(metaRef, (doc) => {
@@ -1682,7 +1717,6 @@ async function setupAuthListener() {
                 
                 navigateToPage('home');
                 
-                // Show a loading spinner immediately so user isn't staring at blank screen
                 const homeFeed = document.getElementById('home-feed');
                 if (homeFeed) {
                     homeFeed.innerHTML = '<div class="loading-spinner"></div>';
@@ -1690,7 +1724,6 @@ async function setupAuthListener() {
 
                 loadNotificationsFromFirestore();
 
-                // Show admin tab if user is admin
                 setTimeout(() => {
                     const adminTab = document.getElementById('admin-tab');
                     const adminEmail = 'theprimestarventures@gmail.com';
@@ -1704,36 +1737,19 @@ async function setupAuthListener() {
                     setupFCMForegroundListener();
                 }, 2000);
                 
-                // Wait for token refresh, THEN fire appReady so features load once with proper auth
                 setTimeout(async () => {
                     await forceRefreshHomeFeed();
                     
-                    // Now fire appReady so other features can initialize
                     if (!appReadyFired) {
                         appReadyFired = true;
                         window.dispatchEvent(new CustomEvent('appReady'));
                     }
                 }, 500);
-
-            } else {
-                // No profile found - user needs to complete onboarding
-                hideAuthScreen();
-                if (!appReadyFired) {
-                    appReadyFired = true;
-                    window.dispatchEvent(new CustomEvent('appReady'));
-                }
-                
-                if (user.emailVerified) {
-                    showOnboarding();
-                } else {
-                    showVerificationRequiredScreen();
-                }
             }
+            
         } catch (error) {
             console.error('Error loading user data:', error);
             
-            // Only show toast for actual errors (not just "no profile yet")
-            // Supabase returns a specific error when no rows found
             const isNoProfileError = error && (
                 error.code === 'PGRST116' || 
                 error.message?.includes('JSON object requested') ||
@@ -1744,13 +1760,11 @@ async function setupAuthListener() {
                 showToast('Error loading profile. Please refresh.', 'error');
             }
             
-            // Always fire appReady so the app can continue
             if (!appReadyFired) {
                 appReadyFired = true;
                 window.dispatchEvent(new CustomEvent('appReady'));
             }
             
-            // For new users with no profile, trigger onboarding
             if (isNoProfileError && user) {
                 if (user.emailVerified) {
                     showOnboarding();
