@@ -2563,27 +2563,28 @@ function showGiftCreditsUI() {
         lookupBtn.disabled = true;
         
         try {
-            const { data, error } = await supabase.rpc('admin_find_user_by_email', {
-                p_email: email
-            });
-            
-            if (error) throw error;
+            // Query Firestore users collection by email
+            const usersRef = collection(window.db, 'users');
+            const q = query(usersRef, where('email', '==', email), limit(1));
+            const snapshot = await getDocs(q);
             
             const userInfo = document.getElementById('admin-user-info');
             const sendBtn = document.getElementById('admin-send-credits-btn');
             
-            if (data.success) {
-                foundUserId = data.user_id;
+            if (!snapshot.empty) {
+                const doc = snapshot.docs[0];
+                foundUserId = doc.id;
+                const userData = doc.data();
                 userInfo.style.display = 'block';
                 userInfo.innerHTML = `
-                    ✅ <strong>${data.display_name}</strong><br>
-                    Current Credits: ${data.current_credits}
+                    ✅ <strong>${userData.displayName || 'User'}</strong><br>
+                    Current Credits: ${userData.credits || 0}
                 `;
                 sendBtn.disabled = false;
                 window.showToast('User found!', 'success');
             } else {
                 userInfo.style.display = 'block';
-                userInfo.innerHTML = `❌ ${data.message}`;
+                userInfo.innerHTML = `❌ No user found with this email`;
                 sendBtn.disabled = true;
                 foundUserId = null;
             }
