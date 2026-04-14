@@ -2988,15 +2988,22 @@ async function editServices() {
         try {
             const servicesString = selectedServices.join(', ');
             
-            const { data, error } = await supabase.rpc('update_provider_services', {
-                p_user_id: window.auth.currentUser.uid,
-                p_services: servicesString
+            // Update Firestore
+            const userRef = doc(window.db, 'users', window.auth.currentUser.uid);
+            await updateDoc(userRef, {
+                services: selectedServices,
+                updatedAt: new Date().toISOString()
             });
             
-            if (error) throw error;
-            
-            if (!data.success) {
-                throw new Error(data.message);
+            // Also update Supabase provider_locations for search
+            try {
+                await supabase
+                    .from('provider_locations')
+                    .update({ services: servicesString })
+                    .eq('user_id', window.auth.currentUser.uid);
+            } catch (err) {
+                console.warn('Could not update location services:', err);
+                // Not critical - user can still use app
             }
             
             if (window.currentUserData) {
@@ -3009,7 +3016,7 @@ async function editServices() {
             
         } catch (error) {
             console.error('editServices error:', error);
-            window.showToast(error.message || 'Error updating services', 'error');
+            window.showToast('Error updating services', 'error');
         }
     });
 }
