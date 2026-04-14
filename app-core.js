@@ -1222,6 +1222,13 @@ async function saveUserProfile() {
         console.error('❌ Failed to save profile to Firestore:', err);
         throw err;
     }
+
+    // Increment admin stats
+        if (typeof incrementAdminStats === 'function') {
+            await incrementAdminStats('totalUsers', 1);
+        } else {
+            console.warn('⚠️ incrementAdminStats not available yet');
+        }
     
     // 2. Save to Supabase provider_locations (for map search - KEEP THIS)
     if (onboardingData.location && onboardingData.location.lat && onboardingData.location.lng) {
