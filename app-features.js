@@ -1696,6 +1696,7 @@ async function openChat(userId, chatId = null) {
     // ========== STEP 4: Do everything else in background ==========
     currentChatUser = userId;
     currentChatId = chatId;
+    window.currentChatId = chatId;
     
     (async () => {
         try {
@@ -2170,6 +2171,7 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
         // Only set up if we don't already have one for this chat
         if (!gigStatusListener || currentListenerChatId !== chatId) {
             currentListenerChatId = chatId;
+            window.currentListenerChatId = chatId;
             
             const gigsRef = collection(window.db, 'chats', chatId, 'gigs');
             const q = query(
@@ -2204,6 +2206,8 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             }, (error) => {
                 console.error('Firestore gig listener error:', error);
             });
+            
+            window.gigStatusListener = gigStatusListener;
             
             console.log(`Firestore gig listener started for chat ${chatId}`);
         }
