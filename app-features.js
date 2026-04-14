@@ -2168,34 +2168,51 @@ async function loadProfile(userId = null, skipSpinner = false) {
         // For others' profiles, we already have cache from bottom sheet
         // (Skeleton is already visible, fresh data will replace it)
         
-        // SINGLE QUERY - Gets everything at once!
-        const { data: profileData, error } = await supabase.rpc('get_profile_data', {
-            p_user_id: targetId
-        });
+        // Fetch profile from FIRESTORE
+        const userRef = doc(window.db, 'users', targetId);
+        const userSnap = await getDoc(userRef);
         
-        if (error) throw error;
-        
-        if (!profileData) {
+        if (!userSnap.exists()) {
             profileContent.innerHTML = '<div class="empty-state">User not found</div>';
             return;
         }
         
+        const profileData = userSnap.data();
+        
+        // Get monthly gigs from Firestore gigs subcollection
+        // For now, set to 0 until we migrate gigs
+        const monthlyGigs = 0;
+        
+        // Get last gig date from Supabase provider_locations (KEEP THIS for active status)
+        let lastGigDate = null;
+        try {
+            const { data: locationData } = await supabase
+                .from('provider_locations')
+                .select('last_gig_date')
+                .eq('user_id', targetId)
+                .single();
+            lastGigDate = locationData?.last_gig_date;
+        } catch (err) {
+            // Location might not exist yet
+            console.warn('Could not fetch location data:', err);
+        }
+        
         const profile = {
-            id: profileData.user_id,
-            displayName: profileData.display_name || 'Anonymous',
-            photoURL: profileData.photo_url,
-            bio: profileData.bio,
-            phone: profileData.phone,
-            addressText: profileData.address_text,
-            services: profileData.services ? profileData.services.split(',').map(s => s.trim()) : [],
+            id: targetId,
+            displayName: profileData.displayName || 'Anonymous',
+            photoURL: profileData.photoURL || null,
+            bio: profileData.bio || '',
+            phone: profileData.phone || '',
+            addressText: profileData.addressText || '',
+            services: profileData.services || [],
             portfolio: profileData.portfolio || [],
             credits: profileData.credits || 0,
-            gigCount: profileData.gig_count || 0,
+            gigCount: profileData.gigCount || 0,
             rating: profileData.rating || 0,
-            totalRatingSum: profileData.total_rating_sum || 0,
-            reviewCount: profileData.review_count || 0,
-            monthlyGigs: profileData.monthly_gigs || 0,
-            lastGigDate: profileData.last_gig_date
+            totalRatingSum: profileData.totalRatingSum || 0,
+            reviewCount: profileData.reviewCount || 0,
+            monthlyGigs: monthlyGigs,
+            lastGigDate: lastGigDate
         };
         
         //const isOwnProfile = targetId === window.auth.currentUser?.uid;//
