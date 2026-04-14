@@ -1862,7 +1862,7 @@ async function openChat(userId, chatId = null) {
 
     // Clean up gig status listener when opening new chat
     if (window.gigStatusListener) {
-        window.gigStatusListener.unsubscribe();
+        window.gigStatusListener();  // ✅ Call it directly
         window.gigStatusListener = null;
         console.log('🧹 Cleaned up previous gig status listener');
     }
