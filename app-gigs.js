@@ -24,25 +24,10 @@ async function getRolling30DayGigCount(userId) {
     if (!userId) return 0;
     
     try {
-        const supabase = window.supabase;
-        if (!supabase) return 0;
-        
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const { count, error } = await supabase
-            .from('gigs')
-            .select('*', { count: 'exact', head: true })
-            .eq('provider_id', userId)
-            .eq('status', 'completed')
-            .gte('completed_at', thirtyDaysAgo.toISOString());
-        
-        if (error) {
-            console.error('getRolling30DayGigCount error:', error);
-            return 0;
-        }
-        
-        return count || 0;
+        // For now, return 0 until we have a way to query across all chats
+        // This will be fixed when we create a top-level gigs collection or index
+        console.log('⚠️ getRolling30DayGigCount: Not yet implemented for Firestore');
+        return 0;
     } catch (error) {
         console.error('getRolling30DayGigCount error:', error);
         return 0;
