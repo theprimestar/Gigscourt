@@ -4173,3 +4173,7 @@ window.registerGig = registerGig;
 window.uploadImage = uploadImage;
 window.showSettings = showSettings;
 window.addPortfolioImage = addPortfolioImage;
+// Expose additional functions for app-gigs.js
+window.getSingleProfileFromSupabase = getSingleProfileFromSupabase;
+window.sendPushNotification = sendPushNotification;
+window.supabase = supabase;
