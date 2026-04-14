@@ -1587,30 +1587,74 @@ async function setupAuthListener() {
         hideAuthScreen();
         
         try {
-            // Fetch user profile from Supabase instead of Firestore
-            const { data: profile, error } = await supabase
-                .from('provider_profiles')
-                .select('*')
-                .eq('user_id', user.uid)
-                .single();
+            // Fetch user profile from FIRESTORE
+            const userRef = doc(db, 'users', user.uid);
+            const userSnap = await getDoc(userRef);
             
-            if (profile && !error) {
-                // Convert Supabase profile to the format expected by the app
+            if (userSnap.exists()) {
+                // Profile exists in Firestore - use it
+                const profile = userSnap.data();
                 window.currentUserData = {
-                    displayName: profile.display_name || 'User',
+                    displayName: profile.displayName || 'User',
                     phone: profile.phone || '',
                     bio: profile.bio || '',
-                    addressText: profile.address_text || '',
-                    services: profile.services ? profile.services.split(',').map(s => s.trim()) : [],
-                    photoURL: profile.photo_url || null,
+                    addressText: profile.addressText || '',
+                    services: profile.services || [],
+                    photoURL: profile.photoURL || null,
                     portfolio: profile.portfolio || [],
                     credits: profile.credits || 0,
-                    gigCount: profile.gig_count || 0,
+                    gigCount: profile.gigCount || 0,
                     rating: profile.rating || 0,
-                    totalRatingSum: profile.total_rating_sum || 0,
-                    reviewCount: profile.review_count || 0,
-                    fcmToken: profile.fcm_token || null
+                    totalRatingSum: profile.totalRatingSum || 0,
+                    reviewCount: profile.reviewCount || 0,
+                    fcmToken: profile.fcmToken || null
                 };
+                console.log('✅ Firestore profile loaded for:', user.uid);
+            } else {
+                // No Firestore profile - create a fresh one (Option B)
+                console.log('🆕 No Firestore profile found, creating fresh profile for:', user.uid);
+                
+                const newProfile = {
+                    displayName: user.displayName || 'User',
+                    email: user.email || '',
+                    phone: '',
+                    bio: '',
+                    addressText: '',
+                    services: [],
+                    photoURL: user.photoURL || null,
+                    portfolio: [],
+                    credits: 5,
+                    gigCount: 0,
+                    rating: 0,
+                    totalRatingSum: 0,
+                    reviewCount: 0,
+                    isActive: true,
+                    deactivatedAt: null,
+                    deactivateExpires: null,
+                    fcmToken: null,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                
+                await setDoc(userRef, newProfile);
+                
+                window.currentUserData = {
+                    displayName: newProfile.displayName,
+                    phone: newProfile.phone,
+                    bio: newProfile.bio,
+                    addressText: newProfile.addressText,
+                    services: newProfile.services,
+                    photoURL: newProfile.photoURL,
+                    portfolio: newProfile.portfolio,
+                    credits: newProfile.credits,
+                    gigCount: newProfile.gigCount,
+                    rating: newProfile.rating,
+                    totalRatingSum: newProfile.totalRatingSum,
+                    reviewCount: newProfile.reviewCount,
+                    fcmToken: newProfile.fcmToken
+                };
+                console.log('✅ Fresh Firestore profile created for:', user.uid);
+            }
 
                 // Backfill email for existing users who don't have it yet
                 if (!profile.email && user.email) {
