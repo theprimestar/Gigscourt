@@ -682,32 +682,32 @@ async function showReviewBottomSheet(providerId, chatId) {
 // ========== SHOW REVIEWS ==========
 async function showReviews(providerId) {
     try {
-        const supabase = window.supabase;
-        if (!supabase) {
-            window.showToast('Error loading reviews', 'error');
-            return;
-        }
+        // Fetch reviews from Firestore
+        const reviewsRef = collection(window.db, 'reviews');
+        const q = query(
+            reviewsRef,
+            where('providerId', '==', providerId),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
         
-        const { data: reviews, error } = await supabase
-            .from('reviews')
-            .select('*')
-            .eq('provider_id', providerId)
-            .order('created_at', { ascending: false });
+        const snapshot = await getDocs(q);
         
-        if (error) throw error;
-        
-        if (!reviews || reviews.length === 0) {
+        if (snapshot.empty) {
             window.showToast('No reviews yet');
             return;
         }
         
         let reviewsHtml = '<h3 style="margin-bottom: 16px;">Reviews</h3>';
-        reviews.forEach(review => {
+        snapshot.forEach(doc => {
+            const review = doc.data();
+            const date = review.createdAt ? new Date(review.createdAt).toLocaleDateString() : 'Unknown date';
+            
             reviewsHtml += `
                 <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
                     <div style="font-weight: 600;">★ ${review.rating}</div>
                     <p style="color: var(--text-secondary);">${review.review || ''}</p>
-                    <div style="font-size: 11px; color: var(--text-muted);">${new Date(review.created_at).toLocaleDateString()}</div>
+                    <div style="font-size: 11px; color: var(--text-muted);">${date}</div>
                 </div>
             `;
         });
