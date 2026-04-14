@@ -104,6 +104,41 @@ async function getSingleProfileFromSupabase(userId) {
     }
 }
 
+// ========== ADMIN STATS HELPER ==========
+async function incrementAdminStats(field, amount = 1) {
+    try {
+        const statsRef = doc(window.db, 'admin_stats', 'stats');
+        const statsSnap = await getDoc(statsRef);
+        
+        if (!statsSnap.exists()) {
+            // Create initial stats document
+            await setDoc(statsRef, {
+                totalUsers: field === 'totalUsers' ? amount : 0,
+                totalGigs: field === 'totalGigs' ? amount : 0,
+                totalCreditsPurchased: field === 'totalCreditsPurchased' ? amount : 0,
+                totalRevenue: field === 'totalRevenue' ? amount : 0,
+                pendingRequests: field === 'pendingRequests' ? amount : 0,
+                usersJoinedToday: field === 'totalUsers' ? amount : 0,
+                usersJoinedWeek: field === 'totalUsers' ? amount : 0,
+                usersJoinedMonth: field === 'totalUsers' ? amount : 0,
+                usersJoinedYear: field === 'totalUsers' ? amount : 0,
+                lastUpdated: new Date().toISOString()
+            });
+            console.log('✅ Admin stats document created');
+            return;
+        }
+        
+        // Increment the field
+        await updateDoc(statsRef, {
+            [field]: increment(amount),
+            lastUpdated: new Date().toISOString()
+        });
+        console.log(`✅ Admin stats: ${field} +${amount}`);
+    } catch (error) {
+        console.error('❌ incrementAdminStats error:', error);
+    }
+}
+
 // ========== PROVIDER CACHE (LocalStorage) ==========
 const CACHE_PREFIX = 'provider_';
 const CACHE_EXPIRY_DAYS = 7; // Cache expires after 7 days
