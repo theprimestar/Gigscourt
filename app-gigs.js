@@ -19,45 +19,6 @@ import {
 let gigStatusListener = null;
 let currentListenerChatId = null;
 
-// ========== HELPER: GET PROVIDER PROFILE FROM SUPABASE ==========
-// This stays here temporarily until profiles move to Firestore
-async function getSingleProfileFromSupabase(userId) {
-    try {
-        const supabase = window.supabase;
-        if (!supabase) {
-            console.warn('Supabase not available');
-            return null;
-        }
-        
-        const { data: profile, error } = await supabase
-            .from('provider_profiles')
-            .select('user_id, display_name, photo_url, bio, phone, address_text, services, portfolio, credits, gig_count, rating, total_rating_sum, review_count')
-            .eq('user_id', userId)
-            .single();
-        
-        if (error || !profile) return null;
-        
-        return {
-            id: profile.user_id,
-            displayName: profile.display_name,
-            photoURL: profile.photo_url,
-            bio: profile.bio,
-            phone: profile.phone,
-            addressText: profile.address_text,
-            services: profile.services ? profile.services.split(',').map(s => s.trim()) : [],
-            portfolio: profile.portfolio || [],
-            credits: profile.credits || 0,
-            gigCount: profile.gig_count || 0,
-            rating: profile.rating || 0,
-            totalRatingSum: profile.total_rating_sum || 0,
-            reviewCount: profile.review_count || 0
-        };
-    } catch (error) {
-        console.error('getSingleProfileFromSupabase error:', error);
-        return null;
-    }
-}
-
 // ========== ROLLING 30-DAY GIG COUNT ==========
 async function getRolling30DayGigCount(userId) {
     if (!userId) return 0;
@@ -206,7 +167,7 @@ async function registerGig(chatId, clientId) {
         });
         
         const providerToast = document.getElementById('pending-review-toast-provider');
-        const clientName = await getSingleProfileFromSupabase(clientId);
+        const clientName = await window.getSingleProfileFromSupabase(clientId);
         const clientDisplayName = clientName?.displayName || 'Client';
         
         if (providerToast) {
@@ -235,14 +196,12 @@ async function registerGig(chatId, clientId) {
             `/chat/${chatId}`
         );
         
-        if (typeof window.sendPushNotification === 'function') {
-            window.sendPushNotification(
-                clientId,
-                'New Gig Request',
-                `${providerName} registered a gig with you. Please review within 7 days.`,
-                `/chat/${chatId}`
-            ).catch(err => console.warn('Push notification failed:', err));
-        }
+        window.sendPushNotification(
+            clientId,
+            'New Gig Request',
+            `${providerName} registered a gig with you. Please review within 7 days.`,
+            `/chat/${chatId}`
+        ).catch(err => console.warn('Push notification failed:', err));
         
         window.showToast('✅ Gig registered! Client will review within 7 days.', 'success');
         window.haptic('heavy');
@@ -437,7 +396,7 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
             const providerToast = document.getElementById('pending-review-toast-provider');
             const clientToast = document.getElementById('pending-review-toast-client');
             
-            const otherUser = await getSingleProfileFromSupabase(userId);
+            const otherUser = await window.getSingleProfileFromSupabase(userId);
             const otherUserName = otherUser?.displayName || 'User';
             
             if (!gigData) {
@@ -565,7 +524,7 @@ async function checkGigStatusAndUpdateUI(chatId, userId) {
 // ========== SHOW REVIEW BOTTOM SHEET ==========
 async function showReviewBottomSheet(providerId, chatId) {
     try {
-        const provider = await getSingleProfileFromSupabase(providerId);
+        const provider = await window.getSingleProfileFromSupabase(providerId);
         if (!provider) {
             window.showToast('Error loading provider', 'error');
             return;
@@ -776,3 +735,5 @@ window.showReviewBottomSheet = showReviewBottomSheet;
 window.showReviews = showReviews;
 window.showRecentChatsForGig = showRecentChatsForGig;
 window.getRolling30DayGigCount = getRolling30DayGigCount;
+
+console.log('✅ app-gigs.js loaded');
