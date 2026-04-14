@@ -2610,30 +2610,48 @@ function showGiftCreditsUI() {
         sendBtn.disabled = true;
         
         try {
-            const { data, error } = await supabase.rpc('admin_add_credits', {
-                p_target_user_id: foundUserId,
-                p_credits: credits,
-                p_notes: 'Admin gift'
+            // Get current credits from Firestore
+            const userRef = doc(window.db, 'users', foundUserId);
+            const userSnap = await getDoc(userRef);
+            
+            if (!userSnap.exists()) {
+                throw new Error('User not found');
+            }
+            
+            const userData = userSnap.data();
+            const currentCredits = userData.credits || 0;
+            const newCredits = currentCredits + credits;
+            
+            // Update user credits
+            await updateDoc(userRef, {
+                credits: newCredits,
+                updatedAt: new Date().toISOString()
             });
             
-            if (error) throw error;
+            // Add transaction record
+            const transactionsRef = collection(window.db, 'transactions');
+            await addDoc(transactionsRef, {
+                userId: foundUserId,
+                type: 'admin_gift',
+                credits: credits,
+                amount: 0,
+                reference: 'admin_' + Date.now(),
+                createdAt: new Date().toISOString()
+            });
             
-            if (data.success) {
-                window.showToast(`✅ Sent ${credits} credits!`, 'success');
-                document.getElementById('admin-user-info').innerHTML = `
-                    ✅ Credits sent!<br>
-                    New Balance: ${data.new_credits}
-                `;
-                document.getElementById('admin-credits-amount').value = 5;
-                
-                // Send notification to the user who received credits
-                window.addNotification(
-                    '🎁 Free Credits!',
-                    `You just received ${credits} free credits from GigsCourt. Keep the momentum on!`
-                );
-            } else {
-                window.showToast(data.message, 'error');
-            }
+            window.showToast(`✅ Sent ${credits} credits!`, 'success');
+            document.getElementById('admin-user-info').innerHTML = `
+                ✅ Credits sent!<br>
+                New Balance: ${newCredits}
+            `;
+            document.getElementById('admin-credits-amount').value = 5;
+            
+            // Send notification to the user who received credits
+            window.addNotification(
+                '🎁 Free Credits!',
+                `You just received ${credits} free credits from GigsCourt. Keep the momentum on!`
+            );
+            
         } catch (error) {
             console.error('Send credits error:', error);
             window.showToast('Error sending credits', 'error');
