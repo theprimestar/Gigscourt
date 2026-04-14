@@ -2452,12 +2452,21 @@ async function loadAdminPage() {
     adminContent.innerHTML = '<div class="loading-spinner"></div>';
     
     try {
-        // Fetch admin stats
-        const { data: statsData, error: statsError } = await supabase.rpc('admin_get_stats');
+        // Fetch stats from Firestore aggregated document (OPTIMIZED - 1 read!)
+        const statsRef = doc(window.db, 'admin_stats', 'stats');
+        const statsSnap = await getDoc(statsRef);
         
-        if (statsError) throw statsError;
-        
-        const stats = statsData.stats;
+        const stats = statsSnap.exists() ? statsSnap.data() : {
+            totalUsers: 0,
+            totalGigs: 0,
+            totalCreditsPurchased: 0,
+            totalRevenue: 0,
+            pendingRequests: 0,
+            usersJoinedToday: 0,
+            usersJoinedWeek: 0,
+            usersJoinedMonth: 0,
+            usersJoinedYear: 0
+        };
         
         adminContent.innerHTML = `
             <div class="admin-dashboard">
@@ -2465,19 +2474,19 @@ async function loadAdminPage() {
                 
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-value">${stats.total_users || 0}</div>
+                        <div class="stat-value">${stats.totalUsers || 0}</div>
                         <div class="stat-label">Total Users</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">${stats.total_gigs || 0}</div>
+                        <div class="stat-value">${stats.totalGigs || 0}</div>
                         <div class="stat-label">Total Gigs</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">${stats.total_credits_purchased || 0}</div>
+                        <div class="stat-value">${stats.totalCreditsPurchased || 0}</div>
                         <div class="stat-label">Credits Sold</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">₦${(stats.total_revenue || 0).toLocaleString()}</div>
+                        <div class="stat-value">₦${(stats.totalRevenue || 0).toLocaleString()}</div>
                         <div class="stat-label">Revenue</div>
                     </div>
                 </div>
@@ -2485,19 +2494,19 @@ async function loadAdminPage() {
                 <h3 style="margin-top: 24px;">📈 User Growth</h3>
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <div class="stat-value">${stats.joined_today || 0}</div>
+                        <div class="stat-value">${stats.usersJoinedToday || 0}</div>
                         <div class="stat-label">Joined Today</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">${stats.joined_week || 0}</div>
+                        <div class="stat-value">${stats.usersJoinedWeek || 0}</div>
                         <div class="stat-label">Joined This Week</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">${stats.joined_month || 0}</div>
+                        <div class="stat-value">${stats.usersJoinedMonth || 0}</div>
                         <div class="stat-label">Joined This Month</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-value">${stats.joined_year || 0}</div>
+                        <div class="stat-value">${stats.usersJoinedYear || 0}</div>
                         <div class="stat-label">Joined This Year</div>
                     </div>
                 </div>
@@ -2505,7 +2514,7 @@ async function loadAdminPage() {
                 <h3 style="margin-top: 24px;">⚡ Quick Actions</h3>
                 <div class="admin-actions">
                     <button id="admin-gift-credits-btn" class="admin-btn-primary">🎁 Gift Credits</button>
-                    <button id="admin-service-requests-btn" class="admin-btn-secondary">📋 Service Requests (${stats.pending_requests || 0})</button>
+                    <button id="admin-service-requests-btn" class="admin-btn-secondary">📋 Service Requests (${stats.pendingRequests || 0})</button>
                     <button id="admin-view-users-btn" class="admin-btn-secondary">👥 View Users</button>
                 </div>
                 
