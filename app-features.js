@@ -2783,10 +2783,25 @@ async function showTransactionHistory() {
         
         let html = '<h3 style="margin-bottom: 16px;">Transaction History</h3>';
         transactions.forEach(t => {
+            // Determine display type
+            let typeDisplay = '';
+            let amountDisplay = '';
+            
+            if (t.type === 'credit_purchase') {
+                typeDisplay = '💰 Purchased';
+                amountDisplay = `₦${t.amount?.toLocaleString() || '0'}`;
+            } else if (t.type === 'admin_gift') {
+                typeDisplay = '🎁 Admin Gift';
+                amountDisplay = 'Free';
+            } else {
+                typeDisplay = '📋 Gig Used';
+                amountDisplay = `₦${t.amount?.toLocaleString() || '0'}`;
+            }
+            
             html += `
                 <div style="padding: 12px; border-bottom: 1px solid var(--border-light);">
-                    <div><strong>${t.type === 'credit_purchase' ? '💰 Purchased' : '📋 Gig Used'}</strong></div>
-                    <div>${t.credits} credits • ₦${t.amount?.toLocaleString() || '0'}</div>
+                    <div><strong>${typeDisplay}</strong></div>
+                    <div>${t.credits > 0 ? '+' : ''}${t.credits} credits • ${amountDisplay}</div>
                     <div style="font-size: 11px; color: var(--text-muted);">${new Date(t.created_at).toLocaleDateString()}</div>
                 </div>
             `;
@@ -3159,12 +3174,18 @@ function showGiftCreditsUI() {
             if (error) throw error;
             
             if (data.success) {
-                window.showToast(`✅ Sent ${credits} credits! New balance: ${data.new_credits}`, 'success');
+                window.showToast(`✅ Sent ${credits} credits!`, 'success');
                 document.getElementById('admin-user-info').innerHTML = `
                     ✅ Credits sent!<br>
                     New Balance: ${data.new_credits}
                 `;
                 document.getElementById('admin-credits-amount').value = 5;
+                
+                // Send notification to the user who received credits
+                window.addNotification(
+                    '🎁 Free Credits!',
+                    `You just received ${credits} free credits from GigsCourt. Keep the momentum on!`
+                );
             } else {
                 window.showToast(data.message, 'error');
             }
@@ -3402,6 +3423,12 @@ function showQuickGiftUI(userId, userName) {
             if (data.success) {
                 window.showToast(`✅ Sent ${credits} credits to ${userName}!`, 'success');
                 showUsersListUI();
+                
+                // Send notification to the user who received credits
+                window.addNotification(
+                    '🎁 Free Credits!',
+                    `You just received ${credits} free credits from GigsCourt. Keep the momentum on!`
+                );
             } else {
                 window.showToast(data.message, 'error');
             }
