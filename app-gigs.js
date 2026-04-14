@@ -383,6 +383,11 @@ async function submitReview(providerId, clientId, rating, reviewText) {
             `⭐ ${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`
         );
         
+        // Increment admin stats (if function exists)
+        if (typeof incrementAdminStats === 'function') {
+            await incrementAdminStats('totalGigs', 1);
+        }
+        
         window.showToast(`✅ Review submitted! ${rating} stars. Thank you!`, 'success');
         window.haptic('heavy');
         
