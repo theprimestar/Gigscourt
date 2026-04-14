@@ -2735,6 +2735,11 @@ async function processServiceRequest(requestId, action, editedName = null) {
         
         if (data.success) {
             window.showToast(`Request ${action}ed successfully!`, 'success');
+
+            // Decrement pending requests count (if approved or rejected)
+            if (action === 'approve' || action === 'reject') {
+                incrementAdminStats('pendingRequests', -1);
+            }
             
             // Send push notification to user
             if (data.user_id) {
