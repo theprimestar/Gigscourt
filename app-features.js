@@ -211,6 +211,7 @@ let currentMarkers = [];
 let currentListViewData = [];
 let currentChatUser = null;
 let currentChatId = null;
+window.currentChatId = null;
 let currentMessagesUnsubscribe = null;
 let lastVisibleMessage = null;
 let isLoadingMoreMessages = false;
