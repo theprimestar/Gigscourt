@@ -2800,41 +2800,40 @@ async function showUsersListUI() {
     panel.innerHTML = '<div class="loading-spinner"></div>';
     
     try {
-        const { data, error } = await supabase.rpc('admin_get_users', {
-            p_limit: 50,
-            p_offset: 0
-        });
+        // Fetch users from Firestore (paginated - 50 at a time)
+        const usersRef = collection(window.db, 'users');
+        const q = query(usersRef, orderBy('createdAt', 'desc'), limit(50));
+        const snapshot = await getDocs(q);
         
-        if (error) throw error;
-        
-        if (!data.success) {
-            throw new Error(data.message);
-        }
-        
-        const users = data.users || [];
-        
-        if (users.length === 0) {
+        if (snapshot.empty) {
             panel.innerHTML = '<div class="empty-state">No users found</div>';
             return;
         }
         
+        const users = [];
+        snapshot.forEach(doc => {
+            users.push({
+                user_id: doc.id,
+                ...doc.data()
+            });
+        });
+        
         let html = `<h4>👥 Users (${users.length})</h4><div style="max-height: 400px; overflow-y: auto;">`;
         
         users.forEach(user => {
-            const joinDate = user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A';
-            const lastActive = user.last_active ? new Date(user.last_active).toLocaleDateString() : 'N/A';
+            const joinDate = user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'N/A';
             
             html += `
                 <div style="padding: 16px; margin-bottom: 12px; background: var(--bg-tertiary); border-radius: 12px;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">${user.display_name || 'Anonymous'}</div>
-                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">📞 ${user.phone || 'No phone'}</div>
+                    <div style="font-weight: 600; margin-bottom: 4px;">${user.displayName || 'Anonymous'}</div>
+                    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">📧 ${user.email || 'No email'}</div>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 13px; margin-bottom: 8px;">
                         <div>💰 Credits: ${user.credits || 0}</div>
-                        <div>📊 Gigs: ${user.gig_count || 0}</div>
-                        <div>⭐ Rating: ${(user.rating || 0).toFixed(1)} (${user.review_count || 0})</div>
+                        <div>📊 Gigs: ${user.gigCount || 0}</div>
+                        <div>⭐ Rating: ${(user.rating || 0).toFixed(1)} (${user.reviewCount || 0})</div>
                         <div>📅 Joined: ${joinDate}</div>
                     </div>
-                    <button class="quick-gift-btn" data-user-id="${user.user_id}" data-user-name="${user.display_name || 'User'}" style="width: 100%; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 8px;">🎁 Quick Gift Credits</button>
+                    <button class="quick-gift-btn" data-user-id="${user.user_id}" data-user-name="${user.displayName || 'User'}" style="width: 100%; padding: 8px; background: var(--accent-orange); color: white; border: none; border-radius: 8px;">🎁 Quick Gift Credits</button>
                 </div>
             `;
         });
