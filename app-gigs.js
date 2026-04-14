@@ -120,33 +120,41 @@ async function registerGig(chatId, clientId) {
         const providerId = window.auth.currentUser.uid;
         console.log('Provider ID:', providerId);
         
-        const supabase = window.supabase;
-        if (!supabase) {
-            throw new Error('Supabase not available');
+        // Get provider data from Firestore
+        const providerRef = doc(window.db, 'users', providerId);
+        const providerSnap = await getDoc(providerRef);
+        
+        if (!providerSnap.exists()) {
+            throw new Error('Provider profile not found');
         }
         
-        const { data: registerResult, error: registerError } = await supabase.rpc('register_gig', {
-            p_provider_id: providerId,
-            p_client_id: clientId,
-            p_chat_id: chatId
-        });
+        const providerData = providerSnap.data();
+        const currentCredits = providerData.credits || 0;
         
-        if (registerError) {
-            console.error('Supabase register_gig error:', registerError);
-            throw new Error(registerError.message || 'Database error');
+        // Check if provider has credits
+        if (currentCredits <= 0) {
+            throw new Error('Insufficient credits. Please buy more credits to register gigs.');
         }
         
-        if (!registerResult || !registerResult.success) {
-            throw new Error(registerResult?.message || 'Failed to register gig');
-        }
-        
-        console.log('✅ Supabase gig registered. Credits remaining:', registerResult.credits_remaining);
-        
-        if (window.currentUserData) {
-            window.currentUserData.credits = registerResult.credits_remaining;
-        }
-        
+        // Check if a pending gig already exists between these users in Firestore
         const gigsRef = collection(window.db, 'chats', chatId, 'gigs');
+        const pendingQuery = query(
+            gigsRef,
+            where('status', '==', 'pending_review'),
+            limit(1)
+        );
+        
+        const pendingSnap = await getDocs(pendingQuery);
+        
+        if (!pendingSnap.empty) {
+            // Check if the pending gig involves these users
+            const pendingGig = pendingSnap.docs[0].data();
+            if (pendingGig.providerId === providerId || pendingGig.clientId === providerId) {
+                throw new Error('A pending gig already exists with this user');
+            }
+        }
+        
+        // Create gig in Firestore
         const gigDoc = await addDoc(gigsRef, {
             providerId: providerId,
             clientId: clientId,
@@ -160,12 +168,26 @@ async function registerGig(chatId, clientId) {
         
         console.log('✅ Firestore gig created:', gigDoc.id);
         
+        // Update chat's pendingReview flag
         const chatRef = doc(window.db, 'chats', chatId);
         await updateDoc(chatRef, { 
             pendingReview: true,
             pendingGigId: gigDoc.id
         });
         
+        // Credit is NOT deducted yet - only when review is submitted
+        
+        // Update Supabase provider_locations last_gig_date
+        try {
+            await window.supabase
+                .from('provider_locations')
+                .update({ last_gig_date: new Date().toISOString() })
+                .eq('user_id', providerId);
+        } catch (err) {
+            console.warn('Could not update location last_gig_date:', err);
+        }
+        
+        // Update UI for provider
         const providerToast = document.getElementById('pending-review-toast-provider');
         const clientName = await window.getSingleProfileFromSupabase(clientId);
         const clientDisplayName = clientName?.displayName || 'Client';
