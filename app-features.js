@@ -2153,6 +2153,10 @@ function buyCredits() {
                             window.showToast(`Added ${credits} credits!`);
                             window.haptic('heavy');
                             loadProfile();
+
+                            // Increment admin stats
+                            incrementAdminStats('totalCreditsPurchased', credits);
+                            incrementAdminStats('totalRevenue', price);
                             
                         } catch (error) {
                             console.error('Credit purchase error:', error);
