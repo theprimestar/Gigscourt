@@ -834,9 +834,6 @@ async function showRecentChatsForGig() {
                 })
             )];
             
-            const supabase = window.supabase;
-            const profilesMap = {};
-            
             // Fetch user profiles from Firestore
             const profilesMap = {};
             
