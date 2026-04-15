@@ -2199,3 +2199,9 @@ body {
     height: 100px;
     margin: 0 auto;
 }
+
+.card-monthly {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 6px;
+}
