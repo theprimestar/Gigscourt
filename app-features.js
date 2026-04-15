@@ -139,6 +139,63 @@ async function incrementAdminStats(field, amount = 1) {
     }
 }
 
+// ========== BATCH FETCH USERS FROM FIRESTORE ==========
+async function batchFetchUsersFromFirestore(userIds) {
+    if (!userIds || userIds.length === 0) return {};
+    
+    try {
+        const usersMap = {};
+        
+        // Firestore limits to 30 items per batch
+        const batchSize = 30;
+        for (let i = 0; i < userIds.length; i += batchSize) {
+            const batch = userIds.slice(i, i + batchSize);
+            
+            const promises = batch.map(async (userId) => {
+                const userRef = doc(window.db, 'users', userId);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const data = userSnap.data();
+                    
+                    // Get fresh counters (with lazy cleanup)
+                    let gigsLast7Days = data.gigsLast7Days || 0;
+                    let gigsLast30Days = data.gigsLast30Days || 0;
+                    
+                    if (typeof window.recalculateStaleCounters === 'function') {
+                        const fresh = await window.recalculateStaleCounters(userId);
+                        if (fresh) {
+                            gigsLast7Days = fresh.gigsLast7Days;
+                            gigsLast30Days = fresh.gigsLast30Days;
+                        }
+                    }
+                    
+                    const hasCompletedGigs = (data.gigCount || 0) > 0;
+                    const isActive = hasCompletedGigs && ((gigsLast7Days >= 1) || (gigsLast30Days >= 3));
+                    
+                    usersMap[userId] = {
+                        gigsLast30Days: gigsLast30Days,
+                        isActive: isActive,
+                        hasCompletedGigs: hasCompletedGigs
+                    };
+                } else {
+                    usersMap[userId] = {
+                        gigsLast30Days: 0,
+                        isActive: false,
+                        hasCompletedGigs: false
+                    };
+                }
+            });
+            
+            await Promise.all(promises);
+        }
+        
+        return usersMap;
+    } catch (error) {
+        console.error('❌ batchFetchUsersFromFirestore error:', error);
+        return {};
+    }
+}
+
 // ========== PROVIDER CACHE (LocalStorage) ==========
 const CACHE_PREFIX = 'provider_';
 const CACHE_EXPIRY_DAYS = 7; // Cache expires after 7 days
