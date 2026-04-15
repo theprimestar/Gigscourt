@@ -2462,11 +2462,15 @@ async function loadProfile(userId = null, skipSpinner = false) {
         if (isOwnProfile) {
             document.getElementById('edit-profile-btn')?.addEventListener('click', editProfile);
             document.getElementById('register-gig-profile-btn')?.addEventListener('click', () => {
-    if (typeof window.showRecentChatsForGig === 'function') {
-        window.showRecentChatsForGig();
-    } else {
-        window.showToast('Feature loading...', 'error');
-    }
+    // Wait for function to be available
+    const checkAndCall = () => {
+        if (typeof window.showRecentChatsForGig === 'function') {
+            window.showRecentChatsForGig();
+        } else {
+            setTimeout(checkAndCall, 100);
+        }
+    };
+    checkAndCall();
 });
             document.getElementById('buy-credits-btn')?.addEventListener('click', buyCredits);
             document.getElementById('settings-btn')?.addEventListener('click', showSettings);
