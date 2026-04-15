@@ -2244,9 +2244,6 @@ async function loadProfile(userId = null, skipSpinner = false) {
             showSkeletons('profile');
         }
         
-        // For others' profiles, we already have cache from bottom sheet
-        // (Skeleton is already visible, fresh data will replace it)
-        
         // Fetch profile from FIRESTORE
         const userRef = doc(window.db, 'users', targetId);
         const userSnap = await getDoc(userRef);
@@ -2258,11 +2255,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
         
         const profileData = userSnap.data();
         
-        // Get monthly gigs from Firestore gigs subcollection
-        // For now, set to 0 until we migrate gigs
-        const monthlyGigs = 0;
-        
-        // Get last gig date from Supabase provider_locations (KEEP THIS for active status)
+        // Get last gig date from Supabase provider_locations (KEEP THIS for backward compatibility)
         let lastGigDate = null;
         try {
             const { data: locationData } = await supabase
@@ -2272,8 +2265,20 @@ async function loadProfile(userId = null, skipSpinner = false) {
                 .single();
             lastGigDate = locationData?.last_gig_date;
         } catch (err) {
-            // Location might not exist yet
             console.warn('Could not fetch location data:', err);
+        }
+        
+        // Get fresh gig counters (handles lazy cleanup automatically)
+        let gigsLast7Days = profileData.gigsLast7Days || 0;
+        let gigsLast30Days = profileData.gigsLast30Days || 0;
+        
+        // If recalculate function exists, use it to ensure fresh counts
+        if (typeof window.recalculateStaleCounters === 'function') {
+            const freshCounts = await window.recalculateStaleCounters(targetId);
+            if (freshCounts) {
+                gigsLast7Days = freshCounts.gigsLast7Days;
+                gigsLast30Days = freshCounts.gigsLast30Days;
+            }
         }
         
         const profile = {
@@ -2290,14 +2295,16 @@ async function loadProfile(userId = null, skipSpinner = false) {
             rating: profileData.rating || 0,
             totalRatingSum: profileData.totalRatingSum || 0,
             reviewCount: profileData.reviewCount || 0,
-            monthlyGigs: monthlyGigs,
+            gigsLast7Days: gigsLast7Days,
+            gigsLast30Days: gigsLast30Days,
             lastGigDate: lastGigDate
         };
         
-        //const isOwnProfile = targetId === window.auth.currentUser?.uid;//
         window.setCurrentViewedUserId(targetId);
         
-        const activeStatus = profile.lastGigDate && new Date(profile.lastGigDate) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        // Determine active status using the new logic
+        const isActive = (gigsLast7Days >= 1) || (gigsLast30Days >= 3);
+        const hasCompletedGigs = (profile.gigCount || 0) > 0;
         
         const profileHeaderTitle = document.getElementById('profile-header-title');
         const settingsBtn = document.getElementById('profile-settings-btn');
@@ -2316,7 +2323,6 @@ async function loadProfile(userId = null, skipSpinner = false) {
                 if (backBtn) backBtn.style.display = 'flex';
                 if (bottomNav) bottomNav.style.display = 'none';
                 
-                // Store current viewed user ID
                 window.currentViewedUserId = targetId;
             }
         }
@@ -2335,7 +2341,7 @@ async function loadProfile(userId = null, skipSpinner = false) {
                 <img class="profile-avatar" src="${getOptimizedImageUrl(profile.photoURL, 200, 200) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(profile.displayName || 'User')}" alt="" data-user-id="${profile.id}">
                 <h2 class="profile-name">${profile.displayName || 'Anonymous'}</h2>
                 <p class="profile-bio">${profile.bio || 'No bio yet'}</p>
-                ${activeStatus ? '<span class="active-badge">Active this week</span>' : ''}
+                ${hasCompletedGigs && isActive ? '<span class="active-badge">Active</span>' : ''}
             </div>
             <div class="profile-stats">
                 <div class="stat" data-stat="gigs">
@@ -2351,9 +2357,11 @@ async function loadProfile(userId = null, skipSpinner = false) {
                     <div class="stat-label">Credits</div>
                 </div>
             </div>
+            ${hasCompletedGigs ? `
             <div class="profile-monthly-gigs" style="text-align: center; padding: 8px 0; color: var(--accent-orange); font-weight: 500;">
-                🔥 ${profile.monthlyGigs} gigs this month
+                ${isActive ? '🔥 ' : ''}${gigsLast30Days} gigs this month
             </div>
+            ` : ''}
             <div class="profile-address">📍 ${profile.addressText || 'No address set'}</div>
             <div class="profile-actions">
                 ${isOwnProfile ? `
@@ -2391,7 +2399,6 @@ async function loadProfile(userId = null, skipSpinner = false) {
             const contactBtn = document.getElementById('contact-now-btn');
             if (contactBtn) {
                 contactBtn.addEventListener('click', () => {
-                    // openChat() will handle history pushing
                     openChat(profile.id);
                 });
             }
@@ -2404,7 +2411,8 @@ async function loadProfile(userId = null, skipSpinner = false) {
             });
         });
         document.querySelector('.stat[data-stat="rating"]')?.addEventListener('click', () => showReviews(targetId));
-// Cache the profile data for others (reuse bottom sheet cache)
+        
+        // Cache the profile data for others (reuse bottom sheet cache)
         if (!isOwnProfile) {
             setCachedProvider(targetId, {
                 displayName: profile.displayName,
@@ -2412,13 +2420,14 @@ async function loadProfile(userId = null, skipSpinner = false) {
                 rating: profile.rating,
                 reviewCount: profile.reviewCount,
                 gigCount: profile.gigCount,
-                monthlyGigs: profile.monthlyGigs,
+                gigsLast30Days: gigsLast30Days,
                 services: profile.services,
                 bio: profile.bio,
-                active: activeStatus
+                active: isActive
             });
             console.log('💾 Cached profile data for:', targetId);
         }
+        
         // Profile avatar click handler (for viewing other profiles' avatars)
         const profileAvatar = document.querySelector('.profile-avatar');
         if (profileAvatar && !isOwnProfile) {
