@@ -3533,12 +3533,13 @@ async function initFeatures() {
         profileContent: !!profileContent
     });
 
+    // Show skeletons immediately on home feed
+    if (homeFeed) {
+        showHomeFeedSkeletons(5);
+    }
+
     // Setup pull to refresh
     setupPullToRefresh();
-    
-    // Run initial data loads with error handling
-    
-    // Run initial data loads with error handling
     
     try {
         if (searchServiceInput) {
@@ -3564,7 +3565,7 @@ async function initFeatures() {
     try {
         if (chatsList) {
             await loadChats();
-            startGlobalUnreadListener();   // <-- ADD THIS LINE
+            startGlobalUnreadListener();
             console.log('loadChats completed');
         }
     } catch (e) {
@@ -3586,13 +3587,12 @@ async function initFeatures() {
     window.addEventListener('navigate', (e) => {
         console.log('Navigate event:', e.detail.page, 'skipProfileLoad:', e.detail.skipProfileLoad);
         if (e.detail.page === 'home' && homeFeed) {
-            loadHomeFeed().catch(err => console.error('Navigate loadHomeFeed error:', err));
+            loadHomeFeed(true).catch(err => console.error('Navigate loadHomeFeed error:', err));
         }
         if (e.detail.page === 'chats' && chatsList) {
             loadChats().catch(err => console.error('Navigate loadChats error:', err));
         }
         if (e.detail.page === 'profile' && profileContent) {
-            // Only auto-load profile if we didn't already load it with a specific userId
             if (!e.detail.skipProfileLoad) {
                 loadProfile().catch(err => console.error('Navigate loadProfile error:', err));
             }
