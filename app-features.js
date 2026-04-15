@@ -654,6 +654,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
     if (!homeFeed) return;
     
     if (!window.auth?.currentUser) {
+        homeFeed.innerHTML = '';
         showHomeFeedSkeletons(5);
         let attempts = 0;
         const maxAttempts = 50;
@@ -667,20 +668,16 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             homeFeed.innerHTML = '<div class="empty-state">Please log in to see providers</div>';
             return;
         }
-        showHomeFeedSkeletons(5);
     }
     
     if (reset) {
-        if (!skipSpinner) {
-            // Show skeletons instead of spinner
-            showHomeFeedSkeletons(5);
-        }
         homeFeedOffset = 0;
         hasMoreHomeFeed = true;
-        while (homeFeed.firstChild) {
-            homeFeed.removeChild(homeFeed.firstChild);
-        }
-        // Re-show skeletons after clearing
+        
+        // Clear the feed COMPLETELY
+        homeFeed.innerHTML = '';
+        
+        // Show skeletons if not skipping
         if (!skipSpinner) {
             showHomeFeedSkeletons(5);
         }
@@ -714,12 +711,15 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         
         if (error) throw error;
         
+        // Clear skeletons before adding content
+        if (reset) {
+            homeFeed.innerHTML = '';
+        }
+        
         if (!providers || providers.length === 0) {
             hasMoreHomeFeed = false;
-            if (homeFeed.children.length === 0 || (homeFeed.children.length === 1 && homeFeed.querySelector('.loading-spinner'))) {
-                const spinner = homeFeed.querySelector('.loading-spinner');
-                if (spinner) spinner.remove();
-                homeFeed.insertAdjacentHTML('beforeend', '<div class="empty-state">No providers found nearby</div>');
+            if (homeFeed.children.length === 0) {
+                homeFeed.innerHTML = '<div class="empty-state">No providers found nearby</div>';
             }
             isHomeFeedLoading = false;
             return;
@@ -760,10 +760,9 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         `;
         }).join('');
         
+        // Use innerHTML for reset, insertAdjacentHTML for pagination
         if (reset) {
-            homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
-            const spinner = homeFeed.querySelector('.loading-spinner');
-            if (spinner) spinner.remove();
+            homeFeed.innerHTML = cardsHtml;
         } else {
             homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
         }
@@ -780,8 +779,6 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
                     photoURL: card.querySelector('.card-avatar')?.src || null,
                     rating: parseFloat(card.querySelector('.card-rating')?.textContent?.match(/★\s*([\d.]+)/)?.[1]) || 0,
                     reviewCount: parseInt(card.querySelector('.card-rating')?.textContent?.match(/\((\d+)\)/)?.[1]) || 0,
-                    gigCount: parseInt(card.querySelector('.stat-item')?.textContent?.match(/📊\s*(\d+)/)?.[1]) || 0,
-                    monthlyGigs: parseInt(card.querySelectorAll('.stat-item')[1]?.textContent?.match(/🔥\s*(\d+)/)?.[1]) || 0,
                     services: Array.from(card.querySelectorAll('.service-tag')).map(tag => tag.textContent.trim()),
                     distance: card.querySelector('.card-distance')?.textContent?.replace('📍', '').trim() || ''
                 };
@@ -792,10 +789,8 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         
     } catch (error) {
         console.error('loadHomeFeed error:', error);
-        if (homeFeed.children.length === 0 || (homeFeed.children.length === 1 && homeFeed.querySelector('.loading-spinner'))) {
-            const spinner = homeFeed.querySelector('.loading-spinner');
-            if (spinner) spinner.remove();
-            homeFeed.insertAdjacentHTML('beforeend', '<div class="empty-state">Error loading feed. Pull to refresh.</div>');
+        if (reset) {
+            homeFeed.innerHTML = '<div class="empty-state">Error loading feed. Pull to refresh.</div>';
         }
     } finally {
         isHomeFeedLoading = false;
