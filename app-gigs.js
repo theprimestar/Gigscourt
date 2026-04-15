@@ -837,13 +837,19 @@ async function showRecentChatsForGig() {
             const supabase = window.supabase;
             const profilesMap = {};
             
-            if (supabase) {
-                const { data: profiles } = await supabase.rpc('get_chat_users', {
-                    p_user_ids: userIds
-                });
+            // Fetch user profiles from Firestore
+            const profilesMap = {};
+            
+            if (typeof window.batchFetchUsersFromFirestore === 'function') {
+                const firestoreUsers = await window.batchFetchUsersFromFirestore(userIds);
                 
-                if (profiles) {
-                    profiles.forEach(p => { profilesMap[p.user_id] = p; });
+                // Convert to the format expected by the rest of the function
+                for (const [uid, userData] of Object.entries(firestoreUsers)) {
+                    profilesMap[uid] = {
+                        user_id: uid,
+                        display_name: userData.displayName || 'User',
+                        services: userData.services ? userData.services.join(', ') : ''
+                    };
                 }
             }
             
