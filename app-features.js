@@ -1936,7 +1936,7 @@ async function openChat(userId, chatId = null) {
         actionsContainer.innerHTML = `
             <div id="pending-review-toast-provider" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
             <div id="pending-review-toast-client" style="display: none; margin-bottom: 12px; padding: 12px; background: var(--warning-yellow); border-radius: 10px; text-align: center;"></div>
-            <button id="register-gig-chat" class="btn-secondary" style="width: 100%; padding: 12px; background: var(--accent-orange); color: white; border: none; border-radius: 30px; font-weight: 600;">📋 Register Gig with this person</button>
+            <button id="register-gig-chat" class="btn-secondary" disabled style="width: 100%; padding: 12px; background: var(--accent-orange); color: white; border: none; border-radius: 30px; font-weight: 600; opacity: 0.5; cursor: not-allowed;">⏳ Checking...</button>
             <div style="display: flex; gap: 12px; margin-top: 12px;">
                 <button id="submit-review-chat" class="btn-primary" style="flex: 1; padding: 12px; border-radius: 30px; display: none;">⭐ Submit Review</button>
                 <button id="cancel-gig-chat" class="btn-secondary" style="flex: 1; padding: 12px; border-radius: 30px; display: none; border: 1px solid var(--error-red); color: var(--error-red);">❌ Cancel Gig</button>
