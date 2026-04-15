@@ -898,5 +898,6 @@ window.showReviewBottomSheet = showReviewBottomSheet;
 window.showReviews = showReviews;
 window.showRecentChatsForGig = showRecentChatsForGig;
 window.getRolling30DayGigCount = getRolling30DayGigCount;
+window.recalculateStaleCounters = recalculateStaleCounters;
 
 console.log('✅ app-gigs.js loaded');
