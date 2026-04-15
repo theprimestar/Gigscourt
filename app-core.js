@@ -1637,10 +1637,7 @@ async function setupAuthListener() {
                 
                 navigateToPage('home');
                 
-                const homeFeed = document.getElementById('home-feed');
-                if (homeFeed) {
-                    homeFeed.innerHTML = '<div class="loading-spinner"></div>';
-                }
+                // Home feed will show skeletons via loadHomeFeed() called by app-features.js
 
                 loadNotificationsFromFirestore();
 
@@ -1727,10 +1724,7 @@ async function setupAuthListener() {
                 
                 navigateToPage('home');
                 
-                const homeFeed = document.getElementById('home-feed');
-                if (homeFeed) {
-                    homeFeed.innerHTML = '<div class="loading-spinner"></div>';
-                }
+                // Home feed will show skeletons via loadHomeFeed() called by app-features.js
 
                 loadNotificationsFromFirestore();
 
