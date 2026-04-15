@@ -728,10 +728,14 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         homeFeedOffset += providers.length;
         if (providers.length < HOME_FEED_LIMIT) hasMoreHomeFeed = false;
         
-        // Build cards - NO MORE N+1 QUERIES!
+        // Extract user IDs for batch fetch
+        const userIds = providers.map(p => p.user_id);
+        const firestoreUsers = await batchFetchUsersFromFirestore(userIds);
+        
+        // Build cards
         const cardsHtml = providers.map(provider => {
             const servicesList = provider.services ? provider.services.split(',').map(s => s.trim()) : [];
-            const activeStatus = provider.last_gig_date && new Date(provider.last_gig_date) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            const userFirestore = firestoreUsers[provider.user_id] || { isActive: false, hasCompletedGigs: false, gigsLast30Days: 0 };
             
             return `
             <div class="card" data-user-id="${provider.user_id}">
@@ -740,7 +744,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
                     <div class="card-info">
                         <div class="card-name">
                             ${provider.display_name}
-                            ${activeStatus ? '<span class="active-badge">Active</span>' : ''}
+                            ${userFirestore.isActive ? '<span class="active-badge">Active</span>' : ''}
                         </div>
                         <div class="card-rating">
                             <span class="star">★</span> ${(provider.rating || 0).toFixed(1)} (${provider.review_count || 0})
@@ -750,10 +754,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
                 <div class="card-services">
                     ${servicesList.slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}
                 </div>
-                <div class="card-stats">
-                    <div class="stat-item">📊 ${provider.gig_count || 0} gigs total</div>
-                    <div class="stat-item">🔥 ${provider.monthly_gigs || 0} gigs this month</div>
-                </div>
+                ${userFirestore.hasCompletedGigs ? `<div class="card-monthly">${userFirestore.isActive ? '🔥 ' : ''}${userFirestore.gigsLast30Days} gigs this month</div>` : ''}
                 <div class="card-distance">📍 ${formatDistance(provider.distance_meters)}</div>
             </div>
         `;
@@ -1436,9 +1437,13 @@ async function performSearch(reset = false) {
         
         const filteredResults = providers.filter(p => p.user_id !== window.auth.currentUser?.uid);
         
+        // Extract user IDs for batch fetch
+        const userIds = filteredResults.map(p => p.user_id);
+        const firestoreUsers = await batchFetchUsersFromFirestore(userIds);
+        
         const cardsHtml = filteredResults.map(provider => {
             const servicesList = provider.services ? provider.services.split(',').map(s => s.trim()) : [];
-            const activeStatus = provider.last_gig_date && new Date(provider.last_gig_date) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+            const userFirestore = firestoreUsers[provider.user_id] || { isActive: false, hasCompletedGigs: false, gigsLast30Days: 0 };
             
             return `
             <div class="card" data-user-id="${provider.user_id}">
@@ -1447,7 +1452,7 @@ async function performSearch(reset = false) {
                     <div class="card-info">
                         <div class="card-name">
                             ${provider.display_name}
-                            ${activeStatus ? '<span class="active-badge">Active</span>' : ''}
+                            ${userFirestore.isActive ? '<span class="active-badge">Active</span>' : ''}
                         </div>
                         <div class="card-rating">
                             <span class="star">★</span> ${(provider.rating || 0).toFixed(1)} (${provider.review_count || 0})
@@ -1457,10 +1462,7 @@ async function performSearch(reset = false) {
                 <div class="card-services">
                     ${servicesList.slice(0, 2).map(s => `<span class="service-tag">${s}</span>`).join('')}
                 </div>
-                <div class="card-stats">
-                    <div class="stat-item">📊 ${provider.gig_count || 0} gigs total</div>
-                    <div class="stat-item">🔥 ${provider.monthly_gigs || 0} gigs this month</div>
-                </div>
+                ${userFirestore.hasCompletedGigs ? `<div class="card-monthly">${userFirestore.isActive ? '🔥 ' : ''}${userFirestore.gigsLast30Days} gigs this month</div>` : ''}
                 <div class="card-distance">📍 ${formatDistance(provider.distance_meters)}</div>
             </div>
         `;
