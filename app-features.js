@@ -3602,10 +3602,17 @@ async function initFeatures() {
         }
     });
     
-    // Load home feed if we're already on the home page (missed the initial navigate event)
+    // Load home feed if we're already on the home page (wait for auth to be ready)
     const currentPage = document.querySelector('.page.active')?.id?.replace('-page', '');
     if (currentPage === 'home' && homeFeed) {
-        loadHomeFeed(true).catch(err => console.error('Initial loadHomeFeed error:', err));
+        const waitForAuth = () => {
+            if (window.auth?.currentUser) {
+                loadHomeFeed(true).catch(err => console.error('Initial loadHomeFeed error:', err));
+            } else {
+                setTimeout(waitForAuth, 100);
+            }
+        };
+        waitForAuth();
     }
     
     console.log('initFeatures: All done!');
