@@ -1778,7 +1778,7 @@ async function openChat(userId, chatId = null) {
                 headerAvatar.style.display = 'inline-block';
             }
             
-            // Cache the fresh data
+           // Cache the fresh data
             if (userData) {
                 setCachedProvider(userId, {
                     displayName: userData.displayName,
@@ -1786,7 +1786,7 @@ async function openChat(userId, chatId = null) {
                     rating: userData.rating,
                     reviewCount: userData.reviewCount,
                     gigCount: userData.gigCount,
-                    monthlyGigs: 0,
+                    gigsLast30Days: userData.gigsLast30Days || 0,
                     services: userData.services,
                     bio: userData.bio,
                     active: false
