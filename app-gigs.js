@@ -18,6 +18,88 @@ import {
     orderBy
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
+// ========== RECALCULATE STALE GIG COUNTERS ==========
+async function recalculateStaleCounters(userId) {
+    try {
+        // Get current user data
+        const userRef = doc(window.db, 'users', userId);
+        const userSnap = await getDoc(userRef);
+        
+        if (!userSnap.exists()) return null;
+        
+        const userData = userSnap.data();
+        const countersUpdatedAt = userData.countersUpdatedAt;
+        
+        // Check if counters are stale (> 1 hour old)
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const lastUpdated = countersUpdatedAt ? new Date(countersUpdatedAt) : new Date(0);
+        
+        if (lastUpdated > oneHourAgo) {
+            // Counters are fresh — return stored values
+            return {
+                gigsLast7Days: userData.gigsLast7Days || 0,
+                gigsLast30Days: userData.gigsLast30Days || 0,
+                isStale: false
+            };
+        }
+        
+        console.log('🔄 Counters stale — recalculating for user:', userId);
+        
+        // Calculate fresh counts from Firestore
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+        
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        // Query all chats for completed gigs by this provider
+        // Note: This requires a collection group index on 'gigs'
+        const gigsQuery = query(
+            collection(window.db, 'gigs'),
+            where('providerId', '==', userId),
+            where('status', '==', 'completed')
+        );
+        
+        const snapshot = await getDocs(gigsQuery);
+        
+        let gigsLast7Days = 0;
+        let gigsLast30Days = 0;
+        
+        snapshot.forEach(doc => {
+            const gig = doc.data();
+            const completedAt = gig.completedAt ? new Date(gig.completedAt) : null;
+            
+            if (completedAt) {
+                if (completedAt >= sevenDaysAgo) {
+                    gigsLast7Days++;
+                }
+                if (completedAt >= thirtyDaysAgo) {
+                    gigsLast30Days++;
+                }
+            }
+        });
+        
+        // Update the user document with fresh counts
+        await updateDoc(userRef, {
+            gigsLast7Days: gigsLast7Days,
+            gigsLast30Days: gigsLast30Days,
+            countersUpdatedAt: new Date().toISOString()
+        });
+        
+        console.log('✅ Counters recalculated — 7d:', gigsLast7Days, '30d:', gigsLast30Days);
+        
+        return {
+            gigsLast7Days: gigsLast7Days,
+            gigsLast30Days: gigsLast30Days,
+            isStale: true
+        };
+        
+    } catch (error) {
+        console.error('❌ recalculateStaleCounters error:', error);
+        return null;
+    }
+}
+
 // ========== GIG STATUS LISTENER STATE ==========
 let gigStatusListener = null;
 let currentListenerChatId = null;
