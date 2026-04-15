@@ -3541,17 +3541,6 @@ async function initFeatures() {
     // Run initial data loads with error handling
     
     try {
-        if (homeFeed) {
-    await loadHomeFeed(true);  // true = reset/clear existing feed
-    setupInfiniteScroll();      // add infinite scroll listener
-    console.log('loadHomeFeed completed');
-}
-    } catch (e) {
-        console.error('loadHomeFeed failed:', e);
-        if (homeFeed) homeFeed.innerHTML = '<div class="empty-state">Failed to load feed. Pull to refresh.</div>';
-    }
-    
-    try {
         if (searchServiceInput) {
             setupSearch();
             setupSearchInfiniteScroll();
