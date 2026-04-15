@@ -177,7 +177,8 @@ async function batchFetchUsersFromFirestore(userIds) {
                         reviewCount: data.reviewCount || 0,
                         gigsLast30Days: gigsLast30Days,
                         isActive: isActive,
-                        hasCompletedGigs: hasCompletedGigs
+                        hasCompletedGigs: hasCompletedGigs,
+                        services: data.services || []
                     };
                 } else {
                     usersMap[userId] = {
@@ -187,7 +188,8 @@ async function batchFetchUsersFromFirestore(userIds) {
                         reviewCount: 0,
                         gigsLast30Days: 0,
                         isActive: false,
-                        hasCompletedGigs: false
+                        hasCompletedGigs: false,
+                        services: []
                     };
                 }
             });
