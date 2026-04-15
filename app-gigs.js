@@ -306,6 +306,9 @@ async function submitReview(providerId, clientId, rating, reviewText) {
             totalRatingSum: newTotalRatingSum,
             reviewCount: newReviewCount,
             rating: newRating,
+            gigsLast7Days: increment(1),
+            gigsLast30Days: increment(1),
+            countersUpdatedAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         });
         
