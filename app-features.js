@@ -2461,7 +2461,13 @@ async function loadProfile(userId = null, skipSpinner = false) {
         
         if (isOwnProfile) {
             document.getElementById('edit-profile-btn')?.addEventListener('click', editProfile);
-            document.getElementById('register-gig-profile-btn')?.addEventListener('click', showRecentChatsForGig);
+            document.getElementById('register-gig-profile-btn')?.addEventListener('click', () => {
+    if (typeof window.showRecentChatsForGig === 'function') {
+        window.showRecentChatsForGig();
+    } else {
+        window.showToast('Feature loading...', 'error');
+    }
+});
             document.getElementById('buy-credits-btn')?.addEventListener('click', buyCredits);
             document.getElementById('settings-btn')?.addEventListener('click', showSettings);
             document.getElementById('profile-settings-btn')?.addEventListener('click', showSettings);
