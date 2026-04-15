@@ -1086,7 +1086,7 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 rating: cachedProvider.rating || 0,
                 reviewCount: cachedProvider.reviewCount || 0,
                 gigCount: cachedProvider.gigCount || 0,
-                monthlyGigs: cachedProvider.monthlyGigs || 0,
+                gigsLast30Days: cachedProvider.gigsLast30Days || 0,
                 services: cachedProvider.services || [],
                 bio: cachedProvider.bio || '',
                 active: cachedProvider.active || false
@@ -1100,7 +1100,7 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 rating: cachedData.rating || 0,
                 reviewCount: cachedData.reviewCount || 0,
                 gigCount: cachedData.gigCount || 0,
-                monthlyGigs: cachedData.monthlyGigs || 0,
+                gigsLast30Days: cachedData.gigsLast30Days || 0,
                 services: cachedData.services || [],
                 bio: '',
                 active: false
@@ -1114,7 +1114,7 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 rating: 0,
                 reviewCount: 0,
                 gigCount: 0,
-                monthlyGigs: 0,
+                gigsLast30Days: 0,
                 services: [],
                 bio: '',
                 active: false
@@ -1122,7 +1122,7 @@ async function showUserBottomSheet(userId, cachedData = null) {
         }
         
         // ========== STEP 3: Open bottom sheet IMMEDIATELY ==========
-        const activeStatusText = displayData.active ? '<span class="active-badge active-badge-in-sheet">Active this week</span>' : '';
+        const activeStatusText = displayData.active ? '<span class="active-badge active-badge-in-sheet">Active</span>' : '';
         
         window.openBottomSheet(`
             <div style="text-align: center; padding: 8px 0;">
@@ -1132,7 +1132,7 @@ async function showUserBottomSheet(userId, cachedData = null) {
                     ${activeStatusText}
                 </div>
                 <div class="card-rating" style="justify-content: center; margin: 8px 0;">★ ${(displayData.rating || 0).toFixed(1)} (${displayData.reviewCount || 0})</div>
-                <div style="font-size: 13px; color: var(--text-secondary); margin: 4px 0;">📊 ${displayData.gigCount || 0} gigs total • 🔥 ${displayData.monthlyGigs || 0} this month</div>
+                <div style="font-size: 13px; color: var(--text-secondary); margin: 4px 0;">📊 ${displayData.gigCount || 0} gigs total${displayData.gigCount > 0 ? ' • ' + (displayData.active ? '🔥 ' : '') + displayData.gigsLast30Days + ' this month' : ''}</div>
                 <p id="profile-bio-text" style="color: var(--text-secondary); margin: 8px 0;">${displayData.bio || ''}</p>
                 <div class="card-services" style="justify-content: center;">${(displayData.services || []).slice(0, 3).map(s => `<span class="service-tag">${s}</span>`).join('')}</div>
                 <div style="display: flex; gap: 12px; margin-top: 20px;">
@@ -1181,15 +1181,12 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 const userRef = doc(window.db, 'users', userId);
                 const userSnap = await getDoc(userRef);
                 
-                // Fetch active status from Supabase (KEEP THIS)
+                // Fetch active status from Supabase (KEEP THIS for backward compatibility)
                 const locationPromise = supabase
                     .from('provider_locations')
                     .select('last_gig_date')
                     .eq('user_id', userId)
                     .single();
-                
-                // Get monthly gigs (set to 0 until gigs migrated)
-                const monthlyGigs = 0;
                 
                 // Wait for location fetch
                 const locationResult = await locationPromise;
@@ -1203,9 +1200,22 @@ async function showUserBottomSheet(userId, cachedData = null) {
                 const userData = userSnap.exists() ? userSnap.data() : null;
                 const locationData = locationResult.data;
                 
-                // Determine active status
-                const lastGigDate = locationData?.last_gig_date;
-                const active = lastGigDate && new Date(lastGigDate) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                // Get fresh gig counters
+                let gigsLast7Days = userData?.gigsLast7Days || 0;
+                let gigsLast30Days = userData?.gigsLast30Days || 0;
+                
+                // If recalculate function exists, use it
+                if (typeof window.recalculateStaleCounters === 'function') {
+                    const freshCounts = await window.recalculateStaleCounters(userId);
+                    if (freshCounts) {
+                        gigsLast7Days = freshCounts.gigsLast7Days;
+                        gigsLast30Days = freshCounts.gigsLast30Days;
+                    }
+                }
+                
+                // Determine active status using the new logic
+                const hasCompletedGigs = (userData?.gigCount || 0) > 0;
+                const isActive = hasCompletedGigs && ((gigsLast7Days >= 1) || (gigsLast30Days >= 3));
                 
                 // Build fresh data object
                 const freshData = {
@@ -1214,10 +1224,10 @@ async function showUserBottomSheet(userId, cachedData = null) {
                     rating: userData?.rating || displayData.rating,
                     reviewCount: userData?.reviewCount || displayData.reviewCount,
                     gigCount: userData?.gigCount || displayData.gigCount,
-                    monthlyGigs: monthlyGigs,
+                    gigsLast30Days: gigsLast30Days,
                     services: userData?.services || displayData.services,
                     bio: userData?.bio || '',
-                    active: active
+                    active: isActive
                 };
                 
                 // Check again before DOM updates
@@ -1249,7 +1259,7 @@ async function showUserBottomSheet(userId, cachedData = null) {
                         if (!existingBadge && headerDiv) {
                             const badge = document.createElement('span');
                             badge.className = 'active-badge active-badge-in-sheet';
-                            badge.textContent = 'Active this week';
+                            badge.textContent = 'Active';
                             badge.style.marginLeft = '8px';
                             headerDiv.appendChild(badge);
                         }
