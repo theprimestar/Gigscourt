@@ -73,33 +73,31 @@ async function fetchProviderProfilesFromSupabase(userIds) {
     }
 }
 
-async function getSingleProfileFromSupabase(userId) {
+async function getSingleProfileFromFirestore(userId) {
     try {
-        const { data: profile, error } = await supabase
-            .from('provider_profiles')
-            .select('user_id, display_name, photo_url, bio, phone, address_text, services, portfolio, credits, gig_count, rating, total_rating_sum, review_count')
-            .eq('user_id', userId)
-            .single();
+        const userRef = doc(window.db, 'users', userId);
+        const userSnap = await getDoc(userRef);
         
-        if (error || !profile) return null;
+        if (!userSnap.exists()) return null;
         
+        const data = userSnap.data();
         return {
-            id: profile.user_id,
-            displayName: profile.display_name,
-            photoURL: profile.photo_url,
-            bio: profile.bio,
-            phone: profile.phone,
-            addressText: profile.address_text,
-            services: profile.services ? profile.services.split(',').map(s => s.trim()) : [],
-            portfolio: profile.portfolio || [],
-            credits: profile.credits || 0,
-            gigCount: profile.gig_count || 0,
-            rating: profile.rating || 0,
-            totalRatingSum: profile.total_rating_sum || 0,
-            reviewCount: profile.review_count || 0
+            id: userId,
+            displayName: data.displayName || 'Anonymous',
+            photoURL: data.photoURL || null,
+            bio: data.bio || '',
+            phone: data.phone || '',
+            addressText: data.addressText || '',
+            services: data.services || [],
+            portfolio: data.portfolio || [],
+            credits: data.credits || 0,
+            gigCount: data.gigCount || 0,
+            rating: data.rating || 0,
+            totalRatingSum: data.totalRatingSum || 0,
+            reviewCount: data.reviewCount || 0
         };
     } catch (error) {
-        console.error('getSingleProfileFromSupabase error:', error);
+        console.error('getSingleProfileFromFirestore error:', error);
         return null;
     }
 }
@@ -1829,7 +1827,7 @@ async function openChat(userId, chatId = null) {
             });
             
             // Fetch fresh user data
-            const userData = await getSingleProfileFromSupabase(userId);
+            const userData = await getSingleProfileFromFirestore(userId);
             
             // Update header with fresh data
             if (headerName && userData) {
@@ -3303,7 +3301,7 @@ async function addPortfolioImage() {
 
 async function editProfile() {
     try {
-        const user = await getSingleProfileFromSupabase(window.auth.currentUser.uid);
+        const user = await getSingleProfileFromFirestore(window.auth.currentUser.uid);
         if (!user) {
             window.showToast('Error loading profile', 'error');
             return;
@@ -3668,6 +3666,8 @@ window.uploadImage = uploadImage;
 window.showSettings = showSettings;
 window.addPortfolioImage = addPortfolioImage;
 // Expose additional functions for app-gigs.js
-window.getSingleProfileFromSupabase = getSingleProfileFromSupabase;
+window.getSingleProfileFromFirestore = getSingleProfileFromFirestore;
+// Keep old name for backward compatibility with app-gigs.js
+window.getSingleProfileFromSupabase = getSingleProfileFromFirestore;
 window.sendPushNotification = sendPushNotification;
 window.supabase = supabase;
