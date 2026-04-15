@@ -15,7 +15,8 @@ import {
     addDoc, 
     onSnapshot, 
     limit,
-    orderBy
+    orderBy,
+    increment
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // ========== RECALCULATE STALE GIG COUNTERS ==========
