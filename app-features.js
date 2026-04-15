@@ -3533,11 +3533,6 @@ async function initFeatures() {
         profileContent: !!profileContent
     });
 
-    // Show skeletons immediately on home feed
-    if (homeFeed) {
-        showHomeFeedSkeletons(5);
-    }
-
     // Setup pull to refresh
     setupPullToRefresh();
     
