@@ -3602,6 +3602,12 @@ async function initFeatures() {
         }
     });
     
+    // Load home feed if we're already on the home page (missed the initial navigate event)
+    const currentPage = document.querySelector('.page.active')?.id?.replace('-page', '');
+    if (currentPage === 'home' && homeFeed) {
+        loadHomeFeed(true).catch(err => console.error('Initial loadHomeFeed error:', err));
+    }
+    
     console.log('initFeatures: All done!');
 }
 
