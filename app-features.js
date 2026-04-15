@@ -173,12 +173,20 @@ async function batchFetchUsersFromFirestore(userIds) {
                     const isActive = hasCompletedGigs && ((gigsLast7Days >= 1) || (gigsLast30Days >= 3));
                     
                     usersMap[userId] = {
+                        displayName: data.displayName || 'Anonymous',
+                        photoURL: data.photoURL || null,
+                        rating: data.rating || 0,
+                        reviewCount: data.reviewCount || 0,
                         gigsLast30Days: gigsLast30Days,
                         isActive: isActive,
                         hasCompletedGigs: hasCompletedGigs
                     };
                 } else {
                     usersMap[userId] = {
+                        displayName: 'Anonymous',
+                        photoURL: null,
+                        rating: 0,
+                        reviewCount: 0,
                         gigsLast30Days: 0,
                         isActive: false,
                         hasCompletedGigs: false
@@ -740,14 +748,14 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             return `
             <div class="card" data-user-id="${provider.user_id}">
                 <div class="card-header">
-                    <img class="card-avatar" src="${getOptimizedImageUrl(provider.photo_url, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(provider.display_name)}" alt="${provider.display_name}" loading="lazy">
+                    <img class="card-avatar" src="${getOptimizedImageUrl(userFirestore.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(userFirestore.displayName)}" alt="${userFirestore.displayName}" loading="lazy">
                     <div class="card-info">
                         <div class="card-name">
-                            ${provider.display_name}
+                            ${userFirestore.displayName}
                             ${userFirestore.isActive ? '<span class="active-badge">Active</span>' : ''}
                         </div>
                         <div class="card-rating">
-                            <span class="star">★</span> ${(provider.rating || 0).toFixed(1)} (${provider.review_count || 0})
+                            <span class="star">★</span> ${(userFirestore.rating || 0).toFixed(1)} (${userFirestore.reviewCount || 0})
                         </div>
                     </div>
                 </div>
@@ -1443,14 +1451,14 @@ async function performSearch(reset = false) {
             return `
             <div class="card" data-user-id="${provider.user_id}">
                 <div class="card-header">
-                    <img class="card-avatar" src="${getOptimizedImageUrl(provider.photo_url, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(provider.display_name)}" alt="${provider.display_name}" loading="lazy">
+                    <img class="card-avatar" src="${getOptimizedImageUrl(userFirestore.photoURL, 100, 100) || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(userFirestore.displayName)}" alt="${userFirestore.displayName}" loading="lazy">
                     <div class="card-info">
                         <div class="card-name">
-                            ${provider.display_name}
+                            ${userFirestore.displayName}
                             ${userFirestore.isActive ? '<span class="active-badge">Active</span>' : ''}
                         </div>
                         <div class="card-rating">
-                            <span class="star">★</span> ${(provider.rating || 0).toFixed(1)} (${provider.review_count || 0})
+                            <span class="star">★</span> ${(userFirestore.rating || 0).toFixed(1)} (${userFirestore.reviewCount || 0})
                         </div>
                     </div>
                 </div>
