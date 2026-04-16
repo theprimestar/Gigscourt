@@ -2356,17 +2356,18 @@ async function loadMoreMessages(chatId, messagesDiv) {
         // Remember current scroll height
         const oldScrollHeight = messagesDiv.scrollHeight;
         
-        // Add click handlers for images in older messages
-        document.querySelectorAll('#chat-messages-container .chat-image').forEach(img => {
-            if (!img.dataset.hasListener) {
-                img.dataset.hasListener = 'true';
-                // The main event listener in openChat() will handle the click
-            }
-        });
+        // Insert older messages at the top
+        messagesDiv.insertAdjacentHTML('afterbegin', olderMessagesHtml);
         
         // Maintain scroll position
         const newScrollHeight = messagesDiv.scrollHeight;
         messagesDiv.scrollTop = newScrollHeight - oldScrollHeight;
+        
+        // Add click handlers for images in older messages (no longer needed - delegated handler handles it)
+        // The main event listener in openChat() will handle the click
+        
+        // Check if there are more messages
+        hasMoreMessages = snapshot.docs.length === MESSAGES_PER_PAGE;
         
         // Check if there are more messages
         hasMoreMessages = snapshot.docs.length === MESSAGES_PER_PAGE;
