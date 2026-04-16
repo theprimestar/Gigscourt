@@ -827,49 +827,43 @@ async function showRecentChatsForGig() {
             }
             
             const recentUsers = [];
-            const userIds = [...new Set(
-                chatsSnapshot.docs.map(doc => {
-                    const chat = doc.data();
-                    return chat.participants.find(p => p !== window.auth.currentUser.uid);
-                })
-            )];
             
-            // Fetch user profiles from Firestore
-            const profilesMap = {};
-            
-            if (typeof window.batchFetchUsersFromFirestore === 'function') {
-                const firestoreUsers = await window.batchFetchUsersFromFirestore(userIds);
-                
-                // Convert to the format expected by the rest of the function
-                for (const [uid, userData] of Object.entries(firestoreUsers)) {
-                    profilesMap[uid] = {
-                        user_id: uid,
-                        display_name: userData.displayName || 'User',
-                        services: userData.services ? userData.services.join(', ') : ''
-                    };
-                }
-            }
-            
+            // Read directly from chat documents' participantInfo (NO extra Firestore reads!)
             for (const chatDoc of chatsSnapshot.docs) {
                 const chat = chatDoc.data();
                 const otherId = chat.participants.find(p => p !== window.auth.currentUser.uid);
-                const userData = profilesMap[otherId] || {};
+                
+                // Get display name from participantInfo cached in chat document
+                const otherUserInfo = chat.participantInfo?.[otherId] || {
+                    displayName: 'User',
+                    photoURL: null
+                };
+                
                 recentUsers.push({ 
                     id: otherId, 
-                    displayName: userData.display_name || 'User',
-                    services: userData.services,
+                    displayName: otherUserInfo.displayName || 'User',
                     chatId: chatDoc.id 
                 });
             }
             
-            if (recentUsers.length === 0) {
+            // Remove duplicates (same user might appear in multiple chats)
+            const uniqueUsers = [];
+            const seenIds = new Set();
+            for (const user of recentUsers) {
+                if (!seenIds.has(user.id)) {
+                    seenIds.add(user.id);
+                    uniqueUsers.push(user);
+                }
+            }
+            
+            if (uniqueUsers.length === 0) {
                 container.innerHTML = '<div class="empty-state">No recent chats found</div>';
                 return;
             }
             
-            container.innerHTML = recentUsers.map(u => `
+            container.innerHTML = uniqueUsers.map(u => `
                 <button class="recent-client-btn" data-user-id="${u.id}" data-chat-id="${u.chatId}" style="width: 100%; padding: 16px; margin-bottom: 8px; background: var(--bg-secondary); border: none; border-radius: 12px; text-align: left;">
-                    ${u.displayName || 'User'} - ${u.services ? u.services.split(',')[0] : ''}
+                    ${u.displayName}
                 </button>
             `).join('');
             
