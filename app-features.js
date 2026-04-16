@@ -310,6 +310,12 @@ let isSearchLoading = false;
 let hasMoreSearch = true;
 const SEARCH_LIMIT = 20;
 
+// ========== STALE TIME TRACKING ==========
+let lastHomeRefresh = Date.now();
+let lastSearchRefresh = Date.now();
+const HOME_STALE_TIME = 30 * 60 * 1000; // 30 minutes
+const SEARCH_STALE_TIME = 10 * 60 * 1000; // 10 minutes
+
 // ========== PULL TO REFRESH STATE ==========
 let pullToRefreshState = {
     // Home page
@@ -775,6 +781,11 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
         } else {
             homeFeed.insertAdjacentHTML('beforeend', cardsHtml);
         }
+
+         // Record refresh timestamp
+        if (reset) {
+            lastHomeRefresh = Date.now();
+        }
         
         document.querySelectorAll('#home-feed .card:not([data-listener])').forEach(card => {
             card.setAttribute('data-listener', 'true');
@@ -1007,6 +1018,7 @@ async function triggerRefresh(page) {
         if (page === 'home') {
             // Pass skipSpinner = true to prevent internal spinner
             await window.loadHomeFeed(true, true);
+            lastHomeRefresh = Date.now();
         } else if (page === 'profile') {
             // Get current profile ID if viewing someone else's profile
             const profileHeader = document.getElementById('profile-header-title');
@@ -1477,7 +1489,11 @@ async function performSearch(reset = false) {
         } else {
             if (searchListFeed) searchListFeed.insertAdjacentHTML('beforeend', cardsHtml);
         }
-        
+
+         // Record refresh timestamp
+        if (reset) {
+            lastSearchRefresh = Date.now();
+        }
         document.querySelectorAll('#search-list-feed .card:not([data-listener])').forEach(card => {
             card.setAttribute('data-listener', 'true');
             card.addEventListener('click', () => {
@@ -3615,9 +3631,34 @@ async function initFeatures() {
     // Set up navigation event listener for tab changes
     window.addEventListener('navigate', (e) => {
         console.log('Navigate event:', e.detail.page, 'skipProfileLoad:', e.detail.skipProfileLoad);
+        
+        // HOME: Only refresh if stale (> 30 minutes)
         if (e.detail.page === 'home' && homeFeed) {
-            loadHomeFeed(true).catch(err => console.error('Navigate loadHomeFeed error:', err));
+            const isStale = (Date.now() - lastHomeRefresh) > HOME_STALE_TIME;
+            const hasNoData = !homeFeed.hasChildNodes() || homeFeed.children.length === 0;
+            
+            if (hasNoData || isStale) {
+                console.log('Home feed stale or empty, refreshing...');
+                loadHomeFeed(true).catch(err => console.error('Navigate loadHomeFeed error:', err));
+            } else {
+                console.log('Home feed fresh, using cached data');
+            }
         }
+        
+        // SEARCH: Only refresh if stale (> 10 minutes) AND has existing search term
+        if (e.detail.page === 'search') {
+            const isStale = (Date.now() - lastSearchRefresh) > SEARCH_STALE_TIME;
+            const hasSearchTerm = currentSearchService && currentSearchService.trim() !== '';
+            const hasNoData = !searchListFeed || searchListFeed.children.length === 0;
+            
+            if (hasNoData || (isStale && hasSearchTerm)) {
+                console.log('Search stale or empty, refreshing...');
+                performSearch(true).catch(err => console.error('Navigate search error:', err));
+            } else {
+                console.log('Search fresh, using cached data');
+            }
+        }
+        
         if (e.detail.page === 'chats' && chatsList) {
             loadChats().catch(err => console.error('Navigate loadChats error:', err));
         }
