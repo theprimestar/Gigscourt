@@ -1652,7 +1652,7 @@ async function loadChats() {
     );
     
     // Set up real-time listener
-    chatListUnsubscribe = onSnapshot(q, async (snapshot) => {
+    chatListUnsubscribe = onSnapshot(q, (snapshot) => {
         // Mark that we have data (for future loads)
         localStorage.setItem('has_chats_cache', 'true');
         
@@ -1666,66 +1666,26 @@ async function loadChats() {
         const chats = [];
         let totalUnread = 0;
         
-        // Collect all unique user IDs
-        const userIds = [...new Set(
-            snapshot.docs.map(doc => {
-                const chat = doc.data();
-                return chat.participants.find(p => p !== window.auth.currentUser.uid);
-            })
-        )];
-        
-        // Fetch all profiles from FIRESTORE
-        const profilesMap = {};
-        
-        if (userIds.length > 0) {
-            // Firestore doesn't support "IN" queries with more than 30 items
-            // So we fetch in batches if needed
-            const batchSize = 30;
-            for (let i = 0; i < userIds.length; i += batchSize) {
-                const batch = userIds.slice(i, i + batchSize);
-                
-                // We need to fetch each user individually since Firestore doesn't have a native batch get by ID
-                const promises = batch.map(async (uid) => {
-                    const userRef = doc(window.db, 'users', uid);
-                    const userSnap = await getDoc(userRef);
-                    if (userSnap.exists()) {
-                        const data = userSnap.data();
-                        profilesMap[uid] = {
-                            user_id: uid,
-                            display_name: data.displayName || 'User',
-                            photo_url: data.photoURL || null,
-                            services: data.services ? data.services.join(', ') : ''
-                        };
-                    } else {
-                        profilesMap[uid] = {
-                            user_id: uid,
-                            display_name: 'User',
-                            photo_url: null,
-                            services: ''
-                        };
-                    }
-                });
-                
-                await Promise.all(promises);
-            }
-        }
-        
-        // Build chats array
+        // Build chats array directly from chat documents (NO extra Firestore reads!)
         for (const chatDoc of snapshot.docs) {
             const chat = { id: chatDoc.id, ...chatDoc.data() };
             const otherUserId = chat.participants.find(p => p !== window.auth.currentUser.uid);
             const unreadCount = chat.unreadCount?.[window.auth.currentUser.uid] || 0;
             totalUnread += unreadCount;
             
-            const userData = profilesMap[otherUserId] || {};
+            // Read from participantInfo (cached in chat document)
+            const otherUserInfo = chat.participantInfo?.[otherUserId] || {
+                displayName: 'User',
+                photoURL: null
+            };
             
             chats.push({ 
                 ...chat, 
                 otherUser: { 
                     id: otherUserId, 
-                    displayName: userData.display_name || 'User',
-                    photoURL: userData.photo_url,
-                    services: userData.services
+                    displayName: otherUserInfo.displayName,
+                    photoURL: otherUserInfo.photoURL,
+                    services: '' // Not needed for chat list display
                 },
                 unreadCount: unreadCount
             });
