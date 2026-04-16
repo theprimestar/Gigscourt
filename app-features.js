@@ -2142,7 +2142,8 @@ async function openChat(userId, chatId = null) {
                 messagesContainer.innerHTML += `
                     <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'}; padding: 4px 16px;">
                         <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
-                            ${msg.text || ''}
+                            ${msg.text ? `<span class="message-text">${msg.text}</span>` : ''}
+                            ${msg.edited ? `<span style="font-size: 10px; opacity: 0.6; margin-left: 4px;">(edited)</span>` : ''}
                             ${msg.imageUrl ? `<img src="${msg.imageUrl}" class="chat-image" data-image-url="${msg.imageUrl}">` : ''}
                             <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
                         </div>
@@ -2158,19 +2159,130 @@ async function openChat(userId, chatId = null) {
             setupMessagesScrollObserver(messagesContainer, chat);
             
             document.querySelectorAll('#chat-messages-container .message-wrapper').forEach(wrapper => {
+                const messageId = wrapper.dataset.messageId;
+                const messageText = wrapper.querySelector('.message-text')?.textContent || '';
+                const isImage = wrapper.querySelector('.chat-image') !== null;
+                
                 let pressTimer;
-                wrapper.addEventListener('touchstart', () => {
-                    pressTimer = setTimeout(() => {
-                        const messageId = wrapper.dataset.messageId;
-                        if (confirm('Delete this message?')) {
-                            const messageRef = doc(window.db, 'chats', chat, 'messages', messageId);
-                            deleteDoc(messageRef);
-                            window.haptic('heavy');
+                let activeMenu = null;
+                
+                // Remove any existing menu when clicking elsewhere
+                const removeMenu = () => {
+                    if (activeMenu) {
+                        activeMenu.remove();
+                        activeMenu = null;
+                    }
+                };
+                
+                wrapper.addEventListener('touchstart', (e) => {
+                    // Only show menu for current user's messages (not text, but we check in the menu)
+                    pressTimer = setTimeout(async () => {
+                        window.haptic('medium');
+                        removeMenu(); // Remove any existing menu
+                        
+                        // Get the message data to verify sender
+                        const msgRef = doc(window.db, 'chats', chat, 'messages', messageId);
+                        const msgSnap = await getDoc(msgRef);
+                        if (!msgSnap.exists()) return;
+                        
+                        const msgData = msgSnap.data();
+                        const isMe = msgData.senderId === window.auth.currentUser.uid;
+                        
+                        // Only allow edit/delete on own messages
+                        if (!isMe) return;
+                        
+                        // Create menu
+                        const menu = document.createElement('div');
+                        menu.className = 'message-action-menu';
+                        menu.style.cssText = `
+                            position: absolute;
+                            background: var(--bg-primary);
+                            border-radius: 12px;
+                            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+                            padding: 8px;
+                            display: flex;
+                            gap: 8px;
+                            z-index: 1000;
+                            border: 1px solid var(--border-light);
+                        `;
+                        
+                        // Edit button (only for text messages)
+                        if (!isImage && msgData.text) {
+                            const editBtn = document.createElement('button');
+                            editBtn.textContent = '✏️ Edit';
+                            editBtn.style.cssText = `
+                                padding: 10px 16px;
+                                background: var(--accent-orange);
+                                color: white;
+                                border: none;
+                                border-radius: 8px;
+                                font-size: 14px;
+                                font-weight: 500;
+                                cursor: pointer;
+                            `;
+                            editBtn.addEventListener('click', async () => {
+                                removeMenu();
+                                const newText = prompt('Edit message:', msgData.text);
+                                if (newText && newText.trim() && newText !== msgData.text) {
+                                    await updateDoc(msgRef, { 
+                                        text: newText.trim(),
+                                        edited: true,
+                                        editedAt: new Date().toISOString()
+                                    });
+                                    window.showToast('Message updated', 'success');
+                                }
+                            });
+                            menu.appendChild(editBtn);
                         }
+                        
+                        // Delete button
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.textContent = '🗑️ Delete';
+                        deleteBtn.style.cssText = `
+                            padding: 10px 16px;
+                            background: var(--error-red);
+                            color: white;
+                            border: none;
+                            border-radius: 8px;
+                            font-size: 14px;
+                            font-weight: 500;
+                            cursor: pointer;
+                        `;
+                        deleteBtn.addEventListener('click', async () => {
+                            removeMenu();
+                            if (confirm('Delete this message?')) {
+                                await deleteDoc(msgRef);
+                                window.haptic('heavy');
+                                window.showToast('Message deleted', 'info');
+                            }
+                        });
+                        menu.appendChild(deleteBtn);
+                        
+                        // Position menu near the touch
+                        const touch = e.touches[0];
+                        menu.style.left = '50%';
+                        menu.style.transform = 'translateX(-50%)';
+                        menu.style.bottom = '80px';
+                        
+                        document.body.appendChild(menu);
+                        activeMenu = menu;
+                        
+                        // Remove menu when tapping elsewhere
+                        setTimeout(() => {
+                            document.addEventListener('click', removeMenu, { once: true });
+                            document.addEventListener('touchstart', removeMenu, { once: true });
+                        }, 100);
+                        
                     }, 500);
                 });
-                wrapper.addEventListener('touchend', () => clearTimeout(pressTimer));
-                wrapper.addEventListener('touchmove', () => clearTimeout(pressTimer));
+                
+                wrapper.addEventListener('touchend', () => {
+                    clearTimeout(pressTimer);
+                });
+                
+                wrapper.addEventListener('touchmove', () => {
+                    clearTimeout(pressTimer);
+                });
             });
         });
         
@@ -2229,7 +2341,8 @@ async function loadMoreMessages(chatId, messagesDiv) {
             olderMessagesHtml = `
                 <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
                     <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
-                        ${msg.text || ''}
+                        ${msg.text ? `<span class="message-text">${msg.text}</span>` : ''}
+                        ${msg.edited ? `<span style="font-size: 10px; opacity: 0.6; margin-left: 4px;">(edited)</span>` : ''}
                         ${msg.imageUrl ? `<img src="${msg.imageUrl}" class="chat-image" data-image-url="${msg.imageUrl}">` : ''}
                         <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
                     </div>
