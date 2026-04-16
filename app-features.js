@@ -2179,6 +2179,7 @@ async function openChat(userId, chatId = null) {
                         removeMenu();
                         
                         const chat = currentChatId;
+                        console.log('Long-press debug:', { chat, messageId });
                         if (!chat) {
                             console.error('No chat ID available');
                             return;
