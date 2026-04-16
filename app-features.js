@@ -1410,22 +1410,30 @@ async function performSearch(reset = false) {
     if (!window.db) return;
     
     if (reset) {
+        // Show skeletons instead of spinner
         if (searchListFeed) {
-            searchListFeed.innerHTML = '<div class="loading-spinner"></div>';
+            showSkeletons('search', 5);
         }
         searchOffset = 0;
         hasMoreSearch = true;
         window.searchCursor = null;  // Reset cursor on new search
-        
-        if (searchListFeed) {
-            while (searchListFeed.firstChild) {
-                searchListFeed.removeChild(searchListFeed.firstChild);
-            }
-        }
     }
     
     if (isSearchLoading || !hasMoreSearch) return;
     isSearchLoading = true;
+    
+    // If loading more (not reset), show a small loader at the bottom
+    if (!reset && searchListFeed) {
+        const existingLoader = document.getElementById('search-load-more-loader');
+        if (!existingLoader) {
+            const loader = document.createElement('div');
+            loader.id = 'search-load-more-loader';
+            loader.className = 'load-more-loader';
+            loader.innerHTML = '<div class="mini-spinner"></div>';
+            loader.style.cssText = 'text-align: center; padding: 20px;';
+            searchListFeed.appendChild(loader);
+        }
+    }
     
     try {
         const service = currentSearchService || searchServiceInput?.value || null;
@@ -1516,7 +1524,10 @@ async function performSearch(reset = false) {
         }).join('');
         
         if (reset) {
-            if (searchListFeed) searchListFeed.innerHTML = cardsHtml;
+            if (searchListFeed) {
+                // Clear skeletons and show results
+                searchListFeed.innerHTML = cardsHtml;
+            }
         } else {
             if (searchListFeed) searchListFeed.insertAdjacentHTML('beforeend', cardsHtml);
         }
@@ -1548,6 +1559,12 @@ async function performSearch(reset = false) {
         
         if (currentViewMode === 'map' && currentMap) {
             updateMapMarkers(filteredResults);
+        }
+        
+        // Remove the load-more loader if it exists
+        if (!reset) {
+            const loader = document.getElementById('search-load-more-loader');
+            if (loader) loader.remove();
         }
         
     } catch (error) {
