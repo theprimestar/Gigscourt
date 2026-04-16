@@ -260,7 +260,9 @@ function setupNotifications() {
     
     if (clearNotificationsBtn) {
         clearNotificationsBtn.addEventListener('click', async () => {
-            await markAllNotificationsAsRead();
+            if (confirm('Delete all notifications?')) {
+                await clearAllNotifications();
+            }
         });
     }
     
@@ -492,19 +494,22 @@ async function markNotificationAsRead(notificationId) {
     }
 }
 
-// ========== MARK ALL NOTIFICATIONS AS READ ==========
-async function markAllNotificationsAsRead() {
+// ========== DELETE ALL NOTIFICATIONS (Clear All) ==========
+async function clearAllNotifications() {
     if (!window.currentUser) return;
     
     try {
         const notificationsRef = collection(db, 'users', window.currentUser.uid, 'notifications');
-        const q = query(notificationsRef, where('read', '==', false));
-        const snapshot = await getDocs(q);
+        const snapshot = await getDocs(notificationsRef);
+        
+        if (snapshot.empty) {
+            window.showToast('No notifications to clear', 'info');
+            return;
+        }
         
         const batch = writeBatch(db);
         snapshot.forEach(doc => {
-            const notifRef = doc(db, 'users', window.currentUser.uid, 'notifications', doc.id);
-            batch.update(notifRef, { read: true });
+            batch.delete(doc.ref);
         });
         await batch.commit();
 
@@ -513,10 +518,19 @@ async function markAllNotificationsAsRead() {
         await setDoc(metaRef, { unreadCount: 0 });
         
         await updateNotificationBadgeCount();
-        await loadNotificationsFromFirestore();
+        
+        // Clear dropdown and show empty state
+        while (notificationsList.firstChild) {
+            notificationsList.removeChild(notificationsList.firstChild);
+        }
+        notificationsList.innerHTML = '<div class="empty-state">No notifications yet</div>';
+        notificationBadge.classList.add('hidden');
+        
+        window.showToast('All notifications cleared', 'success');
         
     } catch (error) {
-        console.error('Error marking all as read:', error);
+        console.error('Error clearing notifications:', error);
+        window.showToast('Error clearing notifications', 'error');
     }
 }
 
