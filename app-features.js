@@ -1998,6 +1998,7 @@ async function openChat(userId, chatId = null) {
     // Set up message input and send button
     const input = document.getElementById('chat-page-input');
     const sendBtn = document.getElementById('chat-page-send-btn');
+    const attachBtn = document.getElementById('chat-attach-btn');
     
     if (sendBtn) {
         const newSendBtn = sendBtn.cloneNode(true);
@@ -2005,7 +2006,7 @@ async function openChat(userId, chatId = null) {
         newSendBtn.addEventListener('click', () => {
             const msgInput = document.getElementById('chat-page-input');
             if (msgInput) {
-                sendMessage(currentChatId, msgInput.value);
+                sendMessage(currentChatId, msgInput.value, null);
                 msgInput.value = '';
             }
         });
@@ -2018,10 +2019,42 @@ async function openChat(userId, chatId = null) {
             if (e.key === 'Enter') {
                 const msgInput = document.getElementById('chat-page-input');
                 if (msgInput) {
-                    sendMessage(currentChatId, msgInput.value);
+                    sendMessage(currentChatId, msgInput.value, null);
                     msgInput.value = '';
                 }
             }
+        });
+    }
+    
+    // Attachment button - send pictures
+    if (attachBtn) {
+        const newAttachBtn = attachBtn.cloneNode(true);
+        attachBtn.parentNode.replaceChild(newAttachBtn, attachBtn);
+        newAttachBtn.addEventListener('click', () => {
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.accept = 'image/*';
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                window.showToast('Uploading image...');
+                window.haptic('light');
+                
+                try {
+                    const imageUrl = await window.uploadImage(file, 'chat-images');
+                    if (imageUrl) {
+                        await sendMessage(currentChatId, null, imageUrl);
+                        window.showToast('Image sent!');
+                    } else {
+                        window.showToast('Upload failed', 'error');
+                    }
+                } catch (error) {
+                    console.error('Image upload error:', error);
+                    window.showToast('Error uploading image', 'error');
+                }
+            };
+            fileInput.click();
         });
     }
     
@@ -2116,8 +2149,8 @@ async function openChat(userId, chatId = null) {
                 messagesContainer.innerHTML += `
                     <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'}; padding: 4px 16px;">
                         <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
-                            ${msg.text}
-                            ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
+                            ${msg.text || ''}
+                            ${msg.imageUrl ? `<img src="${msg.imageUrl}" class="chat-image" onclick="window.openBottomSheet('<img src=\'${msg.imageUrl}\' style=\'width:100%;border-radius:20px;\'>')">` : ''}
                             <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
                         </div>
                     </div>
@@ -2192,7 +2225,7 @@ async function loadMoreMessages(chatId, messagesDiv) {
                 <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
                     <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
                         ${msg.text}
-                        ${msg.imageUrl ? `<img src="${msg.imageUrl}" style="max-width: 200px; border-radius: 10px; margin-top: 8px;">` : ''}
+                        ${msg.imageUrl ? `<img src="${msg.imageUrl}" class="chat-image" onclick="window.openBottomSheet('<img src=\'${msg.imageUrl}\' style=\'width:100%;border-radius:20px;\'>')">` : ''}
                         <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
                     </div>
                 </div>
@@ -2222,15 +2255,20 @@ async function loadMoreMessages(chatId, messagesDiv) {
     }
 }
 
-async function sendMessage(chatId, text) {
-    if (!text.trim()) return;
+async function sendMessage(chatId, text, imageUrl = null) {
+    if (!text && !imageUrl) return;
+    
     try {
         const messagesRef = collection(window.db, 'chats', chatId, 'messages');
-        await addDoc(messagesRef, {
+        const messageData = {
             senderId: window.auth.currentUser.uid,
-            text: text,
             timestamp: new Date().toISOString()
-        });
+        };
+        
+        if (text) messageData.text = text;
+        if (imageUrl) messageData.imageUrl = imageUrl;
+        
+        await addDoc(messagesRef, messageData);
         
         const chatRef = doc(window.db, 'chats', chatId);
         
@@ -2240,20 +2278,22 @@ async function sendMessage(chatId, text) {
         const otherUserId = chatData.participants.find(p => p !== window.auth.currentUser.uid);
         
         // Update chat room with last message and increment unread count for receiver
+        const lastMessageText = imageUrl ? '📷 Image' : text;
         await updateDoc(chatRef, {
-            lastMessage: text,
+            lastMessage: lastMessageText,
             lastMessageTime: new Date().toISOString(),
             [`unreadCount.${otherUserId}`]: increment(1)
         });
         
         // Notify the other user
         const senderName = window.currentUserData?.displayName || 'Someone';
+        const notificationBody = imageUrl ? '📷 Sent an image' : `${senderName}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`;
         
         // Send push notification to the other user (Vercel function saves to their Firestore)
         await sendPushNotification(
             otherUserId,
             'New Message',
-            `${senderName}: ${text.substring(0, 50)}${text.length > 50 ? '...' : ''}`,
+            notificationBody,
             `/chat/${chatId}`
         );
         
