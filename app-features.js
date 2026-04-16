@@ -1568,11 +1568,17 @@ function updateListView(users) {
 
 function setupSearch() {
     if (searchServiceInput) {
+        let debounceTimer;
         searchServiceInput.addEventListener('input', (e) => {
-            currentSearchService = e.target.value;
-            searchOffset = 0;
-            hasMoreSearch = true;
-            performSearch(true);
+            clearTimeout(debounceTimer);
+            const searchTerm = e.target.value;
+            
+            debounceTimer = setTimeout(() => {
+                currentSearchService = searchTerm;
+                searchOffset = 0;
+                hasMoreSearch = true;
+                performSearch(true);
+            }, 400); // Waits 400ms after user stops typing
         });
     }
     if (radiusSlider && radiusValue) {
