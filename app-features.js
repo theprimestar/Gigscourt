@@ -1066,7 +1066,7 @@ window.setCurrentViewedUserId = function(userId) {
 };
 
 // ========== UPDATE MESSAGES TAB BADGE ==========
-function updateMessagesTabBadge(count) {
+function updateMessagesTabBadge(unreadCount, pendingReviewCount = 0) {
     const messagesTab = document.querySelector('.nav-item[data-page="chats"]');
     if (!messagesTab) return;
     
@@ -1074,16 +1074,26 @@ function updateMessagesTabBadge(count) {
     const existingBadge = messagesTab.querySelector('.tab-badge');
     if (existingBadge) existingBadge.remove();
     
-    if (count > 0) {
+    const totalCount = unreadCount + pendingReviewCount;
+    
+    if (totalCount > 0) {
         const badge = document.createElement('span');
         badge.className = 'tab-badge';
-        badge.textContent = count > 99 ? '99+' : count;
-        badge.style.cssText = `
+        badge.textContent = totalCount > 99 ? '99+' : totalCount;
+        
+        // Different color for pending reviews vs unread messages
+        if (pendingReviewCount > 0 && unreadCount === 0) {
+            badge.style.background = '#FFC107'; // Yellow for pending reviews
+            badge.style.color = '#000';
+        } else {
+            badge.style.background = 'var(--accent-orange)';
+            badge.style.color = 'white';
+        }
+        
+        badge.style.cssText += `
             position: absolute;
             top: -5px;
             right: -10px;
-            background: var(--accent-orange);
-            color: white;
             font-size: 10px;
             font-weight: 600;
             padding: 2px 6px;
@@ -1096,7 +1106,6 @@ function updateMessagesTabBadge(count) {
     }
 }
 
-// ========== GLOBAL UNREAD LISTENER (Updates badge anywhere) ==========
 function startGlobalUnreadListener() {
     if (!window.auth?.currentUser) {
         console.log('No user, skipping global unread listener');
@@ -1119,14 +1128,21 @@ function startGlobalUnreadListener() {
     
     globalUnreadListener = onSnapshot(q, (snapshot) => {
         let totalUnread = 0;
+        let totalPendingReviews = 0;
+        
         snapshot.forEach(doc => {
             const chat = doc.data();
             const unreadCount = chat.unreadCount?.[userId] || 0;
             totalUnread += unreadCount;
+            
+            // Count pending reviews that involve this user
+            if (chat.pendingReview === true) {
+                totalPendingReviews++;
+            }
         });
         
-        console.log('Global unread count updated:', totalUnread);
-        updateMessagesTabBadge(totalUnread);
+        console.log('Global counts - Unread:', totalUnread, 'Pending reviews:', totalPendingReviews);
+        updateMessagesTabBadge(totalUnread, totalPendingReviews);
     }, (error) => {
         console.error('Global unread listener error:', error);
     });
@@ -1755,8 +1771,14 @@ async function loadChats() {
             });
         }
         
+        // Count pending reviews
+        let totalPendingReviews = 0;
+        chats.forEach(chat => {
+            if (chat.pendingReview === true) totalPendingReviews++;
+        });
+        
         // Update badge on Messages tab
-        updateMessagesTabBadge(totalUnread);
+        updateMessagesTabBadge(totalUnread, totalPendingReviews);
         
         // Render chat list
         chatsList.innerHTML = chats.map(chat => `
