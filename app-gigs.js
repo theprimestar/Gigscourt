@@ -283,12 +283,8 @@ async function registerGig(chatId, clientId) {
         window.addNotification('Gig Registered', `${clientDisplayName} has been notified to review you`);
         
         const providerName = window.currentUserData?.displayName || 'Provider';
-        window.addNotification(
-            'New Gig Registration',
-            `📋 ${providerName} registered a gig with you. Please review within 7 days.`,
-            `/chat/${chatId}`
-        );
         
+        // Send push notification to client (Vercel function saves to their Firestore)
         window.sendPushNotification(
             clientId,
             'New Gig Request',
@@ -462,12 +458,6 @@ async function submitReview(providerId, clientId, rating, reviewText) {
         } else if (newGigCount === 50) {
             window.addNotification('🎉 Milestone Achieved!', '💎 50 gigs! Legendary status!');
         }
-        
-        const clientName = window.currentUserData?.displayName || 'Client';
-        window.addNotification(
-            'New Review',
-            `⭐ ${clientName} reviewed and rated you ${rating} stars. 1 credit has been deducted.`
-        );
         
         // Increment admin stats (if function exists)
         if (typeof incrementAdminStats === 'function') {
