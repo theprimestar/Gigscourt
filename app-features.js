@@ -18,7 +18,8 @@ import {
     doc, 
     deleteDoc, 
     limit,
-    startAfter
+    startAfter,
+    writeBatch
 } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
@@ -1817,11 +1818,26 @@ async function openChat(userId, chatId = null) {
                 });
                 chat = found;
                 if (!chat) {
+                    // Get current user info for participantInfo
+                    const currentUserData = window.currentUserData || {};
+                    const otherUserData = await getSingleProfileFromFirestore(userId);
+                    
                     const newChatRef = await addDoc(collection(window.db, 'chats'), {
                         participants: [window.auth.currentUser.uid, userId],
+                        participantInfo: {
+                            [window.auth.currentUser.uid]: {
+                                displayName: currentUserData.displayName || 'User',
+                                photoURL: currentUserData.photoURL || null
+                            },
+                            [userId]: {
+                                displayName: otherUserData?.displayName || 'User',
+                                photoURL: otherUserData?.photoURL || null
+                            }
+                        },
                         createdAt: new Date().toISOString(),
                         lastMessageTime: new Date().toISOString(),
-                        lastMessage: ''
+                        lastMessage: '',
+                        unreadCount: {}
                     });
                     chat = newChatRef.id;
                 }
@@ -3382,6 +3398,9 @@ async function editProfile() {
                     window.currentUserData.addressText = updates.addressText;
                 }
                 
+                // Update profile info in recent chats (Option 3 optimization)
+                await updateProfileInRecentChats(updates.displayName, window.currentUserData?.photoURL);
+                
                 window.closeBottomSheet();
                 window.showToast('Profile updated!');
                 loadProfile();
@@ -3396,7 +3415,56 @@ async function editProfile() {
     }
 }
 
-
+// ========== UPDATE PROFILE IN RECENT CHATS ==========
+async function updateProfileInRecentChats(newDisplayName, newPhotoURL) {
+    const currentUser = window.auth.currentUser;
+    if (!currentUser) return;
+    
+    try {
+        // Query the 20 most recent chats where user is a participant
+        const chatsRef = collection(window.db, 'chats');
+        const q = query(
+            chatsRef,
+            where('participants', 'array-contains', currentUser.uid),
+            orderBy('lastMessageTime', 'desc'),
+            limit(20)
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) {
+            console.log('No recent chats to update');
+            return;
+        }
+        
+        // Batch update all recent chats
+        const batch = writeBatch(window.db);
+        let updateCount = 0;
+        
+        snapshot.forEach(doc => {
+            const chatData = doc.data();
+            
+            // Only update if participantInfo exists and has this user's entry
+            if (chatData.participantInfo && chatData.participantInfo[currentUser.uid]) {
+                const updates = {};
+                updates[`participantInfo.${currentUser.uid}.displayName`] = newDisplayName || chatData.participantInfo[currentUser.uid].displayName;
+                updates[`participantInfo.${currentUser.uid}.photoURL`] = newPhotoURL || chatData.participantInfo[currentUser.uid].photoURL;
+                
+                batch.update(doc.ref, updates);
+                updateCount++;
+            }
+        });
+        
+        if (updateCount > 0) {
+            await batch.commit();
+            console.log(`✅ Updated profile in ${updateCount} recent chats`);
+        }
+        
+    } catch (error) {
+        console.error('Failed to update profile in recent chats:', error);
+        // Don't block profile update - fail silently
+    }
+}
 
 async function showSettings() {
     const settingsScreen = document.getElementById('settings-screen');
