@@ -1826,7 +1826,7 @@ async function openChat(userId, chatId = null) {
                 [`unreadCount.${window.auth.currentUser.uid}`]: 0
             });
             
-            // Fetch fresh user data
+            // Fetch fresh user data for the other participant
             const userData = await getSingleProfileFromFirestore(userId);
             
             // Update header with fresh data
@@ -1838,7 +1838,7 @@ async function openChat(userId, chatId = null) {
                 headerAvatar.style.display = 'inline-block';
             }
             
-           // Cache the fresh data
+            // Cache the fresh data
             if (userData) {
                 setCachedProvider(userId, {
                     displayName: userData.displayName,
@@ -1851,6 +1851,50 @@ async function openChat(userId, chatId = null) {
                     bio: userData.bio,
                     active: false
                 });
+            }
+            
+            // ========== AUTO-FIX: Ensure participantInfo exists for both users ==========
+            // This fixes old chats that don't have participantInfo field
+            const chatRef = doc(window.db, 'chats', chat);
+            const chatSnap = await getDoc(chatRef);
+            
+            if (chatSnap.exists()) {
+                const chatData = chatSnap.data();
+                const needsUpdate = !chatData.participantInfo || 
+                                   !chatData.participantInfo[window.auth.currentUser.uid] ||
+                                   !chatData.participantInfo[userId];
+                
+                if (needsUpdate) {
+                    // Fetch current user's data if needed
+                    let currentUserData = chatData.participantInfo?.[window.auth.currentUser.uid];
+                    if (!currentUserData) {
+                        const currentUserRef = doc(window.db, 'users', window.auth.currentUser.uid);
+                        const currentUserSnap = await getDoc(currentUserRef);
+                        if (currentUserSnap.exists()) {
+                            const data = currentUserSnap.data();
+                            currentUserData = {
+                                displayName: data.displayName || 'User',
+                                photoURL: data.photoURL || null
+                            };
+                        } else {
+                            currentUserData = {
+                                displayName: window.currentUserData?.displayName || 'User',
+                                photoURL: window.currentUserData?.photoURL || null
+                            };
+                        }
+                    }
+                    
+                    // Build updates
+                    const updates = {};
+                    updates[`participantInfo.${window.auth.currentUser.uid}`] = currentUserData;
+                    updates[`participantInfo.${userId}`] = {
+                        displayName: userData?.displayName || 'User',
+                        photoURL: userData?.photoURL || null
+                    };
+                    
+                    await updateDoc(chatRef, updates);
+                    console.log('✅ Auto-fixed participantInfo for chat:', chat);
+                }
             }
             
         } catch (error) {
