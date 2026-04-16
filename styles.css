@@ -2256,3 +2256,49 @@ body {
     color: var(--text-secondary);
     line-height: 1.4;
 }
+
+/* Chat attach button */
+.chat-attach-btn {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.15s;
+    flex-shrink: 0;
+}
+
+.chat-attach-btn:active {
+    color: var(--accent-orange);
+}
+
+.chat-input-container {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border-light);
+}
+
+.chat-input {
+    flex: 1;
+}
+
+/* Image in chat bubble */
+.chat-image {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 12px;
+    margin-top: 8px;
+    cursor: pointer;
+    object-fit: cover;
+}
+
+.chat-image:active {
+    opacity: 0.8;
+}
