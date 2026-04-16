@@ -1,6 +1,6 @@
 // ========================================
 // GigsCourt - Features Module (FIXED - Modular Firestore Syntax)
-// Map, Chat, Gigs, Credits, Reviews, Profile, Portfolio, Uploads.
+// Map, Chat, Gigs, Credits, Reviews, Profile, Portfolio, Uploads
 // ========================================
 
 import { 
