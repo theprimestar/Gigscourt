@@ -1924,7 +1924,6 @@ async function openChat(userId, chatId = null) {
             }
             
             // ========== AUTO-FIX: Ensure participantInfo exists for both users ==========
-            // This fixes old chats that don't have participantInfo field
             const chatRef = doc(window.db, 'chats', chat);
             const chatSnap = await getDoc(chatRef);
             
@@ -1935,7 +1934,6 @@ async function openChat(userId, chatId = null) {
                                    !chatData.participantInfo[userId];
                 
                 if (needsUpdate) {
-                    // Fetch current user's data if needed
                     let currentUserData = chatData.participantInfo?.[window.auth.currentUser.uid];
                     if (!currentUserData) {
                         const currentUserRef = doc(window.db, 'users', window.auth.currentUser.uid);
@@ -1954,7 +1952,6 @@ async function openChat(userId, chatId = null) {
                         }
                     }
                     
-                    // Build updates
                     const updates = {};
                     updates[`participantInfo.${window.auth.currentUser.uid}`] = currentUserData;
                     updates[`participantInfo.${userId}`] = {
@@ -2059,9 +2056,7 @@ async function openChat(userId, chatId = null) {
     }
     
     // ========== STEP 6: Set up actions container (Register Gig, Review, etc.) ==========
-    // This runs after we have chat ID
     (async () => {
-        // Wait for chat ID to be set
         while (!currentChatId) {
             await new Promise(resolve => setTimeout(resolve, 50));
         }
@@ -2103,14 +2098,12 @@ async function openChat(userId, chatId = null) {
         currentMessagesUnsubscribe();
     }
 
-    // Clean up gig status listener when opening new chat
     if (window.gigStatusListener) {
-        window.gigStatusListener();  // ✅ Call it directly
+        window.gigStatusListener();
         window.gigStatusListener = null;
         console.log('🧹 Cleaned up previous gig status listener');
     }
     
-    // Wait for chat ID, then set up listener
     (async () => {
         while (!currentChatId) {
             await new Promise(resolve => setTimeout(resolve, 50));
@@ -2150,7 +2143,7 @@ async function openChat(userId, chatId = null) {
                     <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'}; padding: 4px 16px;">
                         <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
                             ${msg.text || ''}
-                            ${msg.imageUrl ? `<img src="${msg.imageUrl}" class="chat-image" onclick="window.openBottomSheet('<img src=\'${msg.imageUrl}\' style=\'width:100%;border-radius:20px;\'>')">` : ''}
+                            ${msg.imageUrl ? `<img src="${msg.imageUrl}" class="chat-image" data-image-url="${msg.imageUrl}">` : ''}
                             <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
                         </div>
                     </div>
@@ -2180,6 +2173,18 @@ async function openChat(userId, chatId = null) {
                 wrapper.addEventListener('touchmove', () => clearTimeout(pressTimer));
             });
         });
+        
+        // ========== IMAGE CLICK HANDLER (Open full screen) ==========
+        if (messagesContainer) {
+            messagesContainer.addEventListener('click', (e) => {
+                const img = e.target.closest('.chat-image');
+                if (img && img.dataset.imageUrl) {
+                    const fullSizeUrl = getOptimizedImageUrl(img.dataset.imageUrl, null, null, true);
+                    window.openBottomSheet(`<img src="${fullSizeUrl}" style="width: 100%; border-radius: 20px;">`);
+                }
+            });
+        }
+        
     })();
 }
 
