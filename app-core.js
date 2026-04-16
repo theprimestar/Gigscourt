@@ -7,7 +7,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, sendEmailVerification } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js';
-import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy, writeBatch, limit, increment, onSnapshot, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy, writeBatch, limit, increment, onSnapshot, enableIndexedDbPersistence, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
 
 // Supabase configuration
 const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
@@ -329,10 +329,10 @@ async function loadNotificationsFromFirestore() {
     try {
         const notificationsRef = collection(db, 'users', window.currentUser.uid, 'notifications');
         const q = query(
-    notificationsRef,
-    orderBy('createdAt', 'desc'),
-    limit(50)
-);
+            notificationsRef,
+            orderBy('createdAt', 'desc'),
+            limit(50)
+        );
         const snapshot = await getDocs(q);
         
         // Clear current dropdown
@@ -352,17 +352,67 @@ async function loadNotificationsFromFirestore() {
             const item = document.createElement('div');
             item.className = 'notification-item';
             item.dataset.notificationId = doc.id;
+            
+            // Format relative time
+            const relativeTime = formatRelativeTime(notif.createdAt);
+            
+            // Handle missing title (use first few words of body)
+            const displayTitle = notif.title || notif.body?.substring(0, 30) + (notif.body?.length > 30 ? '...' : '') || 'Notification';
+            const displayBody = notif.title ? notif.body : '';
+            
             item.innerHTML = `
-                <div class="notification-title">${notif.title}</div>
-                <div class="notification-body">${notif.body}</div>
+                <div class="notification-header">
+                    <span class="notification-title">${displayTitle}</span>
+                    <span class="notification-time">${relativeTime}</span>
+                </div>
+                ${displayBody ? `<div class="notification-body">${displayBody}</div>` : ''}
             `;
-            if (notif.link) {
-                item.addEventListener('click', () => {
-                    markNotificationAsRead(doc.id);
+            
+            // Mark as read when clicked
+            item.addEventListener('click', async () => {
+                await markNotificationAsRead(doc.id);
+                
+                // Navigate if link exists
+                if (notif.link) {
                     window.location.hash = notif.link;
-                    closeBottomSheet();
-                });
-            }
+                }
+                
+                // Close dropdown
+                notificationsDropdown.classList.add('hidden');
+            });
+            
+            // Long press to delete
+            let pressTimer;
+            item.addEventListener('touchstart', (e) => {
+                pressTimer = setTimeout(async () => {
+                    window.haptic('medium');
+                    if (confirm('Delete this notification?')) {
+                        const notifRef = doc(db, 'users', window.currentUser.uid, 'notifications', doc.id);
+                        await deleteDoc(notifRef);
+                        
+                        // Update unread count if notification was unread
+                        if (!notif.read) {
+                            const metaRef = doc(db, 'user_notification_meta', window.currentUser.uid);
+                            await updateDoc(metaRef, {
+                                unreadCount: increment(-1)
+                            }).catch(() => {});
+                        }
+                        
+                        item.remove();
+                        await updateNotificationBadgeCount();
+                        
+                        // Show empty state if no notifications left
+                        if (notificationsList.children.length === 0) {
+                            notificationsList.innerHTML = '<div class="empty-state">No notifications yet</div>';
+                        }
+                        
+                        window.showToast('Notification deleted', 'info');
+                    }
+                }, 500);
+            });
+            item.addEventListener('touchend', () => clearTimeout(pressTimer));
+            item.addEventListener('touchmove', () => clearTimeout(pressTimer));
+            
             notificationsList.appendChild(item);
         });
         
@@ -372,6 +422,34 @@ async function loadNotificationsFromFirestore() {
     } catch (error) {
         console.error('Error loading notifications:', error);
     }
+}
+
+// ========== FORMAT RELATIVE TIME ==========
+function formatRelativeTime(timestamp) {
+    if (!timestamp) return '';
+    
+    const now = new Date();
+    const date = new Date(timestamp);
+    const diffMs = now - date;
+    const diffSec = Math.floor(diffMs / 1000);
+    const diffMin = Math.floor(diffSec / 60);
+    const diffHr = Math.floor(diffMin / 60);
+    const diffDay = Math.floor(diffHr / 24);
+    const diffWeek = Math.floor(diffDay / 7);
+    const diffMonth = Math.floor(diffDay / 30);
+    const diffYear = Math.floor(diffDay / 365);
+    
+    if (diffSec < 60) return 'Just now';
+    if (diffMin < 60) return `${diffMin} min ago`;
+    if (diffHr < 24) return `${diffHr} hr ago`;
+    if (diffDay === 1) return 'Yesterday';
+    if (diffDay < 7) return `${diffDay} days ago`;
+    if (diffWeek === 1) return '1 week ago';
+    if (diffWeek < 4) return `${diffWeek} weeks ago`;
+    if (diffMonth === 1) return '1 month ago';
+    if (diffMonth < 12) return `${diffMonth} months ago`;
+    if (diffYear === 1) return '1 year ago';
+    return `${diffYear} years ago`;
 }
 
 // ========== UPDATE NOTIFICATION BADGE COUNT ==========
