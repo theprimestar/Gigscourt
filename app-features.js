@@ -310,6 +310,7 @@ let searchOffset = 0;
 let isSearchLoading = false;
 let hasMoreSearch = true;
 const SEARCH_LIMIT = 20;
+window.searchCursor = null;  // Cursor for search pagination
 
 // ========== STALE TIME TRACKING ==========
 let lastHomeRefresh = Date.now();
@@ -1414,6 +1415,8 @@ async function performSearch(reset = false) {
         }
         searchOffset = 0;
         hasMoreSearch = true;
+        window.searchCursor = null;  // Reset cursor on new search
+        
         if (searchListFeed) {
             while (searchListFeed.firstChild) {
                 searchListFeed.removeChild(searchListFeed.firstChild);
@@ -1442,14 +1445,18 @@ async function performSearch(reset = false) {
             currentUserLocation = location;
         }
         
-        // SINGLE QUERY - No N+1!
+        // SINGLE QUERY - Cursor-based pagination (No N+1, scales infinitely)
+        const cursorDistance = reset ? null : (window.searchCursor?.distance || null);
+        const cursorUserId = reset ? null : (window.searchCursor?.userId || null);
+        
         const { data: providers, error } = await supabase.rpc('search_providers', {
             p_current_lat: currentUserLocation.lat,
             p_current_lng: currentUserLocation.lng,
             p_radius_km: radiusKm,
             p_service_filter: service,
             p_limit: SEARCH_LIMIT,
-            p_offset: searchOffset
+            p_cursor_distance: cursorDistance,
+            p_cursor_user_id: cursorUserId
         });
         
         if (error) throw error;
@@ -1463,7 +1470,16 @@ async function performSearch(reset = false) {
             return;
         }
         
-        searchOffset += providers.length;
+        // Update cursor for next page (cursor-based pagination)
+        if (providers.length > 0) {
+            const lastProvider = providers[providers.length - 1];
+            window.searchCursor = {
+                distance: lastProvider.distance_meters,
+                userId: lastProvider.user_id
+            };
+        }
+        
+        // No more providers if we got fewer than requested
         if (providers.length < SEARCH_LIMIT) hasMoreSearch = false;
         
         const filteredResults = providers.filter(p => p.user_id !== window.auth.currentUser?.uid);
