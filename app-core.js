@@ -370,17 +370,73 @@ async function loadNotificationsFromFirestore() {
                 ${displayBody ? `<div class="notification-body">${displayBody}</div>` : ''}
             `;
             
-            // Mark as read when clicked
-            item.addEventListener('click', async () => {
+            // Track if this was a long-press (to prevent click after long-press)
+            let isLongPress = false;
+            
+            // Mark as read when clicked (only if not a long-press)
+            item.addEventListener('click', async (e) => {
+                if (isLongPress) {
+                    isLongPress = false;
+                    return;
+                }
+                
                 await markNotificationAsRead(doc.id);
                 
                 // Navigate if link exists
                 if (notif.link) {
+                    // Use navigateToPage for proper navigation within the app
+                    if (notif.link.startsWith('/chat/')) {
+                        const chatId = notif.link.replace('/chat/', '');
+                        if (typeof window.openChat === 'function') {
+                            notificationsDropdown.classList.add('hidden');
+                            window.openChat(chatId);
+                            return;
+                        }
+                    }
                     window.location.hash = notif.link;
                 }
                 
                 // Close dropdown
                 notificationsDropdown.classList.add('hidden');
+            });
+            
+            // Long press to delete
+            let pressTimer;
+            item.addEventListener('touchstart', (e) => {
+                pressTimer = setTimeout(async () => {
+                    isLongPress = true;
+                    window.haptic('medium');
+                    if (confirm('Delete this notification?')) {
+                        const notifRef = doc(db, 'users', window.currentUser.uid, 'notifications', doc.id);
+                        await deleteDoc(notifRef);
+                        
+                        // Update unread count if notification was unread
+                        if (!notif.read) {
+                            const metaRef = doc(db, 'user_notification_meta', window.currentUser.uid);
+                            await updateDoc(metaRef, {
+                                unreadCount: increment(-1)
+                            }).catch(() => {});
+                        }
+                        
+                        item.remove();
+                        await updateNotificationBadgeCount();
+                        
+                        // Show empty state if no notifications left
+                        if (notificationsList.children.length === 0) {
+                            notificationsList.innerHTML = '<div class="empty-state">No notifications yet</div>';
+                        }
+                        
+                        window.showToast('Notification deleted', 'info');
+                    }
+                }, 500);
+            });
+            item.addEventListener('touchend', () => {
+                clearTimeout(pressTimer);
+                // Reset long press flag after a short delay
+                setTimeout(() => { isLongPress = false; }, 100);
+            });
+            item.addEventListener('touchmove', () => {
+                clearTimeout(pressTimer);
             });
             
             // Long press to delete
