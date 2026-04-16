@@ -2229,8 +2229,8 @@ async function loadMoreMessages(chatId, messagesDiv) {
             olderMessagesHtml = `
                 <div class="message-wrapper" data-message-id="${doc.id}" style="display: flex; justify-content: ${isMe ? 'flex-end' : 'flex-start'};">
                     <div style="max-width: 70%; padding: 10px 14px; border-radius: 18px; background: ${isMe ? 'var(--accent-orange)' : 'var(--bg-secondary)'}; color: ${isMe ? 'white' : 'var(--text-primary)'};">
-                        ${msg.text}
-                        ${msg.imageUrl ? `<img src="${msg.imageUrl}" class="chat-image" onclick="window.openBottomSheet('<img src=\'${msg.imageUrl}\' style=\'width:100%;border-radius:20px;\'>')">` : ''}
+                        ${msg.text || ''}
+                        ${msg.imageUrl ? `<img src="${msg.imageUrl}" class="chat-image" data-image-url="${msg.imageUrl}">` : ''}
                         <div style="font-size: 10px; opacity: 0.7; margin-top: 4px;">${new Date(msg.timestamp).toLocaleTimeString()}</div>
                     </div>
                 </div>
@@ -2243,8 +2243,13 @@ async function loadMoreMessages(chatId, messagesDiv) {
         // Remember current scroll height
         const oldScrollHeight = messagesDiv.scrollHeight;
         
-        // Insert older messages at the top
-        messagesDiv.insertAdjacentHTML('afterbegin', olderMessagesHtml);
+        // Add click handlers for images in older messages
+        document.querySelectorAll('#chat-messages-container .chat-image').forEach(img => {
+            if (!img.dataset.hasListener) {
+                img.dataset.hasListener = 'true';
+                // The main event listener in openChat() will handle the click
+            }
+        });
         
         // Maintain scroll position
         const newScrollHeight = messagesDiv.scrollHeight;
