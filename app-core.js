@@ -254,6 +254,7 @@ function setupNotifications() {
         
         // Load notifications from Firestore when dropdown opens
         if (notificationsDropdown.classList.contains('hidden') === false) {
+            await markAllNotificationsAsReadOnly(); // Mark all as read when viewing
             await loadNotificationsFromFirestore();
         }
     });
@@ -349,11 +350,11 @@ async function loadNotificationsFromFirestore() {
         }
         
         // Add each notification to dropdown
-        snapshot.forEach(doc => {
-            const notif = doc.data();
+        snapshot.forEach(notifDoc => {
+            const notif = notifDoc.data();
             const item = document.createElement('div');
             item.className = 'notification-item';
-            item.dataset.notificationId = doc.id;
+            item.dataset.notificationId = notifDoc.id;
             
             // Format relative time
             const relativeTime = formatRelativeTime(notif.createdAt);
@@ -380,7 +381,7 @@ async function loadNotificationsFromFirestore() {
                     return;
                 }
                 
-                await markNotificationAsRead(doc.id);
+                await markNotificationAsRead(notifDoc.id);
                 
                 // Navigate if link exists
                 if (notif.link) {
@@ -406,7 +407,7 @@ async function loadNotificationsFromFirestore() {
                     isLongPress = true;
                     window.haptic('medium');
                     if (confirm('Delete this notification?')) {
-                        const notifRef = doc(db, 'users', window.currentUser.uid, 'notifications', doc.id);
+                        const notifRef = doc(db, 'users', window.currentUser.uid, 'notifications', notifDoc.id);
                         await deleteDoc(notifRef);
                         
                         // Update unread count if notification was unread
@@ -515,6 +516,35 @@ async function markNotificationAsRead(notificationId) {
         await updateNotificationBadgeCount();
     } catch (error) {
         console.error('Error marking notification as read:', error);
+    }
+}
+
+// ========== MARK ALL NOTIFICATIONS AS READ (without deleting) ==========
+async function markAllNotificationsAsReadOnly() {
+    if (!window.currentUser) return;
+    
+    try {
+        const notificationsRef = collection(db, 'users', window.currentUser.uid, 'notifications');
+        const q = query(notificationsRef, where('read', '==', false));
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) return;
+        
+        const batch = writeBatch(db);
+        snapshot.forEach(notifDoc => {
+            batch.update(notifDoc.ref, { read: true });
+        });
+        await batch.commit();
+        
+        // Reset unread count to 0
+        const metaRef = doc(db, 'user_notification_meta', window.currentUser.uid);
+        await setDoc(metaRef, { unreadCount: 0 }, { merge: true });
+        
+        await updateNotificationBadgeCount();
+        console.log('✅ All notifications marked as read');
+        
+    } catch (error) {
+        console.error('Error marking all as read:', error);
     }
 }
 
