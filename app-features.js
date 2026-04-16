@@ -2166,7 +2166,6 @@ async function openChat(userId, chatId = null) {
                 let pressTimer;
                 let activeMenu = null;
                 
-                // Remove any existing menu when clicking elsewhere
                 const removeMenu = () => {
                     if (activeMenu) {
                         activeMenu.remove();
@@ -2175,10 +2174,15 @@ async function openChat(userId, chatId = null) {
                 };
                 
                 wrapper.addEventListener('touchstart', (e) => {
-                    // Only show menu for current user's messages (not text, but we check in the menu)
                     pressTimer = setTimeout(async () => {
                         window.haptic('medium');
-                        removeMenu(); // Remove any existing menu
+                        removeMenu();
+                        
+                        const chat = currentChatId;
+                        if (!chat) {
+                            console.error('No chat ID available');
+                            return;
+                        }
                         
                         // Get the message data to verify sender
                         const msgRef = doc(window.db, 'chats', chat, 'messages', messageId);
@@ -2195,14 +2199,17 @@ async function openChat(userId, chatId = null) {
                         const menu = document.createElement('div');
                         menu.className = 'message-action-menu';
                         menu.style.cssText = `
-                            position: absolute;
+                            position: fixed;
+                            left: 50%;
+                            bottom: 100px;
+                            transform: translateX(-50%);
                             background: var(--bg-primary);
                             border-radius: 12px;
-                            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+                            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
                             padding: 8px;
                             display: flex;
                             gap: 8px;
-                            z-index: 1000;
+                            z-index: 10000;
                             border: 1px solid var(--border-light);
                         `;
                         
@@ -2211,25 +2218,31 @@ async function openChat(userId, chatId = null) {
                             const editBtn = document.createElement('button');
                             editBtn.textContent = '✏️ Edit';
                             editBtn.style.cssText = `
-                                padding: 10px 16px;
+                                padding: 12px 20px;
                                 background: var(--accent-orange);
                                 color: white;
                                 border: none;
                                 border-radius: 8px;
-                                font-size: 14px;
+                                font-size: 16px;
                                 font-weight: 500;
                                 cursor: pointer;
+                                min-width: 80px;
                             `;
                             editBtn.addEventListener('click', async () => {
                                 removeMenu();
                                 const newText = prompt('Edit message:', msgData.text);
                                 if (newText && newText.trim() && newText !== msgData.text) {
-                                    await updateDoc(msgRef, { 
-                                        text: newText.trim(),
-                                        edited: true,
-                                        editedAt: new Date().toISOString()
-                                    });
-                                    window.showToast('Message updated', 'success');
+                                    try {
+                                        await updateDoc(msgRef, { 
+                                            text: newText.trim(),
+                                            edited: true,
+                                            editedAt: new Date().toISOString()
+                                        });
+                                        window.showToast('Message updated', 'success');
+                                    } catch (err) {
+                                        console.error('Edit error:', err);
+                                        window.showToast('Failed to update message', 'error');
+                                    }
                                 }
                             });
                             menu.appendChild(editBtn);
@@ -2239,30 +2252,30 @@ async function openChat(userId, chatId = null) {
                         const deleteBtn = document.createElement('button');
                         deleteBtn.textContent = '🗑️ Delete';
                         deleteBtn.style.cssText = `
-                            padding: 10px 16px;
+                            padding: 12px 20px;
                             background: var(--error-red);
                             color: white;
                             border: none;
                             border-radius: 8px;
-                            font-size: 14px;
+                            font-size: 16px;
                             font-weight: 500;
                             cursor: pointer;
+                            min-width: 80px;
                         `;
                         deleteBtn.addEventListener('click', async () => {
                             removeMenu();
                             if (confirm('Delete this message?')) {
-                                await deleteDoc(msgRef);
-                                window.haptic('heavy');
-                                window.showToast('Message deleted', 'info');
+                                try {
+                                    await deleteDoc(msgRef);
+                                    window.haptic('heavy');
+                                    window.showToast('Message deleted', 'info');
+                                } catch (err) {
+                                    console.error('Delete error:', err);
+                                    window.showToast('Failed to delete message', 'error');
+                                }
                             }
                         });
                         menu.appendChild(deleteBtn);
-                        
-                        // Position menu near the touch
-                        const touch = e.touches[0];
-                        menu.style.left = '50%';
-                        menu.style.transform = 'translateX(-50%)';
-                        menu.style.bottom = '80px';
                         
                         document.body.appendChild(menu);
                         activeMenu = menu;
