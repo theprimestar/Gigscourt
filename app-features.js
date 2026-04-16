@@ -301,6 +301,7 @@ let homeFeedOffset = 0;
 let isHomeFeedLoading = false;
 let hasMoreHomeFeed = true;
 const HOME_FEED_LIMIT = 20;
+window.homeFeedCursor = null;  // Cursor for pagination
 let chatListUnsubscribe = null;
 let globalUnreadListener = null;
 let currentSheetAbortController = null;
@@ -688,6 +689,7 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
     if (reset) {
         homeFeedOffset = 0;
         hasMoreHomeFeed = true;
+        window.homeFeedCursor = null;  // Reset cursor on pull-to-refresh
         
         // Clear the feed COMPLETELY
         homeFeed.innerHTML = '';
@@ -716,12 +718,16 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             currentUserLocation = location;
         }
         
-        // SINGLE QUERY - No N+1!
+        // SINGLE QUERY - Cursor-based pagination (No N+1, scales infinitely)
+        const cursorDistance = reset ? null : (window.homeFeedCursor?.distance || null);
+        const cursorUserId = reset ? null : (window.homeFeedCursor?.userId || null);
+        
         const { data: providers, error } = await supabase.rpc('get_home_feed_providers', {
             p_current_lat: currentUserLocation.lat,
             p_current_lng: currentUserLocation.lng,
             p_limit: HOME_FEED_LIMIT,
-            p_offset: homeFeedOffset
+            p_cursor_distance: cursorDistance,
+            p_cursor_user_id: cursorUserId
         });
         
         if (error) throw error;
@@ -740,7 +746,16 @@ async function loadHomeFeed(reset = false, skipSpinner = false) {
             return;
         }
         
-        homeFeedOffset += providers.length;
+        // Update cursor for next page (cursor-based pagination)
+        if (providers.length > 0) {
+            const lastProvider = providers[providers.length - 1];
+            window.homeFeedCursor = {
+                distance: lastProvider.distance_meters,
+                userId: lastProvider.user_id
+            };
+        }
+        
+        // No more providers if we got fewer than requested
         if (providers.length < HOME_FEED_LIMIT) hasMoreHomeFeed = false;
         
         // Extract user IDs for batch fetch
