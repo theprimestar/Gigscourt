@@ -2227,13 +2227,7 @@ async function sendMessage(chatId, text) {
         // Notify the other user
         const senderName = window.currentUserData?.displayName || 'Someone';
         
-        window.addNotification(
-            'New Message',
-            `💬 New message from ${senderName}`,
-            `/chat/${chatId}`
-        );
-        
-        // Send push notification to the other user
+        // Send push notification to the other user (Vercel function saves to their Firestore)
         await sendPushNotification(
             otherUserId,
             'New Message',
