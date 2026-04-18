@@ -1,0 +1,29 @@
+{
+  "appId": "com.gigscourt.app",
+  "appName": "GigsCourt",
+  "webDir": ".",
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https",
+    "allowNavigation": [
+      "*.firebaseapp.com",
+      "*.supabase.co",
+      "*.imagekit.io",
+      "*.paystack.co",
+      "*.openstreetmap.org"
+    ]
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 2000,
+      "launchAutoHide": true,
+      "backgroundColor": "#C0392B"
+    }
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}
