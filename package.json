@@ -5,12 +5,30 @@
   "main": "index.html",
   "dependencies": {
     "@imagekit/nodejs": "^7.1.1",
-    "firebase-admin": "^12.0.0"
+    "firebase-admin": "^12.0.0",
+    "@capacitor/core": "^6.0.0",
+    "@capacitor/geolocation": "^6.0.0",
+    "@capacitor/push-notifications": "^6.0.0",
+    "@capacitor/splash-screen": "^6.0.0",
+    "@capacitor/haptics": "^6.0.0",
+    "@capacitor/camera": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.0.0",
+    "@capacitor/android": "^6.0.0",
+    "@capacitor/ios": "^6.0.0"
   },
   "scripts": {
-    "start": "vercel dev"
+    "start": "vercel dev",
+    "cap:add:android": "npx cap add android",
+    "cap:add:ios": "npx cap add ios",
+    "cap:sync": "npx cap sync"
   },
-  "keywords": ["gigs", "marketplace", "workers"],
+  "keywords": [
+    "gigs",
+    "marketplace",
+    "workers"
+  ],
   "author": "Theprimestar",
   "license": "MIT"
 }
