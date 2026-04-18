@@ -19,11 +19,12 @@
     "@capacitor/ios": "^6.0.0"
   },
   "scripts": {
-    "start": "vercel dev",
-    "cap:add:android": "npx cap add android",
-    "cap:add:ios": "npx cap add ios",
-    "cap:sync": "npx cap sync"
-  },
+  "start": "vercel dev",
+  "build": "mkdir -p www && cp -r *.html *.js *.css manifest.json www/ 2>/dev/null || true",
+  "cap:add:android": "npx cap add android",
+  "cap:add:ios": "npx cap add ios",
+  "cap:sync": "npx cap sync"
+}
   "keywords": [
     "gigs",
     "marketplace",
