@@ -150,6 +150,11 @@ function hideSplashScreen() {
             mainApp.style.opacity = '1';
         }, 50);
     }
+    
+    // Hide Capacitor native splash screen
+    if (typeof Capacitor !== 'undefined' && Capacitor.Plugins && Capacitor.Plugins.SplashScreen) {
+        Capacitor.Plugins.SplashScreen.hide().catch(function() {});
+    }
 }
 
 // ========== FCM NOTIFICATIONS ==========
