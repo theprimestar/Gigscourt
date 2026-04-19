@@ -8,7 +8,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, si
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging.js';
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, addDoc, query, where, getDocs, orderBy, writeBatch, limit, increment, onSnapshot, enableIndexedDbPersistence, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
-import { FirebaseAuthentication } from 'https://cdn.jsdelivr.net/npm/@capacitor-firebase/authentication@6/+esm';
+
 // Supabase configuration
 const supabaseUrl = 'https://qifzdrkpxzosdturjpex.supabase.co';
 const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
@@ -2078,23 +2078,3 @@ setTimeout(() => {
         window.dispatchEvent(new CustomEvent('appReady'));
     }
 }, 1000);
-
-// DEBUG: Verify event listeners are working
-setTimeout(() => {
-    console.log('DEBUG: Checking buttons...');
-    const loginBtn = document.getElementById('login-btn');
-    const signupBtn = document.getElementById('signup-btn');
-    const tabs = document.querySelectorAll('.auth-tab');
-    
-    console.log('Login button exists:', !!loginBtn);
-    console.log('Signup button exists:', !!signupBtn);
-    console.log('Auth tabs found:', tabs.length);
-    
-    // Force attach a test listener
-    if (loginBtn) {
-        loginBtn.addEventListener('click', () => {
-            alert('Login button clicked!');
-        });
-        console.log('✅ Test listener attached to login button');
-    }
-}, 3000);
