@@ -1565,57 +1565,81 @@ function showAuthScreen() {
         signupBtn.parentNode.replaceChild(newSignupBtn, signupBtn);
         
         newSignupBtn.addEventListener('click', async () => {
-            console.log('Signup button clicked'); // Debug log
-            
-            const email = document.getElementById('signup-email').value.trim();
-            const password = document.getElementById('signup-password').value;
-            const confirmPassword = document.getElementById('signup-confirm-password').value;
-            
-            // Validation
-            if (!email) {
-                showToast('Please enter your email', 'error');
-                return;
-            }
-            if (!password) {
-                showToast('Please enter a password', 'error');
-                return;
-            }
-            if (password.length < 6) {
-                showToast('Password must be at least 6 characters', 'error');
-                return;
-            }
-            if (password !== confirmPassword) {
-                showToast('Passwords do not match', 'error');
-                return;
-            }
-            
-            try {
-                showToast('Creating account...');
-                const userCred = await createUserWithEmailAndPassword(auth, email, password);
-                window.currentUser = userCred.user;
-                
-                // Send email verification
-                await sendEmailVerification(auth.currentUser);
-                
-                // Store email for later (name and phone will be collected in onboarding)
-                onboardingData.email = email;
-                
-                // Show verification required screen instead of onboarding
-                showVerificationRequiredScreen();
-                
-            } catch (error) {
-                console.error('Signup error:', error);
-                if (error.code === 'auth/email-already-in-use') {
-                    showToast('Email already in use. Please login instead.', 'error');
-                } else if (error.code === 'auth/invalid-email') {
-                    showToast('Invalid email address', 'error');
-                } else if (error.code === 'auth/weak-password') {
-                    showToast('Password is too weak. Use at least 6 characters.', 'error');
-                } else {
-                    showToast(error.message, 'error');
-                }
-            }
-        });
+    console.log('Signup button clicked');
+    
+    const email = document.getElementById('signup-email').value.trim();
+    const password = document.getElementById('signup-password').value;
+    const confirmPassword = document.getElementById('signup-confirm-password').value;
+    
+    // Validation
+    if (!email) {
+        showToast('Please enter your email', 'error');
+        return;
+    }
+    if (!password) {
+        showToast('Please enter a password', 'error');
+        return;
+    }
+    if (password.length < 6) {
+        showToast('Password must be at least 6 characters', 'error');
+        return;
+    }
+    if (password !== confirmPassword) {
+        showToast('Passwords do not match', 'error');
+        return;
+    }
+    
+    try {
+        showToast('Creating account...');
+        
+        let user;
+        
+        // Use Capacitor plugin if available, fallback to Firebase SDK
+        if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
+            // Native app (iOS/Android) - Use Capacitor plugin
+            console.log('Using Capacitor auth plugin for signup');
+            const result = await FirebaseAuthentication.createUserWithEmailAndPassword({
+                email: email,
+                password: password
+            });
+            user = result.user;
+        } else {
+            // Web/PWA - Use Firebase SDK
+            console.log('Using Firebase SDK auth for signup');
+            const userCred = await createUserWithEmailAndPassword(auth, email, password);
+            user = userCred.user;
+        }
+        
+        window.currentUser = user;
+        
+        // Send email verification
+        if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
+            // Native: Use Capacitor plugin for verification email
+            await FirebaseAuthentication.sendEmailVerification();
+        } else {
+            // Web: Use Firebase SDK
+            await sendEmailVerification(auth.currentUser);
+        }
+        
+        // Store email for later
+        onboardingData.email = email;
+        
+        // Show verification required screen
+        showVerificationRequiredScreen();
+        
+    } catch (error) {
+        console.error('Signup error:', error);
+        if (error.code === 'auth/email-already-in-use') {
+            showToast('Email already in use. Please login instead.', 'error');
+        } else if (error.code === 'auth/invalid-email') {
+            showToast('Invalid email address', 'error');
+        } else if (error.code === 'auth/weak-password') {
+            showToast('Password is too weak. Use at least 6 characters.', 'error');
+        } else {
+            showToast(error.message || 'Signup failed', 'error');
+        }
+    }
+});
     }
     
     // Forgot password
