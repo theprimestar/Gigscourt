@@ -33,6 +33,39 @@ enableIndexedDbPersistence(db)
         }
     });
 
+// GLOBAL TAB SWITCHING FUNCTIONS (for inline onclick)
+window.switchToLoginTab = function() {
+    console.log('🔥 switchToLoginTab called');
+    const loginTab = document.getElementById('auth-login-tab');
+    const signupTab = document.getElementById('auth-signup-tab');
+    const loginPanel = document.getElementById('auth-login-panel');
+    const signupPanel = document.getElementById('auth-signup-panel');
+    
+    if (loginTab) loginTab.classList.add('active');
+    if (signupTab) signupTab.classList.remove('active');
+    if (loginPanel) loginPanel.classList.add('active');
+    if (signupPanel) signupPanel.classList.remove('active');
+};
+
+window.switchToSignupTab = function() {
+    console.log('🔥 switchToSignupTab called');
+    const loginTab = document.getElementById('auth-login-tab');
+    const signupTab = document.getElementById('auth-signup-tab');
+    const loginPanel = document.getElementById('auth-login-panel');
+    const signupPanel = document.getElementById('auth-signup-panel');
+    
+    if (signupTab) signupTab.classList.add('active');
+    if (loginTab) loginTab.classList.remove('active');
+    if (signupPanel) signupPanel.classList.add('active');
+    if (loginPanel) loginPanel.classList.remove('active');
+};
+
+// Initialize FCM
+let messaging = null;
+if ('Notification' in window && 'serviceWorker' in navigator) {
+    messaging = getMessaging(app);
+}
+
 // Initialize FCM
 let messaging = null;
 if ('Notification' in window && 'serviceWorker' in navigator) {
@@ -1470,44 +1503,6 @@ function showAuthScreen() {
     }
     if (mainApp) {
         mainApp.style.display = 'none';
-    }
-    
-    // Tab switching
-    const loginTab = document.getElementById('auth-login-tab');
-    const signupTab = document.getElementById('auth-signup-tab');
-    const loginPanel = document.getElementById('auth-login-panel');
-    const signupPanel = document.getElementById('auth-signup-panel');
-    
-    if (loginTab && signupTab && loginPanel && signupPanel) {
-        // Remove any existing listeners by cloning
-        const newLoginTab = loginTab.cloneNode(true);
-        const newSignupTab = signupTab.cloneNode(true);
-        loginTab.parentNode.replaceChild(newLoginTab, loginTab);
-        signupTab.parentNode.replaceChild(newSignupTab, signupTab);
-        
-        // Re-query panels to ensure fresh references
-        const freshLoginPanel = document.getElementById('auth-login-panel');
-        const freshSignupPanel = document.getElementById('auth-signup-panel');
-        
-        newLoginTab.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            newLoginTab.classList.add('active');
-            newSignupTab.classList.remove('active');
-            if (freshLoginPanel) freshLoginPanel.classList.add('active');
-            if (freshSignupPanel) freshSignupPanel.classList.remove('active');
-            console.log('✅ Switched to login panel');
-        });
-        
-        newSignupTab.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            newSignupTab.classList.add('active');
-            newLoginTab.classList.remove('active');
-            if (freshSignupPanel) freshSignupPanel.classList.add('active');
-            if (freshLoginPanel) freshLoginPanel.classList.remove('active');
-            console.log('✅ Switched to signup panel');
-        });
     }
     
     // Login - Using addEventListener instead of onclick
