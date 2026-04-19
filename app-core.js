@@ -1478,29 +1478,37 @@ function showAuthScreen() {
     const loginPanel = document.getElementById('auth-login-panel');
     const signupPanel = document.getElementById('auth-signup-panel');
     
-    if (loginTab && signupTab) {
-    // Remove any existing listeners by cloning
-    const newLoginTab = loginTab.cloneNode(true);
-    const newSignupTab = signupTab.cloneNode(true);
-    loginTab.parentNode.replaceChild(newLoginTab, loginTab);
-    signupTab.parentNode.replaceChild(newSignupTab, signupTab);
-    
-    newLoginTab.addEventListener('click', () => {
-        newLoginTab.classList.add('active');
-        newSignupTab.classList.remove('active');
-        loginPanel.classList.add('active');
-        signupPanel.classList.remove('active');
-        console.log('✅ Switched to login panel');
-    });
-    
-    newSignupTab.addEventListener('click', () => {
-        newSignupTab.classList.add('active');
-        newLoginTab.classList.remove('active');
-        signupPanel.classList.add('active');
-        loginPanel.classList.remove('active');
-        console.log('✅ Switched to signup panel');
-    });
-}
+    if (loginTab && signupTab && loginPanel && signupPanel) {
+        // Remove any existing listeners by cloning
+        const newLoginTab = loginTab.cloneNode(true);
+        const newSignupTab = signupTab.cloneNode(true);
+        loginTab.parentNode.replaceChild(newLoginTab, loginTab);
+        signupTab.parentNode.replaceChild(newSignupTab, signupTab);
+        
+        // Re-query panels to ensure fresh references
+        const freshLoginPanel = document.getElementById('auth-login-panel');
+        const freshSignupPanel = document.getElementById('auth-signup-panel');
+        
+        newLoginTab.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            newLoginTab.classList.add('active');
+            newSignupTab.classList.remove('active');
+            if (freshLoginPanel) freshLoginPanel.classList.add('active');
+            if (freshSignupPanel) freshSignupPanel.classList.remove('active');
+            console.log('✅ Switched to login panel');
+        });
+        
+        newSignupTab.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            newSignupTab.classList.add('active');
+            newLoginTab.classList.remove('active');
+            if (freshSignupPanel) freshSignupPanel.classList.add('active');
+            if (freshLoginPanel) freshLoginPanel.classList.remove('active');
+            console.log('✅ Switched to signup panel');
+        });
+    }
     
     // Login - Using addEventListener instead of onclick
     const loginBtn = document.getElementById('login-btn');
