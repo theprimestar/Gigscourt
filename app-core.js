@@ -2030,3 +2030,23 @@ setTimeout(() => {
         window.dispatchEvent(new CustomEvent('appReady'));
     }
 }, 1000);
+
+// DEBUG: Verify event listeners are working
+setTimeout(() => {
+    console.log('DEBUG: Checking buttons...');
+    const loginBtn = document.getElementById('login-btn');
+    const signupBtn = document.getElementById('signup-btn');
+    const tabs = document.querySelectorAll('.auth-tab');
+    
+    console.log('Login button exists:', !!loginBtn);
+    console.log('Signup button exists:', !!signupBtn);
+    console.log('Auth tabs found:', tabs.length);
+    
+    // Force attach a test listener
+    if (loginBtn) {
+        loginBtn.addEventListener('click', () => {
+            alert('Login button clicked!');
+        });
+        console.log('✅ Test listener attached to login button');
+    }
+}, 3000);
