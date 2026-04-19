@@ -1479,20 +1479,28 @@ function showAuthScreen() {
     const signupPanel = document.getElementById('auth-signup-panel');
     
     if (loginTab && signupTab) {
-        loginTab.onclick = () => {
-            loginTab.classList.add('active');
-            signupTab.classList.remove('active');
-            loginPanel.classList.add('active');
-            signupPanel.classList.remove('active');
-        };
-        
-        signupTab.onclick = () => {
-            signupTab.classList.add('active');
-            loginTab.classList.remove('active');
-            signupPanel.classList.add('active');
-            loginPanel.classList.remove('active');
-        };
-    }
+    // Remove any existing listeners by cloning
+    const newLoginTab = loginTab.cloneNode(true);
+    const newSignupTab = signupTab.cloneNode(true);
+    loginTab.parentNode.replaceChild(newLoginTab, loginTab);
+    signupTab.parentNode.replaceChild(newSignupTab, signupTab);
+    
+    newLoginTab.addEventListener('click', () => {
+        newLoginTab.classList.add('active');
+        newSignupTab.classList.remove('active');
+        loginPanel.classList.add('active');
+        signupPanel.classList.remove('active');
+        console.log('✅ Switched to login panel');
+    });
+    
+    newSignupTab.addEventListener('click', () => {
+        newSignupTab.classList.add('active');
+        newLoginTab.classList.remove('active');
+        signupPanel.classList.add('active');
+        loginPanel.classList.remove('active');
+        console.log('✅ Switched to signup panel');
+    });
+}
     
     // Login - Using addEventListener instead of onclick
     const loginBtn = document.getElementById('login-btn');
