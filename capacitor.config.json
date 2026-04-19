@@ -5,6 +5,7 @@
   "server": {
     "androidScheme": "https",
     "iosScheme": "https",
+    "hostname": "localhost",
     "allowNavigation": [
       "*.firebaseapp.com",
       "*.supabase.co",
@@ -24,6 +25,7 @@
     "allowMixedContent": true
   },
   "ios": {
-    "contentInset": "always"
+    "contentInset": "always",
+    "scheme": "http"
   }
 }
