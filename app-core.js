@@ -1992,7 +1992,21 @@ document.addEventListener('DOMContentLoaded', () => {
     setupProfilePictureHandler();
     
     // Setup auth listener (this will show auth screen or main app based on login state)
-    setupAuthListener();  
+    setupAuthListener();
+    
+    // FALLBACK: Force hide splash after 8 seconds no matter what
+    setTimeout(() => {
+        const splash = document.getElementById('splash-screen');
+        if (splash && splash.style.display !== 'none') {
+            console.log('⚠️ FALLBACK: Force hiding splash screen');
+            hideSplashScreen();
+            // Also ensure auth screen is visible
+            const authScreen = document.getElementById('auth-screen');
+            if (authScreen) {
+                authScreen.classList.remove('hidden');
+            }
+        }
+    }, 8000);
 });
 
 // Expose functions for features file
