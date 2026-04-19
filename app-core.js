@@ -1735,17 +1735,11 @@ async function setupAuthListener() {
     window.currentUser = user;
     
     if (user) {
-        // FORCE HIDE SPLASH SCREEN IMMEDIATELY - DIRECT DOM MANIPULATION
-        const splash = document.getElementById('splash-screen');
-        const main = document.getElementById('main-app');
-        if (splash) splash.style.setProperty('display', 'none', 'important');
-        if (main) {
-            main.style.setProperty('display', 'block', 'important');
-            main.style.opacity = '1';
-        }
-        
-        // Hide auth screen
-        hideAuthScreen();
+    // Hide both web AND native splash screens
+    hideSplashScreen();
+    
+    // Hide auth screen
+    hideAuthScreen();
         
         try {
             // Fetch user profile from FIRESTORE
@@ -1940,19 +1934,16 @@ async function setupAuthListener() {
         }, 1000);
         
     } else {
-        // No user found - show spinner first
-        showSplashSpinner();
-        
-        // Give a short delay to ensure no user appears (handles edge cases)
-        authScreenTimeout = setTimeout(() => {
-            showAuthScreen();
-            const splash = document.getElementById('splash-screen');
-            const main = document.getElementById('main-app');
-            if (splash) splash.style.setProperty('display', 'none', 'important');
-            if (main) main.style.setProperty('display', 'block', 'important');
-            authScreenTimeout = null;
-        }, 1500);
-    }
+    // No user found - show spinner first
+    showSplashSpinner();
+    
+    // Give a short delay to ensure no user appears (handles edge cases)
+    authScreenTimeout = setTimeout(() => {
+        showAuthScreen();
+        hideSplashScreen();  // This now handles both web and native
+        authScreenTimeout = null;
+    }, 1500);
+}
 }
 
 // ========== PROFILE PICTURE BOTTOM SHEET ==========
