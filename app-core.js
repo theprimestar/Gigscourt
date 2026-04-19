@@ -1519,29 +1519,10 @@ function showAuthScreen() {
     
     try {
         showToast('Logging in...');
-        
-        let user;
-        
-        // Use Capacitor plugin if available, fallback to Firebase SDK
-        if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
-            // Native app (iOS/Android) - Use Capacitor plugin
-            console.log('Using Capacitor auth plugin');
-            const result = await FirebaseAuthentication.signInWithEmailAndPassword({
-                email: email,
-                password: password
-            });
-            user = result.user;
-        } else {
-            // Web/PWA - Use Firebase SDK
-            console.log('Using Firebase SDK auth');
-            const userCred = await signInWithEmailAndPassword(auth, email, password);
-            user = userCred.user;
-        }
-        
-        window.currentUser = user;
+        const userCred = await signInWithEmailAndPassword(auth, email, password);
+        window.currentUser = userCred.user;
         hideAuthScreen();
         showToast('Welcome back!');
-        
     } catch (error) {
         console.error('Login error:', error);
         if (error.code === 'auth/user-not-found') {
@@ -1551,7 +1532,7 @@ function showAuthScreen() {
         } else if (error.code === 'auth/invalid-email') {
             showToast('Invalid email address', 'error');
         } else {
-            showToast(error.message || 'Login failed', 'error');
+            showToast(error.message, 'error');
         }
     }
 });
@@ -1571,7 +1552,6 @@ function showAuthScreen() {
     const password = document.getElementById('signup-password').value;
     const confirmPassword = document.getElementById('signup-confirm-password').value;
     
-    // Validation
     if (!email) {
         showToast('Please enter your email', 'error');
         return;
@@ -1591,42 +1571,13 @@ function showAuthScreen() {
     
     try {
         showToast('Creating account...');
+        const userCred = await createUserWithEmailAndPassword(auth, email, password);
+        window.currentUser = userCred.user;
         
-        let user;
+        await sendEmailVerification(auth.currentUser);
         
-        // Use Capacitor plugin if available, fallback to Firebase SDK
-        if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
-            // Native app (iOS/Android) - Use Capacitor plugin
-            console.log('Using Capacitor auth plugin for signup');
-            const result = await FirebaseAuthentication.createUserWithEmailAndPassword({
-                email: email,
-                password: password
-            });
-            user = result.user;
-        } else {
-            // Web/PWA - Use Firebase SDK
-            console.log('Using Firebase SDK auth for signup');
-            const userCred = await createUserWithEmailAndPassword(auth, email, password);
-            user = userCred.user;
-        }
-        
-        window.currentUser = user;
-        
-        // Send email verification
-        if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
-            // Native: Use Capacitor plugin for verification email
-            await FirebaseAuthentication.sendEmailVerification();
-        } else {
-            // Web: Use Firebase SDK
-            await sendEmailVerification(auth.currentUser);
-        }
-        
-        // Store email for later
         onboardingData.email = email;
-        
-        // Show verification required screen
         showVerificationRequiredScreen();
-        
     } catch (error) {
         console.error('Signup error:', error);
         if (error.code === 'auth/email-already-in-use') {
@@ -1636,7 +1587,7 @@ function showAuthScreen() {
         } else if (error.code === 'auth/weak-password') {
             showToast('Password is too weak. Use at least 6 characters.', 'error');
         } else {
-            showToast(error.message || 'Signup failed', 'error');
+            showToast(error.message, 'error');
         }
     }
 });
