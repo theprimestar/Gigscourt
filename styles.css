@@ -2322,3 +2322,11 @@ body {
 .message-action-menu button:active {
     opacity: 0.7;
 }
+
+.auth-panel {
+    display: none !important;
+}
+
+.auth-panel.active {
+    display: block !important;
+}
