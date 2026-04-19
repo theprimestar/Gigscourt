@@ -66,12 +66,6 @@ if ('Notification' in window && 'serviceWorker' in navigator) {
     messaging = getMessaging(app);
 }
 
-// Initialize FCM
-let messaging = null;
-if ('Notification' in window && 'serviceWorker' in navigator) {
-    messaging = getMessaging(app);
-}
-
 // Supabase client (MUST be after auth is defined)
 const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     accessToken: async () => {
