@@ -24,6 +24,9 @@ jobs:
       - name: Add iOS platform
         run: npx cap add ios
       
+      - name: Copy GoogleService-Info.plist
+        run: cp GoogleService-Info.plist ios/App/App/
+      
       - name: Sync Capacitor
         run: npx cap sync ios
 
@@ -32,7 +35,7 @@ jobs:
           cd ios/App
           pod install --repo-update
 
-      - name: Disable code signing for bundles (Required for Firebase Auth)
+      - name: Disable code signing for bundles
         run: |
           cd ios/App
           if ! grep -q "CODE_SIGNING_ALLOWED" Podfile; then
