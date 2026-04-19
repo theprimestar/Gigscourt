@@ -1507,35 +1507,54 @@ function showAuthScreen() {
         loginBtn.parentNode.replaceChild(newLoginBtn, loginBtn);
         
         newLoginBtn.addEventListener('click', async () => {
-            console.log('Login button clicked'); // Debug log
-            
-            const email = document.getElementById('login-email').value.trim();
-            const password = document.getElementById('login-password').value;
-            
-            if (!email || !password) {
-                showToast('Please enter email and password', 'error');
-                return;
-            }
-            
-            try {
-                showToast('Logging in...');
-                const userCred = await signInWithEmailAndPassword(auth, email, password);
-                window.currentUser = userCred.user;
-                hideAuthScreen();
-                showToast('Welcome back!');
-            } catch (error) {
-                console.error('Login error:', error);
-                if (error.code === 'auth/user-not-found') {
-                    showToast('No account found with this email', 'error');
-                } else if (error.code === 'auth/wrong-password') {
-                    showToast('Incorrect password', 'error');
-                } else if (error.code === 'auth/invalid-email') {
-                    showToast('Invalid email address', 'error');
-                } else {
-                    showToast(error.message, 'error');
-                }
-            }
-        });
+    console.log('Login button clicked');
+    
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    
+    if (!email || !password) {
+        showToast('Please enter email and password', 'error');
+        return;
+    }
+    
+    try {
+        showToast('Logging in...');
+        
+        let user;
+        
+        // Use Capacitor plugin if available, fallback to Firebase SDK
+        if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
+            // Native app (iOS/Android) - Use Capacitor plugin
+            console.log('Using Capacitor auth plugin');
+            const result = await FirebaseAuthentication.signInWithEmailAndPassword({
+                email: email,
+                password: password
+            });
+            user = result.user;
+        } else {
+            // Web/PWA - Use Firebase SDK
+            console.log('Using Firebase SDK auth');
+            const userCred = await signInWithEmailAndPassword(auth, email, password);
+            user = userCred.user;
+        }
+        
+        window.currentUser = user;
+        hideAuthScreen();
+        showToast('Welcome back!');
+        
+    } catch (error) {
+        console.error('Login error:', error);
+        if (error.code === 'auth/user-not-found') {
+            showToast('No account found with this email', 'error');
+        } else if (error.code === 'auth/wrong-password') {
+            showToast('Incorrect password', 'error');
+        } else if (error.code === 'auth/invalid-email') {
+            showToast('Invalid email address', 'error');
+        } else {
+            showToast(error.message || 'Login failed', 'error');
+        }
+    }
+});
     }
     
 // Signup - Using addEventListener instead of onclick (Email + Password + Confirm Password only)
