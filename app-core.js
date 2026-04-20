@@ -15,23 +15,11 @@ const supabaseAnonKey = 'sb_publishable_QfKJ4jT8u_2HuUKmW-xvbQ_9acJvZw-';
 
 // ========== INITIALIZATION ==========
 const app = initializeApp(window.firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
 
-// Enable offline persistence for instant chat loading
-enableIndexedDbPersistence(db)
-    .then(() => {
-        console.log('✅ Firestore offline persistence enabled');
-    })
-    .catch((err) => {
-        if (err.code === 'failed-precondition') {
-            console.warn('⚠️ Multiple tabs open - persistence enabled in another tab');
-        } else if (err.code === 'unimplemented') {
-            console.warn('⚠️ Browser does not support offline persistence');
-        } else {
-            console.error('❌ Persistence error:', err);
-        }
-    });
+// We'll initialize auth and db after checking platform
+let auth;
+let db;
+let supabase;
 
 // GLOBAL TAB SWITCHING FUNCTIONS (for inline onclick)
 window.switchToLoginTab = function() {
@@ -66,22 +54,57 @@ if ('Notification' in window && 'serviceWorker' in navigator) {
     messaging = getMessaging(app);
 }
 
-// Supabase client (MUST be after auth is defined)
-const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    accessToken: async () => {
-        const user = auth.currentUser;
-        if (user) {
-            return await user.getIdToken(false);
-        }
-        return null;
+// Async initialization for auth and db
+(async function initializeFirebase() {
+    const authModule = await import('https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js');
+    
+    if (typeof Capacitor !== 'undefined' && Capacitor.isNativePlatform && Capacitor.isNativePlatform()) {
+        // Native iOS/Android - use IndexedDB persistence
+        auth = authModule.initializeAuth(app, {
+            persistence: authModule.indexedDBLocalPersistence
+        });
+        console.log('✅ Firebase Auth initialized with IndexedDB persistence (native)');
+    } else {
+        // Web/PWA - use default
+        auth = authModule.getAuth(app);
+        console.log('✅ Firebase Auth initialized with default persistence (web)');
     }
-});
-
-// Make globally available
-window.auth = auth;
-window.db = db;
-window.app = app;
-window.sendPasswordResetEmail = sendPasswordResetEmail;
+    
+    db = getFirestore(app);
+    
+    // Enable offline persistence for Firestore
+    try {
+        await enableIndexedDbPersistence(db);
+        console.log('✅ Firestore offline persistence enabled');
+    } catch (err) {
+        if (err.code === 'failed-precondition') {
+            console.warn('⚠️ Multiple tabs open - persistence enabled in another tab');
+        } else if (err.code === 'unimplemented') {
+            console.warn('⚠️ Browser does not support offline persistence');
+        } else {
+            console.error('❌ Persistence error:', err);
+        }
+    }
+    
+    // Initialize Supabase client
+    supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        accessToken: async () => {
+            const user = auth.currentUser;
+            if (user) {
+                return await user.getIdToken(false);
+            }
+            return null;
+        }
+    });
+    
+    // Make globally available
+    window.auth = auth;
+    window.db = db;
+    window.app = app;
+    window.sendPasswordResetEmail = sendPasswordResetEmail;
+    
+    console.log('✅ Firebase and Supabase initialized');
+})();
 
 // Temporarily expose Firestore functions for Eruda backfill
 import('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js').then(module => {
@@ -1726,6 +1749,11 @@ function hideVerificationScreen() {
 
 // ========== AUTH STATE LISTENER ==========
 async function setupAuthListener() {
+    // Wait for auth to be initialized
+    while (!window.auth) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
     // Wait for Firebase to settle initial auth state
     await auth.authStateReady();
     
@@ -1734,11 +1762,11 @@ async function setupAuthListener() {
     window.currentUser = user;
     
     if (user) {
-    // Hide both web AND native splash screens
-    hideSplashScreen();
-    
-    // Hide auth screen
-    hideAuthScreen();
+        // Hide both web AND native splash screens
+        hideSplashScreen();
+        
+        // Hide auth screen
+        hideAuthScreen();
         
         try {
             // Fetch user profile from FIRESTORE
@@ -1780,9 +1808,6 @@ async function setupAuthListener() {
                 });
                 
                 navigateToPage('home');
-                
-                // Home feed will show skeletons via loadHomeFeed() called by app-features.js
-
                 loadNotificationsFromFirestore();
 
                 setTimeout(() => {
@@ -1808,7 +1833,7 @@ async function setupAuthListener() {
                 }, 500);
                 
             } else {
-                // No Firestore profile - create a fresh one (Option B)
+                // No Firestore profile - create a fresh one
                 console.log('🆕 No Firestore profile found, creating fresh profile for:', user.uid);
                 
                 const newProfile = {
@@ -1852,7 +1877,6 @@ async function setupAuthListener() {
                 };
                 console.log('✅ Fresh Firestore profile created for:', user.uid);
                 
-                // ========== REAL-TIME NOTIFICATION BADGE LISTENER ==========
                 const metaRef = doc(db, 'user_notification_meta', user.uid);
                 onSnapshot(metaRef, (doc) => {
                     const count = doc.exists() ? (doc.data().unreadCount || 0) : 0;
@@ -1867,9 +1891,6 @@ async function setupAuthListener() {
                 });
                 
                 navigateToPage('home');
-                
-                // Home feed will show skeletons via loadHomeFeed() called by app-features.js
-
                 loadNotificationsFromFirestore();
 
                 setTimeout(() => {
@@ -1898,22 +1919,12 @@ async function setupAuthListener() {
         } catch (error) {
             console.error('Error loading user data:', error);
             
-            const isNoProfileError = error && (
-                error.code === 'PGRST116' || 
-                error.message?.includes('JSON object requested') ||
-                error.message?.includes('contains 0 rows')
-            );
-            
-            if (!isNoProfileError) {
-                showToast('Error loading profile. Please refresh.', 'error');
-            }
-            
             if (!appReadyFired) {
                 appReadyFired = true;
                 window.dispatchEvent(new CustomEvent('appReady'));
             }
             
-            if (isNoProfileError && user) {
+            if (user) {
                 if (user.emailVerified) {
                     showOnboarding();
                 } else {
@@ -1933,16 +1944,16 @@ async function setupAuthListener() {
         }, 1000);
         
     } else {
-    // No user found - show spinner first
-    showSplashSpinner();
-    
-    // Give a short delay to ensure no user appears (handles edge cases)
-    authScreenTimeout = setTimeout(() => {
-        showAuthScreen();
-        hideSplashScreen();  // This now handles both web and native
-        authScreenTimeout = null;
-    }, 1500);
-}
+        // No user found - show spinner first
+        showSplashSpinner();
+        
+        // Give a short delay to ensure no user appears
+        authScreenTimeout = setTimeout(() => {
+            showAuthScreen();
+            hideSplashScreen();
+            authScreenTimeout = null;
+        }, 1500);
+    }
 }
 
 // ========== PROFILE PICTURE BOTTOM SHEET ==========
@@ -1991,7 +2002,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setupProfilePictureHandler();
     
     // Setup auth listener (this will show auth screen or main app based on login state)
-    setupAuthListener();
+
     
     // FALLBACK: Force hide splash after 8 seconds no matter what
     setTimeout(() => {
