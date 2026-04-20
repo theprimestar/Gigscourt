@@ -96,6 +96,9 @@ if ('Notification' in window && 'serviceWorker' in navigator) {
             return null;
         }
     });
+
+    // Make Supabase globally available
+    window.supabase = supabase;
     
     // Make globally available
     window.auth = auth;
@@ -104,6 +107,9 @@ if ('Notification' in window && 'serviceWorker' in navigator) {
     window.sendPasswordResetEmail = sendPasswordResetEmail;
     
     console.log('✅ Firebase and Supabase initialized');
+    
+    // Now that auth is ready, set up the auth listener
+    setupAuthListener();
 })();
 
 // Temporarily expose Firestore functions for Eruda backfill
